@@ -10,7 +10,7 @@
 
 Homebridge Proxy which exposes a Loxone System to Homekit.
 
-The plugin uses Loxone Lxcomunicator to setup a websocket connection to a Loxone miniserver.
+The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator) to setup a websocket connection to a Loxone miniserver.
 It retrieves the loxone StructureFile and tries to map all items to HomeKit accessories.
 
 ### Mapped Items

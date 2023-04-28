@@ -57,7 +57,7 @@ export class IRoomControllerV2 {
   callBacktempActual = ( message: {uuid: string; value: number} ) => {
     if (message.uuid) {
       this.platform.log.debug(`[${this.device.name}] Callback tempActual update for Thermostat : ${message.value}`);
-      this.State.CurrentTemperature = (message.value < 10) ? 10 : message.value;
+      this.State.CurrentTemperature = this.limitHomeKitTemperature(message.value);
 
       //also make sure this change is directly communicated to HomeKit
       this.service
@@ -69,7 +69,7 @@ export class IRoomControllerV2 {
   callBacktempTarget = ( message: {uuid: string; value: number} ) => {
     if (message.uuid) {
       this.platform.log.debug(`[${this.device.name}] Callback tempTarget update for Thermostat: ${message.value}`);
-      this.State.TargetTemperature = (message.value < 10) ? 10 : message.value;
+      this.State.TargetTemperature = this.limitHomeKitTemperature(message.value);
 
       //also make sure this change is directly communicated to HomeKit
       this.service
@@ -90,6 +90,12 @@ export class IRoomControllerV2 {
     }
   };
   */
+
+  limitHomeKitTemperature(temp: number) {
+    temp = (temp < 10) ? 10 : temp;
+    temp = (temp > 38) ? 38 : temp;
+    return temp;
+  }
 
   /**
    * Handle requests to get the current value of the "Current Heating Cooling State" characteristic

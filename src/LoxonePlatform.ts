@@ -10,6 +10,23 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   private LoxoneItems: Controls = {};
   private LoxoneIntercomMotion = '';
 
+  // Items supported by this Platform
+  private SupportedItems = [
+    'Alarm',
+    'Brightness',
+    'Dimmer',
+    'Gate',
+    'Humidity',
+    'IntercomV2',
+    'IRoomControllerV2',
+    'Lock',
+    'MoodSwitch',
+    'Motion',
+    'PresenceDetector',
+    'Switch',
+    'Ventilation',
+  ];
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public LoxoneHandler: any;
   public readonly Service: typeof Service = this.api.hap.Service;
@@ -147,9 +164,21 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   async mapLoxoneItems(LoxoneItems: Controls) {
+
+    let itemid = 1;
+
     for (const uuid in LoxoneItems) {
-      this.log.info(`[mapLoxoneItems] Found item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].type}`);
-      new LoxoneAccessory(this, LoxoneItems[uuid]);
+      if (this.SupportedItems.includes(LoxoneItems[uuid].type)) {
+        if (itemid >= 149) {
+          this.log.info('[mapLoxoneitems] Maximum number of supported HomeKit items reached. Stop mapping Items.');
+          return;
+        }
+        this.log.info(`[mapLoxoneItems][Item ${itemid}] Found item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].type}`);
+        new LoxoneAccessory(this, LoxoneItems[uuid]);
+        itemid++;
+      } else {
+        this.log.debug(`[mapLoxoneitems] Skipping Unsupported item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].name}`);
+      }
     }
   }
 

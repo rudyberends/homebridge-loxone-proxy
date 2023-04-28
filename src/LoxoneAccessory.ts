@@ -18,32 +18,11 @@ import { Ventilation } from './items/Ventilation';
 
 export class LoxoneAccessory {
 
-  // Items supported by this Plugin
-  private SupportedItems = [
-    'Alarm',
-    'Brightness',
-    'Dimmer',
-    'Gate',
-    'Humidity',
-    'IntercomV2',
-    'IRoomControllerV2',
-    'Lock',
-    'MoodSwitch',
-    'Motion',
-    'PresenceDetector',
-    'Switch',
-    'Ventilation',
-  ];
-
   constructor(
     private readonly platform: LoxonePlatform,
     private readonly device: Control,
   ) {
 
-    if (!(this.SupportedItems.includes(this.device.type))) {
-      this.platform.log.info(`[LoxoneAccesory] Skipping Unsupported item: ${this.device.name} with type ${this.device.type}`);
-      return;
-    }
     const uuid = this.platform.api.hap.uuid.generate(this.device.uuidAction);
     const existingAccessory = this.platform.accessories.find(accessory => accessory.UUID === uuid);
 

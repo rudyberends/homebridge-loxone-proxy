@@ -159,7 +159,7 @@ export class Camera {
    */
   handleVersionGet() {
     this.platform.log.debug('Triggered GET Version');
-    const currentValue = 1;
+    const currentValue = '1';
     return currentValue;
   }
 

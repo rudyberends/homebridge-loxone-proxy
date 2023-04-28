@@ -30,3 +30,7 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`PresenceDetector` | OccupancySensor | Auto
 |`Switch` | Switch, Outlet, or Lightbulb | Auto
 |`Ventilation` | Fanv2 | Auto
+
+### Limitations
+
+Apple does not allow more than 150 items per bridge. This plugin will not map more than 150 items, but if you have other plugins activated, you might still hit this limit. To prevent this you can run this plugin as a child bridge. Another way to solve it is to use a dedicated loxone user for the plugin and only expose the items that you want to use in HomeKit.

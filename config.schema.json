@@ -8,41 +8,35 @@
         "properties": {
             "host": {
                 "type": "string",
-                "required": true,
-                "description": "Loxone miniserver ip"
+                "required": true
             },
             "port": {
                 "type": "integer",
                 "default": "80",
-                "required": true,
-                "description": "miniserver port"
+                "required": true
             },
             "username": {
                 "type": "string",
-                "required": true,
-                "description": "Loxone username"
+                "required": true
             },
             "password": {
                 "type": "string",
-                "required": true,
-                "description": "Loxone password"
+                "required": true
             },
             "options": {
                 "type": "object",
                 "title": "Options",
                 "properties": {
                     "MoodSwitches": {
-                        "type": "integer",
-                        "default": "1",
-                        "enum": ["0","1"],
-                        "description": "Include Lighting Controller Moods as Switches."
+                        "type": "string",
+                        "default": "enabled",
+                        "enum": ["enabled","disabled"]
                     }
                 }
             },
             "switchAlias": {
                 "type": "object",
                 "title": "Switch aliases",
-                "description": "Change the prefixes being used for the assumptions",
                 "properties": {
                     "Lock": {
                         "type": "string"
@@ -52,7 +46,6 @@
             "InfoOnlyDigitalAlias": {
                 "type": "object",
                 "title": "InfoOnlyDigital aliases",
-                "description": "Change the prefixes being used for the assumptions",
                 "properties": {
                     "Motion": {
                         "type": "string"
@@ -62,7 +55,6 @@
             "InfoOnlyAnalogAlias": {
                 "type": "object",
                 "title": "InfoOnlyAnalog aliases",
-                "description": "Change the prefixes being used for the assumptions",
                 "properties": {
                     "Humidity": {
                         "type": "string"

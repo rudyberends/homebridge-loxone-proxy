@@ -87,23 +87,26 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
   parseLoxoneLightController(LightControllerV2: Control) {
 
-    // Create Mood Switches
-    const moods = JSON.parse(this.LoxoneHandler.getLastCachedValue(LightControllerV2.states.moodList));
-    for (const mood of moods) {
-      if (mood.name !== 'Uit') {
+    // Create Mood Switches if enabled in config
+    if (this.config.options.MoodSwitches === 'enabled') {
+      const moods = JSON.parse(this.LoxoneHandler.getLastCachedValue(LightControllerV2.states.moodList));
+      for (const mood of moods) {
+        if (mood.name !== 'Uit') {
 
-        const MoodSwitch = Object.assign({}, LightControllerV2);
+          const MoodSwitch = Object.assign({}, LightControllerV2);
 
-        MoodSwitch.name = `[${this.LoxoneRooms[LightControllerV2.room]}] ${mood.name}`;
-        MoodSwitch.uuidAction = `${LightControllerV2.uuidAction}/${mood.name}`;
-        MoodSwitch.type = 'MoodSwitch';
-        MoodSwitch.cat = mood.id;
-        MoodSwitch.details = {};
-        MoodSwitch.subControls = {};
+          MoodSwitch.name = `[${this.LoxoneRooms[LightControllerV2.room]}] ${mood.name}`;
+          MoodSwitch.uuidAction = `${LightControllerV2.uuidAction}/${mood.name}`;
+          MoodSwitch.type = 'MoodSwitch';
+          MoodSwitch.cat = mood.id;
+          MoodSwitch.details = {};
+          MoodSwitch.subControls = {};
 
-        this.LoxoneItems[`${LightControllerV2.uuidAction}/${mood.name}`] = MoodSwitch;
+          this.LoxoneItems[`${LightControllerV2.uuidAction}/${mood.name}`] = MoodSwitch;
+        }
       }
     }
+
     // Create individual Lights
     for (const childUuid in LightControllerV2.subControls) {
 

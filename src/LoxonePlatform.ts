@@ -32,10 +32,11 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
     // Wait for configfile. (LoxAPP3.json)
     while (!this.LoxoneHandler.loxdata) {
-      await new Promise(resolve => setTimeout(resolve, 10000));
-      this.log.info(`[LoxoneInit] got structure file; last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
-      this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
+
+    this.log.info(`[LoxoneInit] got structure file; last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
+    this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
   }
 
   async parseLoxoneConfig(config: StructureFile) {

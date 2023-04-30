@@ -24,6 +24,9 @@ export class MoodSwitch {
 
     this.LoxoneListener();
 
+    this.service.setCharacteristic(this.platform.Characteristic.Name, this.device.name);
+    this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, this.device.name);
+
     this.service.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setOn.bind(this))
       .onGet(this.getOn.bind(this));

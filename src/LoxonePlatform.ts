@@ -61,34 +61,14 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
       const LoxoneItem = config.controls[ItemUuid];
 
-      if (LoxoneItem.type === 'LightControllerV2') {
-        this.parseLoxoneLightController(LoxoneItem);
-      } //else {
-        this.LoxoneItems[ItemUuid] = LoxoneItem;
-        this.LoxoneItems[ItemUuid].room = this.LoxoneRooms[LoxoneItem.room];
-        this.LoxoneItems[ItemUuid].cat = this.LoxoneCats[LoxoneItem.cat];
-        this.LoxoneItems[ItemUuid].type = this.checkLoxoneType(LoxoneItem);
-      //}
+      this.LoxoneItems[ItemUuid] = LoxoneItem;
+      this.LoxoneItems[ItemUuid].room = this.LoxoneRooms[LoxoneItem.room];
+      this.LoxoneItems[ItemUuid].cat = this.LoxoneCats[LoxoneItem.cat];
+      this.LoxoneItems[ItemUuid].type = this.checkLoxoneType(LoxoneItem);
     }
 
     this.mapLoxoneItems(this.LoxoneItems);  // Map all discover Loxone Items
     this.removeUnmappedAccessories(); // Remove Cached Items which are removed from Loxone
-  }
-
-  parseLoxoneLightController(LightControllerV2: Control) {
-
-    // Create individual Lights
-    for (const childUuid in LightControllerV2.subControls) {
-
-      const LightItem = LightControllerV2.subControls[childUuid];
-      if (!(LightItem.uuidAction.indexOf('/masterValue') !== -1) || (LightItem.uuidAction.indexOf('/masterColor')) !== -1) {
-        this.LoxoneItems[childUuid] = LightItem;
-        this.LoxoneItems[childUuid].room = this.LoxoneRooms[LightControllerV2.room];
-        this.LoxoneItems[childUuid].cat = this.LoxoneCats[LightControllerV2.cat];
-        this.LoxoneItems[childUuid].type = this.checkLoxoneType(LightItem);
-      }
-    }
-    return;
   }
 
   checkLoxoneType(LoxoneItem: Control) {

@@ -11,8 +11,8 @@ import { Gate } from './items/Gate';
 import { Humidiy } from './items/Humidity';
 import { IntercomV2 } from './items/IntercomV2';
 import { IRoomControllerV2 } from './items/IRoomControllerV2';
+import { LightControllerV2 } from './items/LightControllerV2';
 import { Lock } from './items/Lock';
-import { MoodSwitch } from './items/MoodSwitch';
 import { Motion } from './items/Motion';
 import { PresenceDetector } from './items/PresenceDetector';
 import { Switch } from './items/Switch';
@@ -20,17 +20,47 @@ import { Ventilation } from './items/Ventilation';
 
 export class LoxoneAccessory {
 
+  // Items supported by this Platform
+  private SupportedItems = [
+    'Alarm',
+    'Brightness',
+    'ColorPickerV2',
+    'Dimmer',
+    'Gate',
+    'Humidity',
+    'IntercomV2',
+    'IRoomControllerV2',
+    'LightControllerV2',
+    'Lock',
+    'Motion',
+    'PresenceDetector',
+    'Switch',
+    'Ventilation',
+  ];
+
   constructor(
     private readonly platform: LoxonePlatform,
     private readonly device: Control,
   ) {
+
+    if (this.platform.LoxoneItemCount >= 149) {
+      this.platform.log.info('[LoxoneAccessory] Maximum number of supported HomeKit items reached. Stop mapping Items.');
+      return;
+    }
+
+    if (!this.SupportedItems.includes(this.device.type)) {
+      this.platform.log.debug(`[[LoxoneAccessory] Skipping Unsupported item: ${this.device.name} with type ${this.device.type}`);
+      return;
+    }
+
+    this.platform.log.debug(`[mapLoxoneItems][${this.platform.LoxoneItemCount}] Found: ${this.device.name} with type ${this.device.type}`);
 
     const uuid = this.platform.api.hap.uuid.generate(this.device.uuidAction);
     const existingAccessory = this.platform.accessories.find(accessory => accessory.UUID === uuid);
 
     if (existingAccessory) {
       // the accessory already exists
-      this.platform.log.debug('[LoxoneAccesory] Item already mapped. Restoring accessory from cache:', existingAccessory.displayName);
+      this.platform.log.debug('[LoxoneAccessory] Item already mapped. Restoring accessory from cache:', existingAccessory.displayName);
 
       // update the accessory.context
       existingAccessory.context.device = this.device;
@@ -58,6 +88,7 @@ export class LoxoneAccessory {
       // link the accessory to your platform
       this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
     }
+    this.platform.LoxoneItemCount++;
   }
 
   mapLoxoneItem(accessory: PlatformAccessory) {
@@ -75,56 +106,42 @@ export class LoxoneAccessory {
       case 'Alarm':
         new Alarm(this.platform, accessory);
         break;
-
       case 'Brightness':
         new Brightness(this.platform, accessory);
         break;
-
       case 'ColorPickerV2':
         new ColorPickerV2(this.platform, accessory);
         break;
-
-
       case 'IntercomV2':
         new IntercomV2(this.platform, accessory);
         break;
-
       case 'Humidity':
         new Humidiy(this.platform, accessory);
         break;
-
       case 'Switch':
         new Switch(this.platform, accessory);
         break;
-
+      case 'LightControllerV2':
+        new LightControllerV2(this.platform, accessory);
+        break;
       case 'Lock':
         new Lock(this.platform, accessory);
         break;
-
       case 'Motion':
         new Motion(this.platform, accessory);
         break;
-
       case 'PresenceDetector':
         new PresenceDetector(this.platform, accessory);
         break;
-
       case 'Gate':
         new Gate(this.platform, accessory);
         break;
-
       case 'Dimmer':
         new Dimmer(this.platform, accessory);
         break;
-
-      case 'MoodSwitch':
-        new MoodSwitch(this.platform, accessory);
-        break;
-
       case 'IRoomControllerV2':
         new IRoomControllerV2(this.platform, accessory);
         break;
-
       case 'Ventilation':
         new Ventilation(this.platform, accessory);
         break;

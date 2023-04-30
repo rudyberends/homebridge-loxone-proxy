@@ -10,30 +10,13 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   private LoxoneItems: Controls = {};
   private LoxoneIntercomMotion = '';
 
-  // Items supported by this Platform
-  private SupportedItems = [
-    'Alarm',
-    'Brightness',
-    'ColorPickerV2',
-    'Dimmer',
-    'Gate',
-    'Humidity',
-    'IntercomV2',
-    'IRoomControllerV2',
-    'Lock',
-    'MoodSwitch',
-    'Motion',
-    'PresenceDetector',
-    'Switch',
-    'Ventilation',
-  ];
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public LoxoneHandler: any;
+  public msInfo = {} as MSInfo;
+  public LoxoneItemCount = 1;
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
   public readonly accessories: PlatformAccessory[] = [];  // this is used to track restored cached accessories
-  public msInfo = {} as MSInfo;
 
   constructor(
     public readonly log: Logger,
@@ -75,57 +58,15 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
     // Loxone Items
     for (const ItemUuid in config.controls) {
-
       const LoxoneItem = config.controls[ItemUuid];
-
-      if (LoxoneItem.type === 'LightControllerV2') {
-        this.parseLoxoneLightController(LoxoneItem);
-      } else {
-        this.LoxoneItems[ItemUuid] = LoxoneItem;
-        this.LoxoneItems[ItemUuid].room = this.LoxoneRooms[LoxoneItem.room];
-        this.LoxoneItems[ItemUuid].cat = this.LoxoneCats[LoxoneItem.cat];
-        this.LoxoneItems[ItemUuid].type = this.checkLoxoneType(LoxoneItem);
-      }
+      this.LoxoneItems[ItemUuid] = LoxoneItem;
+      this.LoxoneItems[ItemUuid].room = this.LoxoneRooms[LoxoneItem.room];
+      this.LoxoneItems[ItemUuid].cat = this.LoxoneCats[LoxoneItem.cat];
+      this.LoxoneItems[ItemUuid].type = this.checkLoxoneType(LoxoneItem);
     }
 
     this.mapLoxoneItems(this.LoxoneItems);  // Map all discover Loxone Items
-    this.getUnmappedAssessories(); // Remove Cached Items which are removed from Loxone
-  }
-
-  parseLoxoneLightController(LightControllerV2: Control) {
-
-    // Create Mood Switches if enabled in config
-    if (this.config.options.MoodSwitches === 'enabled') {
-      const moods = JSON.parse(this.LoxoneHandler.getLastCachedValue(LightControllerV2.states.moodList));
-      for (const mood of moods) {
-        if (mood.name !== 'Uit') {
-
-          const MoodSwitch = Object.assign({}, LightControllerV2);
-
-          MoodSwitch.name = `[${this.LoxoneRooms[LightControllerV2.room]}] ${mood.name}`;
-          MoodSwitch.uuidAction = `${LightControllerV2.uuidAction}/${mood.name}`;
-          MoodSwitch.type = 'MoodSwitch';
-          MoodSwitch.cat = mood.id;
-          MoodSwitch.details = {};
-          MoodSwitch.subControls = {};
-
-          this.LoxoneItems[`${LightControllerV2.uuidAction}/${mood.name}`] = MoodSwitch;
-        }
-      }
-    }
-
-    // Create individual Lights
-    for (const childUuid in LightControllerV2.subControls) {
-
-      const LightItem = LightControllerV2.subControls[childUuid];
-      if (!(LightItem.uuidAction.indexOf('/masterValue') !== -1) || (LightItem.uuidAction.indexOf('/masterColor')) !== -1) {
-        this.LoxoneItems[childUuid] = LightItem;
-        this.LoxoneItems[childUuid].room = this.LoxoneRooms[LightControllerV2.room];
-        this.LoxoneItems[childUuid].cat = this.LoxoneCats[LightControllerV2.cat];
-        this.LoxoneItems[childUuid].type = this.checkLoxoneType(LightItem);
-      }
-    }
-    return;
+    this.removeUnmappedAccessories(); // Remove Cached Items which are removed from Loxone
   }
 
   checkLoxoneType(LoxoneItem: Control) {
@@ -174,25 +115,12 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   async mapLoxoneItems(LoxoneItems: Controls) {
-
-    let itemid = 1;
-
     for (const uuid in LoxoneItems) {
-      if (this.SupportedItems.includes(LoxoneItems[uuid].type)) {
-        if (itemid >= 149) {
-          this.log.info('[mapLoxoneitems] Maximum number of supported HomeKit items reached. Stop mapping Items.');
-          return;
-        }
-        this.log.debug(`[mapLoxoneItems][Item ${itemid}] Found item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].type}`);
-        new LoxoneAccessory(this, LoxoneItems[uuid]);
-        itemid++;
-      } else {
-        this.log.debug(`[mapLoxoneitems] Skipping Unsupported item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].type}`);
-      }
+      new LoxoneAccessory(this, LoxoneItems[uuid]);
     }
   }
 
-  getUnmappedAssessories() {
+  removeUnmappedAccessories() {
     this.accessories.forEach((a) => {
       if (!a.context.mapped) {
         this.removeAccessory(a);

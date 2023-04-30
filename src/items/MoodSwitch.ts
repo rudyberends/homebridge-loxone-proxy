@@ -13,19 +13,23 @@ export class MoodSwitch {
   constructor(
     private readonly platform: LoxonePlatform,
     private readonly accessory: PlatformAccessory,
+    private readonly MoodSwitch: Control,
   ) {
 
-    this.device = this.accessory.context.device;
+    this.device = MoodSwitch;
 
     this.service =
-      this.accessory.getService(this.platform.Service.Switch) ||
-      this.accessory.addService(this.platform.Service.Switch);
+      this.accessory.getService(this.device.name) ||
+      this.accessory.addService(this.platform.Service.Switch, this.device.name, `${this.device.uuidAction}/${this.device.cat}`);
 
     this.LoxoneListener();
 
+    this.service.setCharacteristic(this.platform.Characteristic.Name, this.device.name);
+    this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, this.device.name);
+
     this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this))  // SET - bind to the `setOn` method below
-      .onGet(this.getOn.bind(this)); // GET - bind to the `getOn` method below
+      .onSet(this.setOn.bind(this))
+      .onGet(this.getOn.bind(this));
   }
 
   // Register a listener to be notified of changes in this items value

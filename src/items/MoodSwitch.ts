@@ -13,13 +13,14 @@ export class MoodSwitch {
   constructor(
     private readonly platform: LoxonePlatform,
     private readonly accessory: PlatformAccessory,
+    private readonly MoodSwitch: Control,
   ) {
 
-    this.device = this.accessory.context.device;
+    this.device = MoodSwitch;
 
     this.service =
-      this.accessory.getService(this.platform.Service.Switch) ||
-      this.accessory.addService(this.platform.Service.Switch);
+      this.accessory.getService(this.device.name) ||
+      this.accessory.addService(this.platform.Service.Switch, this.device.name, `${this.device.uuidAction}/${this.device.cat}`);
 
     this.LoxoneListener();
 

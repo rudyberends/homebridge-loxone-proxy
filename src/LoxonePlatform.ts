@@ -14,6 +14,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   private SupportedItems = [
     'Alarm',
     'Brightness',
+    'ColorPickerV2',
     'Dimmer',
     'Gate',
     'Humidity',

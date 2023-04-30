@@ -4,6 +4,7 @@ import { Control } from './structure/LoxAPP3';
 // Loxone Items
 import { Alarm } from './items/Alarm';
 import { Brightness } from './items/Brightness';
+import { ColorPickerV2 } from './items/ColorPickerV2';
 import { Dimmer } from './items/Dimmer';
 import { Gate } from './items/Gate';
 import { Humidiy } from './items/Humidity';
@@ -73,6 +74,11 @@ export class LoxoneAccessory {
       case 'Brightness':
         new Brightness(this.platform, accessory);
         break;
+
+      case 'ColorPickerV2':
+        new ColorPickerV2(this.platform, accessory);
+        break;
+
 
       case 'IntercomV2':
         new IntercomV2(this.platform, accessory);

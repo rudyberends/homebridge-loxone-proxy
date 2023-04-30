@@ -25,7 +25,7 @@ export class IntercomV2 {
 
     // Loxone Intercom Present??
     this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.address, (ip: string) => {
-      this.platform.log.info(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
+      this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
       new Camera(this.platform, this.accessory, ip); // Register InterCom Camera
       new Motion(this.platform, this.accessory); // Register InterCom Motion Sensor
     });

@@ -137,7 +137,7 @@ export class ColorPickerV2 {
       command = `temp(${this.State.Brightness},${homekitToLoxoneColorTemperature(this.State.ColorTemperature, this)})`;
     }
 
-    this.platform.log.info(`[Color] HomeKit - send message to ${this.device.name} ${command}`);
+    this.platform.log.info(`[${this.device.name}] HomeKit - send message to ${this.device.name} ${command}`);
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
 
     this.State.On = this.State.Brightness > 0;

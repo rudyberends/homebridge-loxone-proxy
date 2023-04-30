@@ -26,7 +26,7 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`IntercomV2` | Doorbell, MotionSensor, Camera | Auto
 |`IRoomControllerV2` | Thermostat | Auto
 |`Lock` | LockMechanism | Manual | A switch with an alias that is defined in the config.
-|`MoodSwitch` | Switch | Auto | all LightControllerV2 moods are maped to a seperate switch.
+|`MoodSwitch` | Switch Group | Auto | all LightControllerV2 moods are mapped to a Switch Group as a seperate switch.
 |`Motion` | MotionSensor | Manual | Requires an alias in the config.
 |`PresenceDetector` | OccupancySensor | Auto
 |`Switch` | Switch, Outlet, or Lightbulb | Auto

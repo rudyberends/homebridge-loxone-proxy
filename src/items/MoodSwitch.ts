@@ -25,8 +25,8 @@ export class MoodSwitch {
     this.LoxoneListener();
 
     this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this))  // SET - bind to the `setOn` method below
-      .onGet(this.getOn.bind(this)); // GET - bind to the `getOn` method below
+      .onSet(this.setOn.bind(this))
+      .onGet(this.getOn.bind(this));
   }
 
   // Register a listener to be notified of changes in this items value

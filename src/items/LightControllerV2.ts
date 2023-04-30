@@ -1,7 +1,7 @@
 import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../LoxonePlatform';
-import { Control } from '../structure/LoxAPP3';
 import { LoxoneAccessory } from '../LoxoneAccessory';
+import { Control } from '../structure/LoxAPP3';
 import { MoodSwitch } from './MoodSwitch';
 
 export class LightControllerV2 {
@@ -13,10 +13,8 @@ export class LightControllerV2 {
   ) {
 
     this.device = this.accessory.context.device;
-
     this.RegisterMoodSwitches();
     this.RegisterChildItems();
-
   }
 
   // Create Mood Switches if enabled in config

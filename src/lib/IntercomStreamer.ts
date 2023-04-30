@@ -67,7 +67,7 @@ export class IntercomStreamer implements CameraStreamingDelegate {
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', `http://${this.ip}/mjpg/video.mjpg`,
       '-frames:v', '1',
-      '-loglevel', 'debug',
+      '-loglevel', 'info',
       '-f', 'image2',
       '-',
     ],

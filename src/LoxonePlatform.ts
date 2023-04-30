@@ -53,7 +53,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    this.log.info(`[LoxoneInit] got structure file; last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
+    this.log.debug(`[LoxoneInit] got structure file; last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
     this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
   }
 
@@ -179,7 +179,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
           this.log.info('[mapLoxoneitems] Maximum number of supported HomeKit items reached. Stop mapping Items.');
           return;
         }
-        this.log.info(`[mapLoxoneItems][Item ${itemid}] Found item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].type}`);
+        this.log.debug(`[mapLoxoneItems][Item ${itemid}] Found item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].type}`);
         new LoxoneAccessory(this, LoxoneItems[uuid]);
         itemid++;
       } else {
@@ -197,7 +197,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   };
 
   removeAccessory(accessory: PlatformAccessory) {
-    this.log.info('Remove accessory: ', accessory.displayName);
+    this.log.debug('Remove accessory: ', accessory.displayName);
     this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
   };
 
@@ -206,7 +206,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    * It should be used to setup event handlers for characteristics and update respective values.
    */
   configureAccessory(accessory: PlatformAccessory) {
-    this.log.info('Loading accessory from cache:', accessory.displayName);
+    this.log.debug('Loading accessory from cache:', accessory.displayName);
     accessory.context.mapped = false; // To enable the removal of cached accessories removed from Loxone
     this.accessories.push(accessory);
   }

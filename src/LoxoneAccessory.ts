@@ -1,3 +1,4 @@
+import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from './LoxonePlatform';
 import { Control } from './structure/LoxAPP3';
 
@@ -29,7 +30,7 @@ export class LoxoneAccessory {
 
     if (existingAccessory) {
       // the accessory already exists
-      this.platform.log.info('[LoxoneAccesory] Item already mapped. Restoring accessory from cache:', existingAccessory.displayName);
+      this.platform.log.debug('[LoxoneAccesory] Item already mapped. Restoring accessory from cache:', existingAccessory.displayName);
 
       // update the accessory.context
       existingAccessory.context.device = this.device;
@@ -42,7 +43,7 @@ export class LoxoneAccessory {
 
     } else {
       // the accessory does not yet exist, so we need to create it
-      this.platform.log.info('[LoxoneAccesory] Adding new accessory:', this.device.name);
+      this.platform.log.debug('[LoxoneAccesory] Adding new accessory:', this.device.name);
 
       // create a new accessory
       const accessory = new this.platform.api.platformAccessory(this.device.name, uuid);
@@ -59,8 +60,9 @@ export class LoxoneAccessory {
     }
   }
 
-  mapLoxoneItem(accessory) {
+  mapLoxoneItem(accessory: PlatformAccessory) {
 
+    this.platform.log.debug('[mapLoxoneItem] Mapping Loxone item to accessory:', this.device.name);
     // set accessory information
     accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')

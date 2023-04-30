@@ -24,7 +24,7 @@ export class LightControllerV2 {
       for (const mood of moods) {
         if (mood.id !== 778) {
           const MoodSwitchItem = Object.assign({}, this.device);
-          MoodSwitchItem.name = `[${this.device.room}] ${mood.name}`;
+          MoodSwitchItem.name = `${mood.name}`;
           MoodSwitchItem.cat = mood.id;
           MoodSwitchItem.details = {};
           MoodSwitchItem.subControls = {};

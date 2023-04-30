@@ -11,18 +11,20 @@ export class IRoomControllerV2 {
     TargetHeatingCoolingState: 3, // 0 = Off / 1 = Heat / 2 = Cool / 3 = auto
     CurrentTemperature: 15,
     TargetTemperature: 15,
-    TemperatureDisplayUnits: 0,
+    TemperatureDisplayUnits: this.platform.msInfo.tempUnit, // The temperature unit in use by this Miniserver
   };
+
 
   constructor(
     private readonly platform: LoxonePlatform,
     private readonly accessory: PlatformAccessory,
   ) {
 
+    this.device = this.accessory.context.device;
+
     this.service =
       this.accessory.getService(this.platform.Service.Thermostat) ||
       this.accessory.addService(this.platform.Service.Thermostat);
-    this.device = this.accessory.context.device;
 
     this.initListener();
 

@@ -1,7 +1,7 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
 import LoxoneHandler from './lib/LoxoneHandler';
 import { LoxoneAccessory } from './LoxoneAccessory';
-import { StructureFile, Controls, Control } from './structure/LoxAPP3';
+import { StructureFile, Controls, Control, MSInfo } from './structure/LoxAPP3';
 
 export class LoxonePlatform implements DynamicPlatformPlugin {
 
@@ -33,6 +33,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
   public readonly accessories: PlatformAccessory[] = [];  // this is used to track restored cached accessories
+  public msInfo = {} as MSInfo;
 
   constructor(
     public readonly log: Logger,
@@ -59,6 +60,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
   async parseLoxoneConfig(config: StructureFile) {
 
+    // MSinfo
+    this.msInfo = config.msInfo;
+
     // Loxone Rooms
     for (const RoomUuid in config.rooms) {
       this.LoxoneRooms[RoomUuid] = config.rooms[RoomUuid].name;
@@ -83,7 +87,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
         this.LoxoneItems[ItemUuid].type = this.checkLoxoneType(LoxoneItem);
       }
     }
-    
+
     this.mapLoxoneItems(this.LoxoneItems);  // Map all discover Loxone Items
     this.getUnmappedAssessories(); // Remove Cached Items which are removed from Loxone
   }
@@ -194,12 +198,12 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
         this.removeAccessory(a);
       }
     });
-  };
+  }
 
   removeAccessory(accessory: PlatformAccessory) {
     this.log.debug('Remove accessory: ', accessory.displayName);
     this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
-  };
+  }
 
   /**
    * This function is invoked when homebridge restores cached accessories from disk at startup.

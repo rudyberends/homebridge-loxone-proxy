@@ -83,7 +83,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
         this.LoxoneItems[ItemUuid].type = this.checkLoxoneType(LoxoneItem);
       }
     }
-    this.mapLoxoneItems(this.LoxoneItems);
+    
+    this.mapLoxoneItems(this.LoxoneItems);  // Map all discover Loxone Items
+    this.getUnmappedAssessories(); // Remove Cached Items which are removed from Loxone
   }
 
   parseLoxoneLightController(LightControllerV2: Control) {
@@ -186,12 +188,26 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     }
   }
 
+  getUnmappedAssessories() {
+    this.accessories.forEach((a) => {
+      if (!a.context.mapped) {
+        this.removeAccessory(a);
+      }
+    });
+  };
+
+  removeAccessory(accessory: PlatformAccessory) {
+    this.log.info('Remove accessory: ', accessory.displayName);
+    this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
+  };
+
   /**
    * This function is invoked when homebridge restores cached accessories from disk at startup.
    * It should be used to setup event handlers for characteristics and update respective values.
    */
   configureAccessory(accessory: PlatformAccessory) {
     this.log.info('Loading accessory from cache:', accessory.displayName);
+    accessory.context.mapped = false; // To enable the removal of cached accessories removed from Loxone
     this.accessories.push(accessory);
   }
 }

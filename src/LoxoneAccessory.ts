@@ -33,6 +33,8 @@ export class LoxoneAccessory {
 
       // update the accessory.context
       existingAccessory.context.device = this.device;
+      existingAccessory.context.mapped = true;
+
       this.platform.api.updatePlatformAccessories([existingAccessory]);
 
       // create the accessory handler for the restored accessory
@@ -47,6 +49,7 @@ export class LoxoneAccessory {
 
       // store a copy of the device object in the `accessory.context`
       accessory.context.device = this.device;
+      accessory.context.mapped = true;
 
       // create the accessory handler for the newly create accessory
       this.mapLoxoneItem(accessory);

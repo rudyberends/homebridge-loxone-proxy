@@ -180,7 +180,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
         new LoxoneAccessory(this, LoxoneItems[uuid]);
         itemid++;
       } else {
-        this.log.debug(`[mapLoxoneitems] Skipping Unsupported item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].name}`);
+        this.log.debug(`[mapLoxoneitems] Skipping Unsupported item: ${LoxoneItems[uuid].name} with type ${LoxoneItems[uuid].type}`);
       }
     }
   }

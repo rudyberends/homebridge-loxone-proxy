@@ -40,9 +40,10 @@ export class LightControllerV2 {
   RegisterChildItems = () => {
     // Create individual Lights
     for (const childUuid in this.device.subControls) {
-
       const LightItem = this.device.subControls[childUuid];
       if (!(LightItem.uuidAction.indexOf('/masterValue') !== -1) || (LightItem.uuidAction.indexOf('/masterColor')) !== -1) {
+        LightItem.room = this.device.room;
+        LightItem.cat = this.device.cat;
         new LoxoneAccessory(this.platform, LightItem);
       }
     }

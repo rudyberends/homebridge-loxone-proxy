@@ -10,6 +10,7 @@ import { Dimmer } from './items/Dimmer';
 import { Gate } from './items/Gate';
 import { Humidiy } from './items/Humidity';
 import { IntercomV2 } from './items/IntercomV2';
+import { Jalousie } from './items/Jalousie';
 import { IRoomControllerV2 } from './items/IRoomControllerV2';
 import { LightControllerV2 } from './items/LightControllerV2';
 import { Lock } from './items/Lock';
@@ -30,6 +31,7 @@ export class LoxoneAccessory {
     'Humidity',
     'IntercomV2',
     'IRoomControllerV2',
+    'Jalousie',
     'LightControllerV2',
     'Lock',
     'Motion',
@@ -114,6 +116,9 @@ export class LoxoneAccessory {
         break;
       case 'IntercomV2':
         new IntercomV2(this.platform, accessory);
+        break;
+      case 'Jalousie':
+        new Jalousie(this.platform, accessory);
         break;
       case 'Humidity':
         new Humidiy(this.platform, accessory);

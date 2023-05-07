@@ -37,6 +37,11 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`Switch` | Switch, Outlet, or Lightbulb | Auto
 |`Ventilation` | Fanv2 | Auto
 
+### Manual mapping
+Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all motion detectors the convention "MoXX" in Loxone Config and then setting the alias "Mo" in the plugin will result in all items with "Mo" in the name being recognized as motion detectors.
+
+Items that require an alias are listed in the table above.
+
 ### Limitations
 
 Apple does not allow more than 150 items per bridge. This plugin will not map more than 150 items, but if you have other plugins activated, you might still hit this limit. To prevent this you can run this plugin as a child bridge. Another way to solve it is to use a dedicated loxone user for the plugin and only expose the items that you want to use in HomeKit.

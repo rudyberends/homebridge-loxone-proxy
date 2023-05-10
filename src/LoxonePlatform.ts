@@ -1,7 +1,7 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import LoxoneHandler from './lib/LoxoneHandler';
-import { LoxoneAccessory } from './LoxoneAccessory';
 import { StructureFile, Controls, Control, MSInfo } from './structure/LoxAPP3';
+import { LoxoneAccessory } from './LoxoneAccessory';
+import LoxoneHandler from './lib/LoxoneHandler';
 
 export class LoxonePlatform implements DynamicPlatformPlugin {
 
@@ -65,7 +65,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
       this.LoxoneItems[ItemUuid].type = this.checkLoxoneType(LoxoneItem);
     }
 
-    this.mapLoxoneItems(this.LoxoneItems);  // Map all discover Loxone Items
+    this.mapLoxoneItems(this.LoxoneItems);  // Map all discovered Loxone Items
     this.removeUnmappedAccessories(); // Remove Cached Items which are removed from Loxone
   }
 
@@ -94,7 +94,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
         return 'Humidity';
       }
 
-      // Map InfoOnlyAnalog with Brightness Alias to HumidityItem
+      // Map InfoOnlyAnalog with Brightness Alias to BriightnessItem
       if (this.config.InfoOnlyAnalogAlias?.Brightness && LoxoneItem.name.includes(this.config.InfoOnlyAnalogAlias.Brightness)) {
         return 'Brightness';
       }
@@ -121,16 +121,12 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   removeUnmappedAccessories() {
-    this.accessories.forEach((a) => {
-      if (!a.context.mapped) {
-        this.removeAccessory(a);
+    this.accessories.forEach((accessory: PlatformAccessory) => {
+      if (!accessory.context.mapped) {
+        this.log.debug('Remove accessory: ', accessory.displayName);
+        this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
       }
     });
-  }
-
-  removeAccessory(accessory: PlatformAccessory) {
-    this.log.debug('Remove accessory: ', accessory.displayName);
-    this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
   }
 
   /**

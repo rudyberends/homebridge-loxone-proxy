@@ -99,6 +99,8 @@ export class Jalousie {
       this.platform.log.debug(`[${this.device.name}] Position Callback state update for Jalousie: ${message.value}`);
 
       this.State.TargetPosition = 100 - (message.value *=100); // reversed value
+      this.State.TargetPosition = this.State.TargetPosition < 0 ? 0 : this.State.TargetPosition;
+      this.State.TargetPosition = this.State.TargetPosition > 100 ? 100 : this.State.TargetPosition;
       this.State.CurrentPosition = this.State.TargetPosition;
 
       //also make sure this change is directly communicated to HomeKit
@@ -116,6 +118,8 @@ export class Jalousie {
 
       this.platform.log.debug(`[${this.device.name}] Shade Position Callback state update for Jalousie: ${message.value}`);
       this.State.TargetHorizontalTiltAngle = message.value * 180 - 90;
+      this.State.TargetHorizontalTiltAngle = this.State.TargetHorizontalTiltAngle < -90 ? -90 : this.State.TargetHorizontalTiltAngle;
+      this.State.TargetHorizontalTiltAngle = this.State.TargetHorizontalTiltAngle > 90 ? 90 : this.State.TargetHorizontalTiltAngle;
       this.State.CurrentHorizontalTiltAngle = this.State.TargetHorizontalTiltAngle;
 
       //also make sure this change is directly communicated to HomeKit

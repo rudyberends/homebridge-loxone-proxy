@@ -1,27 +1,17 @@
-import { Service, PlatformAccessory } from 'homebridge';
-import { LoxonePlatform } from '../LoxonePlatform';
-import { Control } from '../structure/LoxAPP3';
+import { BaseService } from './BaseService';
 
-export class Lock {
-  private service: Service;
-  private device: Control;
+export class LockMechanism extends BaseService {
 
-  private State = {
+  State = {
     LockCurrentState: 0,
     LockTargetState: 0,
   };
 
-  constructor(
-    private readonly platform: LoxonePlatform,
-    private readonly accessory: PlatformAccessory,
-  ) {
+  setupService() {
 
     this.service =
       this.accessory.getService(this.platform.Service.LockMechanism) ||
       this.accessory.addService(this.platform.Service.LockMechanism);
-    this.device = this.accessory.context.device;
-
-    this.LoxoneListener();
 
     // create handlers for required characteristics
     this.service.getCharacteristic(this.platform.Characteristic.LockCurrentState)
@@ -32,31 +22,23 @@ export class Lock {
       .onSet(this.handleLockTargetStateSet.bind(this));
   }
 
-  // Register a listener to be notified of changes in this items value
-  LoxoneListener = () => {
-    this.platform.log.debug(`[${this.device.name}] Register Listener for Lock`);
-    this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.active, this.callBack.bind(this));
-  };
+  updateService = (message: { value: number}) => {
+    this.platform.log.debug(`[${this.device.name}] Callback state update for Lock: ${message.value}`);
+    this.State.LockTargetState = message.value;
 
-  callBack = (message: { uuid: string; value: number }) => {
-    if (message.uuid) {
-      this.platform.log.debug(`[${this.device.name}] Callback state update for Lock: ${message.value}`);
-      this.State.LockTargetState = message.value;
+    //also make sure this change is directly communicated to HomeKit
+    this.service!
+      .getCharacteristic(this.platform.Characteristic.LockTargetState)
+      .updateValue(this.State.LockTargetState);
+
+    setTimeout(() => {
+      this.State.LockCurrentState = message.value;
 
       //also make sure this change is directly communicated to HomeKit
-      this.service
-        .getCharacteristic(this.platform.Characteristic.LockTargetState)
-        .updateValue(this.State.LockTargetState);
-
-      setTimeout(() => {
-        this.State.LockCurrentState = message.value;
-
-        //also make sure this change is directly communicated to HomeKit
-        this.service
-          .getCharacteristic(this.platform.Characteristic.LockCurrentState)
-          .updateValue(this.State.LockCurrentState);
-      }, 5000);
-    }
+      this.service!
+        .getCharacteristic(this.platform.Characteristic.LockCurrentState)
+        .updateValue(this.State.LockCurrentState);
+    }, 5000);
   };
 
   /**

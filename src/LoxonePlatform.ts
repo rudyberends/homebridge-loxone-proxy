@@ -1,5 +1,5 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { StructureFile, Controls, MSInfo, Control } from './loxone/StructureFile';
+import { StructureFile, Controls, MSInfo, Control, Room, CatValue } from './loxone/StructureFile';
 import LoxoneHandler from './loxone/LoxoneHandler';
 
 /**
@@ -7,75 +7,75 @@ import LoxoneHandler from './loxone/LoxoneHandler';
  * This class is the main constructor for the plugin.
  */
 export class LoxonePlatform implements DynamicPlatformPlugin {
-
-  private LoxoneRooms = {}; // Contains List of configured rooms
-  private LoxoneCats = {}; // Contains List of configured Cats
-  private LoxoneItems: Controls = {}; // Contains List of all Items
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public LoxoneHandler: any;
+  private LoxoneRooms: Record<string, Room> = {};
+  private LoxoneCats: Record<string, CatValue> = {};
+  private LoxoneItems: Controls = {};
+  public LoxoneHandler;
+  //public LoxoneHandler: LoxoneHandler = new LoxoneHandler(this);
   public AccessoryCount = 1;
-  public msInfo = {} as MSInfo;
+  public msInfo: MSInfo = {} as MSInfo;
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
-  public readonly accessories: PlatformAccessory[] = [];  // this is used to track restored cached accessories
+  public readonly accessories: PlatformAccessory[] = []; // this is used to track restored cached accessories
 
   constructor(
     public readonly log: Logger,
     public readonly config: PlatformConfig,
     public readonly api: API,
   ) {
-    this.api.on('didFinishLaunching', () => this.LoxoneInit());
+    this.api.on('didFinishLaunching', async () => {
+      await this.LoxoneInit();
+    });
   }
 
   /**
-   * This function creates a websocket connection to the Loxone miniserver and
-   * awaits retrieval of the structure file
+   * Establishes a WebSocket connection to the Loxone Miniserver and retrieves the structure file.
    */
   async LoxoneInit(): Promise<void> {
-
-    this.LoxoneHandler = new LoxoneHandler(this);  // New Miniserver websocket
-
-    while (!this.LoxoneHandler.loxdata) {  // Wait for configfile. (LoxAPP3.json)
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
+    this.LoxoneHandler = new LoxoneHandler(this);
+    await this.waitForLoxoneConfig();
     this.log.debug(`[LoxoneInit] Got Structure File; Last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
     this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
   }
 
   /**
-   * This function parses The Loxone Structure File and collects a list of
-   * Rooms, Categories, and Items.
+   * Waits for the Loxone configuration to be retrieved.
    */
-  parseLoxoneConfig(config: StructureFile): void {
-
-    this.msInfo = config.msInfo; // MSinfo
-
-    for (const RoomUuid in config.rooms) { // Parse Loxone Rooms
-      this.LoxoneRooms[RoomUuid] = config.rooms[RoomUuid].name;
-    }
-
-    for (const CatUuid in config.cats) { // Parse Loxone Cats
-      this.LoxoneCats[CatUuid] = config.cats[CatUuid].type;
-    }
-
-    for (const ItemUuid in config.controls) { // Loxone Items
-      const LoxoneItem = config.controls[ItemUuid];
-      this.LoxoneItems[ItemUuid] = LoxoneItem;
-      this.LoxoneItems[ItemUuid].room = this.LoxoneRooms[LoxoneItem.room];
-      this.LoxoneItems[ItemUuid].cat = this.LoxoneCats[LoxoneItem.cat];
-    }
-    this.mapLoxoneItems(this.LoxoneItems); // Map all discovered Loxone Items
-    this.removeUnmappedAccessories(); // Remove Cached Items which are removed from Loxone
+  waitForLoxoneConfig(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const waitInterval = setInterval(() => {
+        if (this.LoxoneHandler!.loxdata) {
+          clearInterval(waitInterval);
+          resolve();
+        }
+      }, 1000);
+    });
   }
 
   /**
-   * This function maps all Loxone Items.
+   * Parses the Loxone Structure File and collects a list of rooms, categories, and items.
    */
-  mapLoxoneItems(LoxoneItems: Controls) : void {
-    for (const uuid in LoxoneItems) {
-      const Item: Control = LoxoneItems[uuid];
+  parseLoxoneConfig(config: StructureFile): void {
+    this.msInfo = config.msInfo;
+    this.LoxoneRooms = { ...config.rooms };
+    this.LoxoneCats = { ...config.cats };
+    this.LoxoneItems = { ...config.controls };
+
+    for (const uuid in this.LoxoneItems) {
+      const Item = this.LoxoneItems[uuid];
+      Item.room = this.LoxoneRooms[Item.room].name;
+      Item.cat = this.LoxoneCats[Item.cat].name;
+    }
+
+    this.mapLoxoneItems(Object.values(this.LoxoneItems));
+    this.removeUnmappedAccessories();
+  }
+
+  /**
+   * Maps all Loxone items to their corresponding HomeKit accessories.
+   */
+  mapLoxoneItems(items: Control[]): void {
+    for (const Item of items) {
       import(`./loxone/items/${Item.type}`)
         .then((itemFile) => {
           const constructorName = Object.keys(itemFile)[0];
@@ -88,7 +88,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * This function Removes Cached Accessories when they are removed from Loxone.
+   * Removes cached accessories that are no longer present in the Loxone system.
    */
   removeUnmappedAccessories(): void {
     setTimeout(() => {
@@ -102,8 +102,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to setup event handlers for characteristics and update respective values.
+   * Called when Homebridge restores cached accessories from disk at startup.
+   * Sets up event handlers for characteristics and updates values.
    */
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.debug('Loading accessory from cache:', accessory.displayName);

@@ -26,6 +26,6 @@ export class LightBulb extends SwitchService {
   async setBrightness(value: CharacteristicValue) {
     this.State.Brightness = value as number;
     this.platform.log.debug(`[${this.device.name}] - send message: ${this.State.Brightness}`);
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, this.State.Brightness);
+    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, this.State.Brightness.toString());
   }
 }

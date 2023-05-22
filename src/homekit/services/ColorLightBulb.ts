@@ -2,7 +2,7 @@ import { CharacteristicValue } from 'homebridge';
 import { LightBulb } from './LightBulb';
 
 export class ColorLightBulb extends LightBulb {
-  private lastsetmode = '';
+  private lastSetMode = '';
   private lastUpdate = 0;
 
   State = {
@@ -16,15 +16,20 @@ export class ColorLightBulb extends LightBulb {
   setupService() {
     super.setupService();
 
-    this.service!.getCharacteristic(this.platform.Characteristic.Hue)
+    const { Characteristic } = this.platform;
+
+    this.service!
+      .getCharacteristic(Characteristic.Hue)
       .onSet(this.setHue.bind(this))
       .onGet(this.getHue.bind(this));
 
-    this.service!.getCharacteristic(this.platform.Characteristic.Saturation)
+    this.service!
+      .getCharacteristic(Characteristic.Saturation)
       .onSet(this.setSaturation.bind(this))
       .onGet(this.getSaturation.bind(this));
 
-    this.service!.getCharacteristic(this.platform.Characteristic.ColorTemperature)
+    this.service!
+      .getCharacteristic(Characteristic.ColorTemperature)
       .onSet(this.setColorTemperature.bind(this))
       .onGet(this.getColorTemperature.bind(this));
   }
@@ -32,18 +37,21 @@ export class ColorLightBulb extends LightBulb {
   async setColorState() {
     this.lastUpdate = Date.now();
 
-    //compose hsv or temp string
+    const { device, platform, State } = this;
+    const { name, uuidAction } = device;
+    const { LoxoneHandler } = platform;
+
     let command = '';
-    if (this.lastsetmode === 'color') {
-      command = `hsv(${this.State.Hue},${this.State.Saturation},${this.State.Brightness})`;
-    } else if (this.lastsetmode === 'colortemperature') {
-      command = `temp(${this.State.Brightness},${homekitToLoxoneColorTemperature(this.State.ColorTemperature, this)})`;
+    if (this.lastSetMode === 'color') {
+      command = `hsv(${State.Hue},${State.Saturation},${State.Brightness})`;
+    } else if (this.lastSetMode === 'colortemperature') {
+      // command = `temp(${State.Brightness},${homekitToLoxoneColorTemperature(State.ColorTemperature, this)})`;
     }
 
-    this.platform.log.info(`[${this.device.name}] HomeKit - send message: ${command}`);
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    platform.log.info(`[${name}] HomeKit - send message: ${command}`);
+    LoxoneHandler.sendCommand(uuidAction, command);
 
-    this.State.On = this.State.Brightness > 0;
+    State.On = State.Brightness > 0;
   }
 
   async setOn(value: CharacteristicValue) {
@@ -61,7 +69,7 @@ export class ColorLightBulb extends LightBulb {
 
   async setHue(value: CharacteristicValue) {
     this.State.Hue = value as number;
-    this.lastsetmode = 'color';
+    this.lastSetMode = 'color';
     this.setColorState();
   }
 
@@ -71,7 +79,7 @@ export class ColorLightBulb extends LightBulb {
 
   async setSaturation(value: CharacteristicValue) {
     this.State.Saturation = value as number;
-    this.lastsetmode = 'color';
+    this.lastSetMode = 'color';
     this.setColorState();
   }
 
@@ -81,26 +89,11 @@ export class ColorLightBulb extends LightBulb {
 
   async setColorTemperature(value: CharacteristicValue) {
     this.State.ColorTemperature = value as number;
-    this.lastsetmode = 'colortemperature';
+    this.lastSetMode = 'colortemperature';
     this.setColorState();
   }
 
   async getColorTemperature() {
     return this.State.ColorTemperature;
   }
-}
-
-// transform Homekit color temperature (expressed 140-500 to Loxone values expressed in Kelvins 2700-6500k)
-function homekitToLoxoneColorTemperature(ct: number) {
-
-  const minCtLoxone = 2700;
-  const maxCtLoxone = 6500;
-
-  const minCtHomekit = 153;
-  const maxCtHomekit = 500;
-
-  const percent = 1 - ((ct - minCtHomekit) / (maxCtHomekit - minCtHomekit));
-  const newValue = Math.round(minCtLoxone + ((maxCtLoxone - minCtLoxone) * percent));
-
-  return newValue;
 }

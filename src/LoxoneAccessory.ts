@@ -9,8 +9,8 @@ import { Control } from './loxone/StructureFile';
  */
 export class LoxoneAccessory {
   Accessory: PlatformAccessory | undefined;
-  Service: { [key: string]: unknown } = {};
-  ItemStates = {};
+  Service: Record<string, unknown> = {};
+  ItemStates: Record<string, { service: string; state: string }> = {};
 
   constructor(
     readonly platform: LoxonePlatform,
@@ -23,64 +23,70 @@ export class LoxoneAccessory {
       return;
     }
 
-    (this.isSupported())
-      ? this.setupAccessory()
-      : this.platform.log.debug(`[${device.type}Item] Skipping Unsupported Item: ${this.device.name}`);
+    if (!this.isSupported()) {
+      this.platform.log.debug(`[${device.type}Item] Skipping Unsupported Item: ${this.device.name}`);
+      return;
+    }
+
+    this.setupAccessory();
   }
 
-  isSupported(): boolean {
+  protected isSupported(): boolean {
     return true;
   }
 
-  setupAccessory(): void {
-
+  private setupAccessory(): void {
     const uuid = this.platform.api.hap.uuid.generate(this.device.uuidAction);
-
-    this.Accessory = this.platform.accessories.find(accessory => accessory.UUID === uuid);
-    const isCached = (this.Accessory) ? true : false;
-
-    if (!this.Accessory) {
-      this.Accessory = new this.platform.api.platformAccessory(this.device.name, uuid);
-    }
+    this.Accessory = this.getOrCreateAccessory(uuid);
 
     this.Accessory.context.device = this.device;
     this.Accessory.context.mapped = true;
 
-    if (isCached) {
-      this.platform.log.debug(`[${this.device.type}Item] Restoring accessory from cache:`, this.Accessory.displayName);
-      this.platform.api.updatePlatformAccessories([this.Accessory]);
-    } else {
-      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory:`, this.device.name);
-      this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [this.Accessory]);
-    }
-
-    this.Accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
-      .setCharacteristic(this.platform.Characteristic.Model, this.device.room)
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, this.device.uuidAction)
-      .setCharacteristic(this.platform.Characteristic.Name, this.device.name);
-
-    this.configureServices();
+    this.configureServices(this.Accessory);
     this.setupListeners();
 
     this.platform.AccessoryCount++;
   }
 
-  configureServices(): void {
-    return;
+  private getOrCreateAccessory(uuid: string): PlatformAccessory {
+    let accessory = this.platform.accessories.find((acc) => acc.UUID === uuid);
+
+    if (!accessory) {
+      accessory = new this.platform.api.platformAccessory(this.device.name, uuid);
+      this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
+      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory:`, this.device.name);
+    } else {
+      this.platform.log.debug(`[${this.device.type}Item] Restoring accessory from cache:`, accessory.displayName);
+    }
+
+    const accessoryInfoService = accessory.getService(this.platform.Service.AccessoryInformation);
+    if (accessoryInfoService) {
+      accessoryInfoService
+        .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
+        .setCharacteristic(this.platform.Characteristic.Model, this.device.room)
+        .setCharacteristic(this.platform.Characteristic.SerialNumber, this.device.uuidAction)
+        .setCharacteristic(this.platform.Characteristic.Name, this.device.name);
+    }
+    return accessory;
   }
 
-  setupListeners(): void {
+  protected configureServices(accessory: PlatformAccessory): void {
+    // Implement the configuration of services for the accessory
+  }
+
+  private setupListeners(): void {
     this.platform.log.debug(`[${this.device.name}] Register Listeners for ${this.device.type}Item`);
-    for(const state in this.ItemStates) {
+    for (const state in this.ItemStates) {
       this.platform.LoxoneHandler.registerListenerForUUID(state, this.callBack.bind(this));
     }
   }
 
-  callBack = ( message: {uuid: string; state: string; service: string; value: number} ) => {
+  private callBack = (message: { uuid: string; state: string; service: string; value: number }): void => {
     if (message.uuid) {
-      message.service = this.ItemStates[message.uuid].service;
-      message.state = this.ItemStates[message.uuid].state;
+      const itemState = this.ItemStates[message.uuid];
+      message.service = itemState.service;
+      message.state = itemState.state;
+
       const updateService = new Function('message', `return this.Service.${this.ItemStates[message.uuid].service}.updateService(message);`);
       updateService.call(this, message);
     }

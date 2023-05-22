@@ -1,4 +1,4 @@
-import { Service, PlatformAccessory } from 'homebridge';
+import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { Control } from '../../loxone/StructureFile';
 
@@ -17,5 +17,14 @@ export class BaseService {
 
   setupService() {
     return;
+  }
+
+  protected updateCharacteristicValue(characteristic: string, value: CharacteristicValue) {
+    if (this.service) {
+      const characteristicInstance = this.service.getCharacteristic(characteristic);
+      if (characteristicInstance) {
+        characteristicInstance.updateValue(value);
+      }
+    }
   }
 }

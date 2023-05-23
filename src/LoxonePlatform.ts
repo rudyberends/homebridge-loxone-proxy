@@ -11,7 +11,6 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   private LoxoneCats: Record<string, CatValue> = {};
   private LoxoneItems: Controls = {};
   public LoxoneHandler;
-  //public LoxoneHandler: LoxoneHandler = new LoxoneHandler(this);
   public AccessoryCount = 1;
   public msInfo: MSInfo = {} as MSInfo;
   public readonly Service: typeof Service = this.api.hap.Service;
@@ -74,16 +73,24 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   /**
    * Maps all Loxone items to their corresponding HomeKit accessories.
    */
-  mapLoxoneItems(items: Control[]): void {
-    for (const Item of items) {
-      import(`./loxone/items/${Item.type}`)
-        .then((itemFile) => {
-          const constructorName = Object.keys(itemFile)[0];
-          new itemFile[constructorName](this, Item);
-        })
-        .catch(() => {
-          this.log.debug(`[mapLoxoneItem] Skipping Unsupported ItemType: ${Item.name} with type ${Item.type}`);
-        });
+  async mapLoxoneItems(items: Control[]): Promise<void> {
+    const itemCache: { [key: string]: any } = {}; // Cache object to store imported item files
+
+    for (const item of items) {
+      try {
+        const itemType = item.type;
+
+        if (!itemCache[itemType]) {  // Check if the item file has already been imported
+          const itemFile = await import(`./loxone/items/${itemType}`);
+          itemCache[itemType] = itemFile;
+        }
+
+        const itemFile = itemCache[itemType];
+        const constructorName = Object.keys(itemFile)[0];
+        new itemFile[constructorName](this, item);
+      } catch (error) {
+        this.log.debug(`[mapLoxoneItem] Skipping Unsupported ItemType: ${item.name} with type ${item.type}`);
+      }
     }
   }
 

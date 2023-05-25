@@ -1,4 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
+import { SwitchService } from '../../homekit/services/Switch';
 import { ColorPickerV2 } from './ColorPickerV2';
 import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
@@ -10,45 +11,57 @@ export class LightControllerV2 extends LoxoneAccessory {
 
   isSupported(): boolean {
     this.registerChildItems();
-    return false;
+
+    if (this.platform.config.options.MoodSwitches === 'enabled') {
+      this.registerMoodSwitches();
+      return true;
+    } else {
+      return false;
+    }
   }
 
-  configureServices(): void {
-
-    /*
-    this.ItemStates = {
-      [this.device.states.active]: {'service': 'PrimaryService', 'state': 'active'},
-    };
-
-    this.Service.PrimaryService = (this.device.name.includes(this.platform.config.switchAlias?.Lock))
-      ? new LockMechanism(this.platform, this.Accessory!)
-      : new SwitchService(this.platform, this.Accessory!);
-      */
+  // Create Mood Switches if enabled in config
+  registerMoodSwitches(): void {
+    const moods = JSON.parse(this.platform.LoxoneHandler.getLastCachedValue(this.device.states.moodList));
+    for (const mood of moods) {
+      if (mood.id !== 778) {
+        const moodSwitchItem = {
+          ...this.device,
+          name: `${mood.name}`,
+          cat: mood.id,
+          details: {},
+          subControls: {},
+        };
+        const stateUUID = this.device.states.activeMoods;
+        this.ItemStates[stateUUID] = { service: moodSwitchItem.name, state: 'activeMoods' };
+        new SwitchService(this.platform, this.Accessory!);
+      }
+    }
   }
 
   // Create individual Lights
   registerChildItems(): void {
     for (const childUuid in this.device.subControls) {
-      const LightItem = this.device.subControls[childUuid];
+      const lightItem = this.device.subControls[childUuid];
       if (
-        LightItem.uuidAction.indexOf('/masterValue') !== -1 ||
-        LightItem.uuidAction.indexOf('/masterColor') !== -1
+        lightItem.uuidAction.indexOf('/masterValue') !== -1 ||
+        lightItem.uuidAction.indexOf('/masterColor') !== -1
       ) {
         continue;
       }
 
-      LightItem.room = this.device.room;
-      LightItem.cat = this.device.cat;
+      lightItem.room = this.device.room;
+      lightItem.cat = this.device.cat;
 
-      switch (LightItem.type) {
+      switch (lightItem.type) {
         case 'ColorPickerV2':
-          new ColorPickerV2(this.platform, LightItem);
+          new ColorPickerV2(this.platform, lightItem);
           break;
         case 'Dimmer':
-          new Dimmer(this.platform, LightItem);
+          new Dimmer(this.platform, lightItem);
           break;
         case 'Switch':
-          new Switch(this.platform, LightItem);
+          new Switch(this.platform, lightItem);
           break;
       }
     }

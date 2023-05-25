@@ -1,6 +1,10 @@
 import { CharacteristicValue } from 'homebridge';
 import { LightBulb } from './LightBulb';
 
+/**
+ * ColorLightBulb
+ * Represents a color light bulb service for Homebridge.
+ */
 export class ColorLightBulb extends LightBulb {
   private lastSetMode = '';
   private lastUpdate = 0;
@@ -13,7 +17,10 @@ export class ColorLightBulb extends LightBulb {
     ColorTemperature: 153,
   };
 
-  setupService() {
+  /**
+   * Sets up the color light bulb service.
+   */
+  setupService(): void {
     super.setupService();
 
     const { Characteristic } = this.platform;
@@ -34,7 +41,10 @@ export class ColorLightBulb extends LightBulb {
       .onGet(this.getColorTemperature.bind(this));
   }
 
-  async setColorState() {
+  /**
+   * Sets the color state of the light bulb.
+   */
+  async setColorState(): Promise<void> {
     this.lastUpdate = Date.now();
 
     const { device, platform, State } = this;
@@ -54,46 +64,78 @@ export class ColorLightBulb extends LightBulb {
     State.On = State.Brightness > 0;
   }
 
-  async setOn(value: CharacteristicValue) {
+  /**
+   * Sets the "On" characteristic of the light bulb.
+   * @param value - The new value for the "On" characteristic.
+   */
+  async setOn(value: CharacteristicValue): Promise<void> {
     if (!value) {
       this.State.Brightness = 0;
       this.setColorState();
     }
   }
 
-  async setBrightness(value: CharacteristicValue) {
+  /**
+   * Sets the "Brightness" characteristic of the light bulb.
+   * @param value - The new value for the "Brightness" characteristic.
+   */
+  async setBrightness(value: CharacteristicValue): Promise<void> {
     this.State.Brightness = value as number;
     this.State.On = this.State.Brightness > 0;
     this.setColorState();
   }
 
-  async setHue(value: CharacteristicValue) {
+  /**
+   * Sets the "Hue" characteristic of the light bulb.
+   * @param value - The new value for the "Hue" characteristic.
+   */
+  async setHue(value: CharacteristicValue): Promise<void> {
     this.State.Hue = value as number;
     this.lastSetMode = 'color';
     this.setColorState();
   }
 
-  async getHue() {
+  /**
+   * Gets the current value of the "Hue" characteristic.
+   * @returns The current value of the "Hue" characteristic.
+   */
+  async getHue(): Promise<CharacteristicValue> {
     return this.State.Hue;
   }
 
-  async setSaturation(value: CharacteristicValue) {
+  /**
+   * Sets the "Saturation" characteristic of the light bulb.
+   * @param value - The new value for the "Saturation" characteristic.
+   */
+  async setSaturation(value: CharacteristicValue): Promise<void> {
     this.State.Saturation = value as number;
     this.lastSetMode = 'color';
     this.setColorState();
   }
 
-  async getSaturation() {
+  /**
+   * Gets the current value of the "Saturation" characteristic.
+   * @returns The current value of the "Saturation" characteristic.
+   */
+  async getSaturation(): Promise<CharacteristicValue> {
     return this.State.Saturation;
   }
 
-  async setColorTemperature(value: CharacteristicValue) {
+  /**
+   * Sets the "ColorTemperature" characteristic of the light bulb.
+   * @param value - The new value for the "ColorTemperature" characteristic.
+   */
+  async setColorTemperature(value: CharacteristicValue): Promise<void> {
     this.State.ColorTemperature = value as number;
     this.lastSetMode = 'colortemperature';
     this.setColorState();
   }
 
-  async getColorTemperature() {
+  /**
+   * Gets the current value of the "ColorTemperature" characteristic.
+   * @returns The current value of the "ColorTemperature" characteristic.
+   */
+  async getColorTemperature(): Promise<CharacteristicValue> {
     return this.State.ColorTemperature;
   }
 }

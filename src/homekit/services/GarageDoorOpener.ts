@@ -1,7 +1,10 @@
 import { BaseService } from './BaseService';
 
+/**
+ * GarageDoorOpener Service
+ * Represents a garage door opener accessory in HomeKit.
+ */
 export class GarageDoorOpener extends BaseService {
-
   State = {
     CurrentDoorState: 0,
     TargetDoorState: 0,
@@ -9,29 +12,35 @@ export class GarageDoorOpener extends BaseService {
     ObstructionDetected: 0,
   };
 
-  setupService() {
+  /**
+   * Sets up the GarageDoorOpener service.
+   * Creates the required characteristics and their event handlers.
+   */
+  setupService(): void {
     this.service =
       this.accessory.getService(this.platform.Service.GarageDoorOpener) ||
       this.accessory.addService(this.platform.Service.GarageDoorOpener);
 
-    // create handlers for required characteristics
+    // Create handlers for the required characteristics
     this.service.getCharacteristic(this.platform.Characteristic.CurrentDoorState)
-      .onGet(this.handleCurrentDoorStateGet.bind(this));
+      .onGet(() => this.handleCurrentDoorStateGet());
 
     this.service.getCharacteristic(this.platform.Characteristic.TargetDoorState)
-      .onGet(this.handleTargetDoorStateGet.bind(this))
-      .onSet(this.handleTargetDoorStateSet.bind(this));
+      .onGet(() => this.handleTargetDoorStateGet())
+      .onSet((value) => this.handleTargetDoorStateSet(value as number));
 
     this.service.getCharacteristic(this.platform.Characteristic.ObstructionDetected)
-      .onGet(this.handleObstructionDetectedGet.bind(this));
+      .onGet(() => this.handleObstructionDetectedGet());
   }
 
-  updateService(message: { state: string; value: number }) {
-
+  /**
+   * Updates the GarageDoorOpener service with the latest state.
+   * @param message - The message containing the updated state and value.
+   */
+  updateService(message: { state: string; value: number }): void {
     this.platform.log.debug(`[${this.device.name}] ${message.state} Callback state update for Gate: ${message.value}`);
 
     switch (message.state) {
-
       case 'active':
         switch (message.value) {
           case -1: // closing
@@ -45,41 +54,49 @@ export class GarageDoorOpener extends BaseService {
             break;
         }
         break;
-
       case 'position':
         this.State.TargetDoorState = message.value === 0 ? 1 : 0;
         this.State.Position = message.value;
         break;
     }
+
+    // Make sure the changes are communicated to HomeKit
+    this.service?.getCharacteristic(this.platform.Characteristic.CurrentDoorState)?.updateValue(this.State.CurrentDoorState);
+    this.service?.getCharacteristic(this.platform.Characteristic.TargetDoorState)?.updateValue(this.State.TargetDoorState);
   }
 
   /**
-   * Handle requests to get the current value of the "Current Door State" characteristic
+   * Handles the GET event for the CurrentDoorState characteristic.
+   * @returns The current value of the CurrentDoorState characteristic.
    */
-  handleCurrentDoorStateGet() {
+  handleCurrentDoorStateGet(): number {
     this.platform.log.debug('Triggered GET CurrentDoorState');
     return this.State.CurrentDoorState;
   }
 
   /**
-   * Handle requests to get the current value of the "Target Door State" characteristic
+   * Handles the GET event for the TargetDoorState characteristic.
+   * @returns The current value of the TargetDoorState characteristic.
    */
-  handleTargetDoorStateGet() {
+  handleTargetDoorStateGet(): number {
     this.platform.log.debug('Triggered GET TargetDoorState');
     return this.State.TargetDoorState;
   }
 
   /**
-   * Handle requests to set the "Target Door State" characteristic
+   * Handles the SET event for the TargetDoorState characteristic.
+   * @param value - The new value of the TargetDoorState characteristic.
    */
-  handleTargetDoorStateSet(value) {
-    this.platform.log.debug('Triggered SET TargetDoorState:' + value);
+  handleTargetDoorStateSet(value: number): void {
+    this.platform.log.debug('Triggered SET TargetDoorState: ' + value);
+    // Handle the change in the TargetDoorState characteristic if needed
   }
 
   /**
-   * Handle requests to get the current value of the "Obstruction Detected" characteristic
+   * Handles the GET event for the ObstructionDetected characteristic.
+   * @returns The current value of the ObstructionDetected characteristic.
    */
-  handleObstructionDetectedGet() {
+  handleObstructionDetectedGet(): number {
     this.platform.log.debug('Triggered GET ObstructionDetected');
     return this.State.ObstructionDetected;
   }

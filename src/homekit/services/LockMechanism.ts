@@ -1,19 +1,23 @@
 import { BaseService } from './BaseService';
 
+/**
+ * Represents a Lock Mechanism accessory.
+ */
 export class LockMechanism extends BaseService {
-
   State = {
     LockCurrentState: 0,
     LockTargetState: 0,
   };
 
-  setupService() {
-
+  /**
+   * Sets up the lock mechanism service.
+   */
+  setupService(): void {
     this.service =
       this.accessory.getService(this.platform.Service.LockMechanism) ||
       this.accessory.addService(this.platform.Service.LockMechanism);
 
-    // create handlers for required characteristics
+    // Create handlers for required characteristics
     this.service.getCharacteristic(this.platform.Characteristic.LockCurrentState)
       .onGet(this.handleLockCurrentStateGet.bind(this));
 
@@ -22,11 +26,11 @@ export class LockMechanism extends BaseService {
       .onSet(this.handleLockTargetStateSet.bind(this));
   }
 
-  updateService = (message: { value: number}) => {
+  updateService = (message: { value: number }) => {
     this.platform.log.debug(`[${this.device.name}] Callback state update for Lock: ${message.value}`);
     this.State.LockTargetState = message.value;
 
-    //also make sure this change is directly communicated to HomeKit
+    // Also make sure this change is directly communicated to HomeKit
     this.service!
       .getCharacteristic(this.platform.Characteristic.LockTargetState)
       .updateValue(this.State.LockTargetState);
@@ -34,7 +38,7 @@ export class LockMechanism extends BaseService {
     setTimeout(() => {
       this.State.LockCurrentState = message.value;
 
-      //also make sure this change is directly communicated to HomeKit
+      // Also make sure this change is directly communicated to HomeKit
       this.service!
         .getCharacteristic(this.platform.Characteristic.LockCurrentState)
         .updateValue(this.State.LockCurrentState);
@@ -42,7 +46,7 @@ export class LockMechanism extends BaseService {
   };
 
   /**
-   * Handle requests to get the current value of the "Lock Current State" characteristic
+   * Handle requests to get the current value of the "Lock Current State" characteristic.
    */
   handleLockCurrentStateGet() {
     this.platform.log.debug('Triggered GET LockCurrentState');
@@ -50,16 +54,16 @@ export class LockMechanism extends BaseService {
   }
 
   /**
- * Handle requests to get the current value of the "Lock Target State" characteristic
- */
+   * Handle requests to get the current value of the "Lock Target State" characteristic.
+   */
   handleLockTargetStateGet() {
     this.platform.log.debug('Triggered GET LockTargetState');
     return this.State.LockTargetState;
   }
 
   /**
- * Handle requests to set the "Lock Target State" characteristic
- */
+   * Handle requests to set the "Lock Target State" characteristic.
+   */
   handleLockTargetStateSet(value) {
     this.platform.log.debug('Triggered SET LockTargetState:' + value);
     const command = this.State.LockTargetState ? 'Off' : 'On';

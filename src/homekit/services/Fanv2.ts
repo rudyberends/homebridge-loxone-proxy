@@ -1,62 +1,77 @@
 import { BaseService } from './BaseService';
 
+/**
+ * Fanv2 Service
+ * Represents a fan accessory in HomeKit with rotation speed control.
+ */
 export class Fanv2 extends BaseService {
-
   State = {
     Active: true,
     RotationSpeed: 0,
   };
 
-  setupService() {
+  /**
+   * Sets up the Fanv2 service.
+   * Creates the required characteristics and their event handlers.
+   */
+  setupService(): void {
     this.service =
       this.accessory.getService(this.platform.Service.Fanv2) ||
       this.accessory.addService(this.platform.Service.Fanv2);
 
-    // create handlers for required characteristics
+    // Create handlers for the required characteristics
     this.service.getCharacteristic(this.platform.Characteristic.Active)
-      .onGet(this.handleActiveGet.bind(this))
-      .onSet(this.handleActiveSet.bind(this));
+      .onGet(() => this.handleActiveGet())
+      .onSet((value) => this.handleActiveSet(value as boolean));
 
     this.service.getCharacteristic(this.platform.Characteristic.RotationSpeed)
-      .onGet(this.handleRotationSpeedGet.bind(this));
-    //.onSet(this.handleActiveSet.bind(this));
+      .onGet(() => this.handleRotationSpeedGet());
   }
 
-  updateService = (message: {state: string; value: number}) => {
+  /**
+   * Updates the Fanv2 service with the latest state.
+   * @param message - The message containing the updated state and value.
+   */
+  updateService(message: { state: string; value: number }): void {
     this.platform.log.debug(`[${this.device.name}] Callback ${message.state} update for Fan: ${message.value}`);
 
     switch (message.state) {
       case 'mode':
+        // Handle mode update if needed
         break;
       case 'speed':
         this.State.RotationSpeed = message.value;
         break;
     }
 
-    //also make sure this change is directly communicated to HomeKit
-    this.service!.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.State.Active);
-    this.service!.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.State.RotationSpeed);
-  };
+    // Make sure the changes are communicated to HomeKit
+    this.service?.getCharacteristic(this.platform.Characteristic.Active)?.updateValue(this.State.Active);
+    this.service?.getCharacteristic(this.platform.Characteristic.RotationSpeed)?.updateValue(this.State.RotationSpeed);
+  }
 
   /**
-   * Handle requests to get the current value of the "Active" characteristic
+   * Handles the GET event for the Active characteristic.
+   * @returns The current value of the Active characteristic.
    */
-  handleActiveGet() {
+  handleActiveGet(): boolean {
     this.platform.log.debug('Triggered GET Active');
     return this.State.Active;
   }
 
   /**
-   * Handle requests to set the "Active" characteristic
+   * Handles the SET event for the Active characteristic.
+   * @param value - The new value of the Active characteristic.
    */
-  handleActiveSet(value) {
-    this.platform.log.debug('Triggered SET Active:' + value);
+  handleActiveSet(value: boolean): void {
+    this.platform.log.debug('Triggered SET Active: ' + value);
+    // Handle the change in the Active characteristic if needed
   }
 
   /**
-  * Handle requests to get the current value of the "Active" characteristic
-  */
-  handleRotationSpeedGet() {
+   * Handles the GET event for the RotationSpeed characteristic.
+   * @returns The current value of the RotationSpeed characteristic.
+   */
+  handleRotationSpeedGet(): number {
     this.platform.log.debug('Triggered GET RotationSpeed');
     return this.State.RotationSpeed;
   }

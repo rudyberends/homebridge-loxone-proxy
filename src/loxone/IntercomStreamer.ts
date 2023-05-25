@@ -1,5 +1,4 @@
-/* eslint-disable no-case-declarations */
-import {ChildProcess, spawn} from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import { LoxonePlatform } from '../LoxonePlatform';
 import {
   CameraController,
@@ -19,25 +18,12 @@ import {
 } from 'homebridge';
 
 type SessionInfo = {
-  address: string; // address of the HAP controller
+  address: string; // Address of the HAP controller
   videoPort: number;
-  videoCryptoSuite: SRTPCryptoSuites; // should be saved if multiple suites are supported
-  videoSRTP: Buffer; // key and salt concatenated
-  videoSSRC: number; // rtp synchronisation source
+  videoCryptoSuite: SRTPCryptoSuites; // Should be saved if multiple suites are supported
+  videoSRTP: Buffer; // Key and salt concatenated
+  videoSSRC: number; // RTP synchronization source
 };
-
-/*
-const FFMPEGH264ProfileNames = [
-  'baseline',
-  'main',
-  'high',
-];
-const FFMPEGH264LevelNames = [
-  '3.1',
-  '3.2',
-  '4.0',
-];
-*/
 
 export class IntercomStreamer implements CameraStreamingDelegate {
 
@@ -46,10 +32,16 @@ export class IntercomStreamer implements CameraStreamingDelegate {
   private readonly base64auth: string = '';
   controller?: CameraController;
 
-  // keep track of sessions
+  // Keep track of sessions
   pendingSessions: Record<string, SessionInfo> = {};
   ongoingSessions: Record<string, ChildProcess> = {};
 
+  /**
+   * Constructs an instance of the IntercomStreamer class.
+   * @param platform The LoxonePlatform instance.
+   * @param hap The HAP instance.
+   * @param ip The IP address of the camera.
+   */
   constructor(
     private readonly platform: LoxonePlatform,
     hap: HAP,
@@ -60,8 +52,13 @@ export class IntercomStreamer implements CameraStreamingDelegate {
     this.base64auth = Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
   }
 
+  /**
+   * Handles a snapshot request from HomeKit.
+   * @param request The snapshot request.
+   * @param callback The callback function to invoke with the snapshot image buffer.
+   */
   handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): void {
-
+    // Spawn an ffmpeg process to capture a snapshot from the camera
     const ffmpeg = spawn('ffmpeg', [
       '-re',
       '-headers', `Authorization: Basic ${this.base64auth}`,
@@ -75,7 +72,9 @@ export class IntercomStreamer implements CameraStreamingDelegate {
 
     const snapshotBuffers: Buffer[] = [];
 
+    // Collect the snapshot data from ffmpeg's stdout
     ffmpeg.stdout.on('data', data => snapshotBuffers.push(data));
+
     ffmpeg.stderr.on('data', data => {
       this.platform.log.info('SNAPSHOT: ' + String(data));
     });
@@ -94,7 +93,11 @@ export class IntercomStreamer implements CameraStreamingDelegate {
     });
   }
 
-  // called when iOS request rtp setup
+  /**
+   * Handles the preparation of a stream requested by an iOS device.
+   * @param request The prepare stream request.
+   * @param callback The callback function to invoke with the response.
+   */
   prepareStream(request: PrepareStreamRequest, callback: PrepareStreamCallback): void {
     const sessionId: StreamSessionIdentifier = request.sessionID;
     const targetAddress = request.targetAddress;
@@ -102,7 +105,7 @@ export class IntercomStreamer implements CameraStreamingDelegate {
     const video = request.video;
     const videoPort = video.port;
 
-    const videoCryptoSuite = video.srtpCryptoSuite; // could be used to support multiple crypto suite (or support no suite for debugging)
+    const videoCryptoSuite = video.srtpCryptoSuite; // Could be used to support multiple crypto suites
     const videoSrtpKey = video.srtp_key;
     const videoSrtpSalt = video.srtp_salt;
 
@@ -110,31 +113,33 @@ export class IntercomStreamer implements CameraStreamingDelegate {
 
     const sessionInfo: SessionInfo = {
       address: targetAddress,
-
       videoPort: videoPort,
       videoCryptoSuite: videoCryptoSuite,
       videoSRTP: Buffer.concat([videoSrtpKey, videoSrtpSalt]),
       videoSSRC: videoSSRC,
     };
 
-    const currentAddress = '192.168.1.252'; // ipAddress version must match
+    const currentAddress = '192.168.1.252'; // IP address version must match
     const response: PrepareStreamResponse = {
       address: currentAddress,
       video: {
         port: videoPort,
         ssrc: videoSSRC,
-
         srtp_key: videoSrtpKey,
         srtp_salt: videoSrtpSalt,
       },
-      // audio is omitted as we do not support audio in this example
+      // Audio is omitted as we do not support audio in this example
     };
 
     this.pendingSessions[sessionId] = sessionInfo;
     callback(undefined, response);
   }
 
-  // called when iOS device asks stream to start/stop/reconfigure
+  /**
+   * Handles stream requests from an iOS device to start, stop, or reconfigure the stream.
+   * @param request The streaming request.
+   * @param callback The callback function to invoke.
+   */
   handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback): void {
     const sessionId = request.sessionID;
 
@@ -143,22 +148,15 @@ export class IntercomStreamer implements CameraStreamingDelegate {
         const sessionInfo = this.pendingSessions[sessionId];
 
         const video: VideoInfo = request.video;
-
-        //const profile = FFMPEGH264ProfileNames[video.profile];
-        //const level = FFMPEGH264LevelNames[video.level];
         const width = video.width;
         const height = video.height;
         const fps = video.fps;
-
-        //const payloadType = video.pt;
         const maxBitrate = video.max_bit_rate;
-        //const rtcpInterval = video.rtcp_interval; // usually 0.5
-        const mtu = video.mtu; // maximum transmission unit
+        const mtu = video.mtu;
 
         const address = sessionInfo.address;
         const videoPort = sessionInfo.videoPort;
         const ssrc = sessionInfo.videoSSRC;
-        //const cryptoSuite = sessionInfo.videoCryptoSuite;
         const videoSRTP = sessionInfo.videoSRTP.toString('base64');
 
         this.platform.log.debug(`Starting video stream (${width}x${height}, ${fps} fps, ${maxBitrate} kbps, ${mtu} mtu)...`);
@@ -185,68 +183,68 @@ export class IntercomStreamer implements CameraStreamingDelegate {
           '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
           '-srtp_out_params', `${videoSRTP}`,
           `srtp://${address}:${videoPort}?rtcpport=${videoPort}&localrtcpport=${videoPort}&pkt_size=${mtu}`,
-          '-loglevel', 'info',
-          '-progress', 'pipe:1',
         ],
         { env: process.env });
 
-        let started = false;
-        ffmpegVideo.stderr.on('data', data => {
-          if (!started) {
-            started = true;
-            this.platform.log.debug('FFMPEG: received first frame');
-
-            callback(); // do not forget to execute callback once set up
-          }
-
-          this.platform.log.debug('VIDEO: ' + String(data));
-        });
-        ffmpegVideo.on('error', error => {
-          this.platform.log.debug('[Video] Failed to start video stream: ' + error.message);
-          callback(new Error('ffmpeg process creation failed!'));
-        });
-        ffmpegVideo.on('exit', (code, signal) => {
-          const message = '[Video] ffmpeg exited with code: ' + code + ' and signal: ' + signal;
-
-          if (code === null || code === 255) {
-            this.platform.log.debug(message + ' (Video stream stopped!)');
-          } else {
-            this.platform.log.debug(message + ' (error)');
-
-            if (!started) {
-              callback(new Error(message));
-            } else {
-              this.controller!.forceStopStreamingSession(sessionId);
-            }
-          }
-        });
-
         this.ongoingSessions[sessionId] = ffmpegVideo;
-        delete this.pendingSessions[sessionId];
+
+        ffmpegVideo.stderr.on('data', data => {
+          this.platform.log.debug('VIDEO STREAM: ' + String(data));
+        });
+
+        ffmpegVideo.on('exit', (code, signal) => {
+          if (signal) {
+            this.platform.log.debug('Video stream process was killed with signal: ' + signal);
+          } else {
+            this.platform.log.debug('Video stream process exited with code ' + code);
+          }
+          delete this.ongoingSessions[sessionId];
+        });
 
         break;
+
       case StreamRequestTypes.RECONFIGURE:
-        // not supported by this example
-        this.platform.log.debug('Received (unsupported) request to reconfigure to: ' + JSON.stringify(request.video));
-        callback();
+        // Reconfiguration of the stream is not supported in this example
+        this.platform.log.debug('Stream reconfiguration is not supported.');
         break;
+
       case StreamRequestTypes.STOP:
         const ffmpegProcess = this.ongoingSessions[sessionId];
-
-        try {
-          if (ffmpegProcess) {
-            ffmpegProcess.kill('SIGKILL');
-          }
-        } catch (e) {
-          this.platform.log.debug('Error occurred terminating the video process!');
-          //this.platform.log.debug(e);
+        if (ffmpegProcess) {
+          ffmpegProcess.kill('SIGTERM');
+          delete this.ongoingSessions[sessionId];
+          this.platform.log.debug('Stopped video stream.');
         }
-
-        delete this.ongoingSessions[sessionId];
-
-        this.platform.log.debug('Stopped streaming session!');
-        callback();
         break;
     }
+
+    callback();
   }
+
+  /**
+   * Cleans up any ongoing stream sessions and pending sessions.
+   */
+  cleanupSessions(): void {
+    for (const sessionId in this.ongoingSessions) {
+      const ffmpegProcess = this.ongoingSessions[sessionId];
+      if (ffmpegProcess) {
+        ffmpegProcess.kill('SIGTERM');
+        delete this.ongoingSessions[sessionId];
+      }
+    }
+
+    for (const sessionId in this.pendingSessions) {
+      delete this.pendingSessions[sessionId];
+    }
+  }
+
+  
+  /**
+   * Stops any ongoing stream sessions and cleans up resources.
+   */
+  /*
+  stopStreaming(): void {
+    this.cleanupSessions();
+    this.controller?.forceStop();
+  }*/
 }

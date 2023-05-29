@@ -1,32 +1,22 @@
-import { Service, PlatformAccessory } from 'homebridge';
-import { LoxonePlatform } from '../LoxonePlatform';
-import { Control } from '../structure/LoxAPP3';
+import { BaseService } from './BaseService';
 
-export class IRoomControllerV2 {
-  private service: Service;
-  private device: Control;
+/**
+ * Thermostat service implementation.
+ */
+export class Thermostat extends BaseService {
 
-  private State = {
+  State = {
     CurrentHeatingCoolingState: 0, // 0 = Off / 1 = Heat / 2 = Cool
-    TargetHeatingCoolingState: 3, // 0 = Off / 1 = Heat / 2 = Cool / 3 = auto
+    TargetHeatingCoolingState: 3, // 0 = Off / 1 = Heat / 2 = Cool / 3 = Auto
     CurrentTemperature: 15,
     TargetTemperature: 15,
     TemperatureDisplayUnits: this.platform.msInfo.tempUnit, // The temperature unit in use by this Miniserver
   };
 
-
-  constructor(
-    private readonly platform: LoxonePlatform,
-    private readonly accessory: PlatformAccessory,
-  ) {
-
-    this.device = this.accessory.context.device;
-
+  setupService() {
     this.service =
       this.accessory.getService(this.platform.Service.Thermostat) ||
       this.accessory.addService(this.platform.Service.Thermostat);
-
-    this.initListener();
 
     // create handlers for required characteristics
     this.service.getCharacteristic(this.platform.Characteristic.CurrentHeatingCoolingState)
@@ -48,50 +38,20 @@ export class IRoomControllerV2 {
     //.onSet(this.handleTemperatureDisplayUnitsSet.bind(this));
   }
 
-  // Register a listener to be notified of changes in this items value
-  initListener = () => {
-    this.platform.log.debug(`[${this.device.name}] Register Listener for Thermostat`);
-    this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.tempActual, this.callBacktempActual.bind(this));
-    this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.tempTarget, this.callBacktempTarget.bind(this));
-    //this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.activeMode, this.callBackactiveMode.bind(this));
-  };
+  updateService( message: { state: string; value: number} ) {
+    this.platform.log.debug(`[${this.device.name}] Callback ${message.state} update for Thermostat: ${message.value}`);
 
-  callBacktempActual = ( message: {uuid: string; value: number} ) => {
-    if (message.uuid) {
-      this.platform.log.debug(`[${this.device.name}] Callback tempActual update for Thermostat : ${message.value}`);
-      this.State.CurrentTemperature = this.limitHomeKitTemperature(message.value);
-
-      //also make sure this change is directly communicated to HomeKit
-      this.service
-        .getCharacteristic(this.platform.Characteristic.CurrentTemperature)
-        .updateValue(this.State.CurrentTemperature);
+    switch (message.state) {
+      case 'tempActual':
+        this.State.CurrentTemperature = this.limitHomeKitTemperature(message.value);
+        this.updateCharacteristicValue('CurrentTemperature', this.State.CurrentTemperature);
+        break;
+      case 'tempTarget':
+        this.State.TargetTemperature = this.limitHomeKitTemperature(message.value);
+        this.updateCharacteristicValue('TargetTemperature', this.State.TargetTemperature);
+        break;
     }
-  };
-
-  callBacktempTarget = ( message: {uuid: string; value: number} ) => {
-    if (message.uuid) {
-      this.platform.log.debug(`[${this.device.name}] Callback tempTarget update for Thermostat: ${message.value}`);
-      this.State.TargetTemperature = this.limitHomeKitTemperature(message.value);
-
-      //also make sure this change is directly communicated to HomeKit
-      this.service
-        .getCharacteristic(this.platform.Characteristic.TargetTemperature)
-        .updateValue(this.State.TargetTemperature);
-    }
-  };
-  /*
-  callBackactiveMode = ( message: {uuid: string; value: number} ) => {
-    if (message.uuid) {
-      this.platform.log.debug(`[${this.device.name}] Callback ActiveMode update for Thermostat: ${message.value}`);
-      this.State.TargetHeatingCoolingState = message.value;
-
-      //also make sure this change is directly communicated to HomeKit
-      this.service
-        .getCharacteristic(this.platform.Characteristic.TargetHeatingCoolingState)
-        .updateValue(message.value);
-    }
-  };
-  */
+  }
 
   limitHomeKitTemperature(temp: number) {
     temp = (temp < 10) ? 10 : temp;

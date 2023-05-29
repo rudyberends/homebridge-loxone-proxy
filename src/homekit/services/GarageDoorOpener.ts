@@ -8,8 +8,9 @@ export class GarageDoorOpener extends BaseService {
   State = {
     CurrentDoorState: 0,
     TargetDoorState: 0,
-    Position: 0,
     ObstructionDetected: 0,
+    Active: 0,
+    Position: 0,
   };
 
   /**
@@ -40,23 +41,20 @@ export class GarageDoorOpener extends BaseService {
   updateService(message: { state: string; value: number }): void {
     this.platform.log.debug(`[${this.device.name}] ${message.state} Callback state update for Gate: ${message.value}`);
 
-    switch (message.state) {
-      case 'active':
-        switch (message.value) {
-          case -1: // closing
-            this.State.CurrentDoorState = 3;
-            break;
-          case 0: // not moving
-            this.State.CurrentDoorState = this.State.Position === 0 ? 1 : this.State.Position === 1 ? 0 : 4;
-            break;
-          case 1: // opening
-            this.State.CurrentDoorState = 2;
-            break;
-        }
+    (message.state) === 'active' ? this.State.Active = message.value : this.State.Position = message.value;
+
+    switch (this.State.Active) {
+      case -1: // closing
+        this.State.CurrentDoorState = 3;
+        this.State.TargetDoorState = 1;
         break;
-      case 'position':
-        this.State.TargetDoorState = message.value === 0 ? 1 : 0;
-        this.State.Position = message.value;
+      case 0: // not moving
+        this.State.CurrentDoorState = this.State.Position === 0 ? 1 : this.State.Position === 1 ? 0 : 4;
+        this.State.TargetDoorState = this.State.Position === 0 ? 1 : 0;
+        break;
+      case 1: // opening
+        this.State.CurrentDoorState = 2;
+        this.State.TargetDoorState = 0;
         break;
     }
 
@@ -89,7 +87,10 @@ export class GarageDoorOpener extends BaseService {
    */
   handleTargetDoorStateSet(value: number): void {
     this.platform.log.debug('Triggered SET TargetDoorState: ' + value);
-    // Handle the change in the TargetDoorState characteristic if needed
+    this.State.TargetDoorState = value;
+
+    const command = value === 0 ? 'open' : 'close';
+    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }
 
   /**

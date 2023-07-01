@@ -1,155 +1,95 @@
 import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from './LoxonePlatform';
-import { Control } from './structure/LoxAPP3';
+import { Control } from './loxone/StructureFile';
 
-// Loxone Items
-import { Alarm } from './items/Alarm';
-import { Brightness } from './items/Brightness';
-import { ColorPickerV2 } from './items/ColorPickerV2';
-import { Dimmer } from './items/Dimmer';
-import { Gate } from './items/Gate';
-import { Humidiy } from './items/Humidity';
-import { IntercomV2 } from './items/IntercomV2';
-import { Jalousie } from './items/Jalousie';
-import { IRoomControllerV2 } from './items/IRoomControllerV2';
-import { LightControllerV2 } from './items/LightControllerV2';
-import { Lock } from './items/Lock';
-import { Motion } from './items/Motion';
-import { PresenceDetector } from './items/PresenceDetector';
-import { Switch } from './items/Switch';
-import { Ventilation } from './items/Ventilation';
-
+/**
+ * LoxoneAccessory
+ * An instance of this class is created for each accessory Loxone platform registers.
+ * Each accessory may expose multiple services of different service types.
+ */
 export class LoxoneAccessory {
-
-  // Items supported by this Platform
-  private SupportedItems = [
-    'Alarm',
-    'Brightness',
-    'ColorPickerV2',
-    'Dimmer',
-    'Gate',
-    'Humidity',
-    'IntercomV2',
-    'IRoomControllerV2',
-    'Jalousie',
-    'LightControllerV2',
-    'Lock',
-    'Motion',
-    'PresenceDetector',
-    'Switch',
-    'Ventilation',
-  ];
+  Accessory: PlatformAccessory | undefined;
+  Service: Record<string, unknown> = {};
+  ItemStates: Record<string, { service: string; state: string }> = {};
 
   constructor(
-    private readonly platform: LoxonePlatform,
-    private readonly device: Control,
+    readonly platform: LoxonePlatform,
+    readonly device: Control,
   ) {
 
-    if (this.platform.LoxoneItemCount >= 149) {
-      this.platform.log.info('[LoxoneAccessory] Maximum number of supported HomeKit items reached. Stop mapping Items.');
+    // Don't add more than HomeKit MAX items
+    if (this.platform.AccessoryCount >= 149) {
+      this.platform.log.info(`[${device.type}Item] Maximum number of supported HomeKit Accessories reached. Item not Mapped`);
       return;
     }
 
-    if (!this.SupportedItems.includes(this.device.type)) {
-      this.platform.log.debug(`[[LoxoneAccessory] Skipping Unsupported item: ${this.device.name} with type ${this.device.type}`);
+    if (!this.isSupported()) {
+      this.platform.log.debug(`[${device.type}Item] Skipping Unsupported Item: ${this.device.name}`);
       return;
     }
 
-    this.platform.log.debug(`[mapLoxoneItems][${this.platform.LoxoneItemCount}] Found: ${this.device.name} with type ${this.device.type}`);
+    this.setupAccessory();
+  }
 
+  protected isSupported(): boolean {
+    return true;
+  }
+
+  private setupAccessory(): void {
     const uuid = this.platform.api.hap.uuid.generate(this.device.uuidAction);
-    const existingAccessory = this.platform.accessories.find(accessory => accessory.UUID === uuid);
+    this.Accessory = this.getOrCreateAccessory(uuid);
 
-    if (existingAccessory) {
-      // the accessory already exists
-      this.platform.log.debug('[LoxoneAccessory] Item already mapped. Restoring accessory from cache:', existingAccessory.displayName);
+    this.Accessory.context.device = this.device;
+    this.Accessory.context.mapped = true;
 
-      // update the accessory.context
-      existingAccessory.context.device = this.device;
-      existingAccessory.context.mapped = true;
+    this.configureServices(this.Accessory);
+    this.setupListeners();
 
-      this.platform.api.updatePlatformAccessories([existingAccessory]);
+    this.platform.AccessoryCount++;
+  }
 
-      // create the accessory handler for the restored accessory
-      this.mapLoxoneItem(existingAccessory);
+  private getOrCreateAccessory(uuid: string): PlatformAccessory {
+    let accessory = this.platform.accessories.find((acc) => acc.UUID === uuid);
 
-    } else {
-      // the accessory does not yet exist, so we need to create it
-      this.platform.log.debug('[LoxoneAccesory] Adding new accessory:', this.device.name);
-
-      // create a new accessory
-      const accessory = new this.platform.api.platformAccessory(this.device.name, uuid);
-
-      // store a copy of the device object in the `accessory.context`
-      accessory.context.device = this.device;
-      accessory.context.mapped = true;
-
-      // create the accessory handler for the newly create accessory
-      this.mapLoxoneItem(accessory);
-
-      // link the accessory to your platform
+    if (!accessory) {
+      accessory = new this.platform.api.platformAccessory(this.device.name, uuid);
       this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
+      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory:`, this.device.name);
+    } else {
+      this.platform.log.debug(`[${this.device.type}Item] Restoring accessory from cache:`, accessory.displayName);
     }
-    this.platform.LoxoneItemCount++;
+
+    const accessoryInfoService = accessory.getService(this.platform.Service.AccessoryInformation);
+    if (accessoryInfoService) {
+      accessoryInfoService
+        .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
+        .setCharacteristic(this.platform.Characteristic.Model, this.device.room)
+        .setCharacteristic(this.platform.Characteristic.SerialNumber, this.device.uuidAction)
+        .setCharacteristic(this.platform.Characteristic.Name, this.device.name);
+    }
+    return accessory;
   }
 
-  mapLoxoneItem(accessory: PlatformAccessory) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected configureServices(accessory: PlatformAccessory): void {
+    // Implement the configuration of services for the accessory
+  }
 
-    this.platform.log.debug('[mapLoxoneItem] Mapping Loxone item to accessory:', this.device.name);
-    // set accessory information
-    accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
-      .setCharacteristic(this.platform.Characteristic.Model, accessory.context.device.room)
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, accessory.context.device.uuidAction)
-      .setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name);
-
-    switch (accessory.context.device.type) {
-
-      case 'Alarm':
-        new Alarm(this.platform, accessory);
-        break;
-      case 'Brightness':
-        new Brightness(this.platform, accessory);
-        break;
-      case 'ColorPickerV2':
-        new ColorPickerV2(this.platform, accessory);
-        break;
-      case 'IntercomV2':
-        new IntercomV2(this.platform, accessory);
-        break;
-      case 'Jalousie':
-        new Jalousie(this.platform, accessory);
-        break;
-      case 'Humidity':
-        new Humidiy(this.platform, accessory);
-        break;
-      case 'Switch':
-        new Switch(this.platform, accessory);
-        break;
-      case 'LightControllerV2':
-        new LightControllerV2(this.platform, accessory);
-        break;
-      case 'Lock':
-        new Lock(this.platform, accessory);
-        break;
-      case 'Motion':
-        new Motion(this.platform, accessory);
-        break;
-      case 'PresenceDetector':
-        new PresenceDetector(this.platform, accessory);
-        break;
-      case 'Gate':
-        new Gate(this.platform, accessory);
-        break;
-      case 'Dimmer':
-        new Dimmer(this.platform, accessory);
-        break;
-      case 'IRoomControllerV2':
-        new IRoomControllerV2(this.platform, accessory);
-        break;
-      case 'Ventilation':
-        new Ventilation(this.platform, accessory);
-        break;
+  private setupListeners(): void {
+    this.platform.log.debug(`[${this.device.name}] Register Listeners for ${this.device.type}Item`);
+    for (const state in this.ItemStates) {
+      this.platform.LoxoneHandler.registerListenerForUUID(state, this.callBack.bind(this));
     }
   }
+
+  private callBack = (message: { uuid: string; state: string; service: string; value: number }): void => {
+    if (message.uuid) {
+      const itemState = this.ItemStates[message.uuid];
+      message.service = itemState.service;
+      message.state = itemState.state;
+
+      const updateService = new Function('message', `return this.Service.${this.ItemStates[message.uuid].service}.updateService(message);`);
+      updateService.call(this, message);
+    }
+  };
 }

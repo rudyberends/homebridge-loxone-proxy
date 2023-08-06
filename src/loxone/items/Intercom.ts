@@ -16,8 +16,8 @@ export class Intercom extends LoxoneAccessory {
 
     this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!);
 
-    /*
     // Loxone Intercom Present??
+    /*
     this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.address, (ip: string) => {
       this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
 

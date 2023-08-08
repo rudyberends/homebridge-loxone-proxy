@@ -71,8 +71,10 @@ import { RecordingDelegate } from './RecordingDelegate';
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
   public readonly recordingDelegate: CameraRecordingDelegate;
-  private readonly ip: string = '';
-  private readonly base64auth: string = '';
+  private readonly ip: string;
+  private readonly login: string | undefined;
+  private readonly authheader: string;
+  private readonly authtoken: string;
 
   private pendingSessions: { [index: string]: SessionInfo } = {};
   private ongoingSessions: { [index: string]: ActiveSession } = {};
@@ -82,11 +84,27 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   constructor(
       private readonly platform: LoxonePlatform,
       ip: string,
+      login?: string,
   ) {
     //this.camera = camera;
     this.hap = this.platform.api.hap;
     this.ip = ip;
-    this.base64auth = Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
+    this.authheader = '';
+    this.authtoken = '';
+
+    // Determine Authentication method for Streaming URL
+    console.log('!!!! DEBUG: StreamingDelgate !!!!');
+    console.log('!! '+ login + ' !!');
+
+    if (login === undefined) {
+      // V2 Intercom - Basic Authentication
+      console.log('!! using Basic Auth !!');
+      const base64auth = Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
+      this.authheader = `Authorization: Basic ${base64auth}`;
+    } else if (login !== 'v1noneed' ) {
+      console.log('!! using Token Auth !!');
+      this.authtoken = `?${login}`;
+    }
 
     this.recordingDelegate = new RecordingDelegate(this.platform, this.ip);
 
@@ -228,8 +246,8 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     // Spawn an ffmpeg process to capture a snapshot from the camera
     const ffmpeg = spawn('ffmpeg', [
       '-re',
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-i', `http://${this.ip}/mjpg/video.mjpg`,
+      '-headers', this.authheader,
+      '-i', `http://${this.ip}/mjpg/video.mjpg${this.authtoken}`,
       '-frames:v', '1',
       '-loglevel', 'info',
       '-f', 'image2',
@@ -362,9 +380,9 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     //const videoBitrate = request.video.max_bit_rate;
 
     const ffmpegArgs: string[] = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-headers', this.authheader,
       '-re',
-      '-i', `http://${this.ip}/mjpg/video.mjpg`,
+      '-i', `http://${this.ip}/mjpg/video.mjpg${this.authtoken}`,
       '-an',
       '-sn',
       '-dn',

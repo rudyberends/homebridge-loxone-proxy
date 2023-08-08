@@ -1,7 +1,21 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { Doorbell } from '../../homekit/services/Doorbell';
 import { SwitchService } from '../../homekit/services/Switch';
-//import { Camera } from '../../homekit/services/Camera';
+import { Camera } from '../../homekit/services/Camera';
+
+interface VideoInfo {
+  alertImage: string;
+  streamUrl: string;
+  deviceUuid: string;
+  user: string;
+  pass: string;
+}
+
+interface LLData {
+  control: string;
+  value: string;
+  Code: string;
+}
 
 /**
  * Loxone Intercom (V1) Item
@@ -11,20 +25,33 @@ export class Intercom extends LoxoneAccessory {
   configureServices(): void {
 
     this.ItemStates = {
-      [this.device.states.bell]: {'service': 'PrimaryService', 'state': 'bell'},
+      [this.device.states.bell]: { 'service': 'PrimaryService', 'state': 'bell' },
     };
 
     this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!);
 
     // Loxone Intercom Present??
-    /*
-    this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.address, (ip: string) => {
-      this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
+    this.platform.LoxoneHandler.getsecuredDetails(this.device.uuidAction)
+      .then((parsedData: { LL: LLData }) => {
 
-      new Camera(this.platform, this.Accessory!, ip); // Register Intercom Camera
-      //new Motion(this.platform, this.accessory); // Register Intercom Motion Sensor
-    });
-    */
+        // Parse the nested JSON string inside the 'value' property
+        const valueData: { videoInfo: VideoInfo } = JSON.parse(parsedData.LL.value);
+
+        // Extract IP address from alertImage
+        const alertImageURL = valueData.videoInfo.alertImage;
+        const ipAddressRegex = /\/\/([^/]+)/;
+        const ipAddressMatch = alertImageURL.match(ipAddressRegex);
+        const ipAddress = ipAddressMatch ? ipAddressMatch[1] : undefined;
+
+        // Extract login string from streamUrl using URLSearchParams
+        const streamUrl = valueData.videoInfo.streamUrl;
+        const urlSearchParams = new URLSearchParams(new URL(streamUrl).search);
+        const loginString = urlSearchParams.get('login');
+        const loginResult = loginString !== null ? loginString : 'v1noneed';
+
+        console.log('!!!!DEBUG !!!! Login String:', loginResult);
+        new Camera(this.platform, this.Accessory!, ipAddress, loginResult); // Register Intercom Camera
+      });
 
     this.registerChildItems();
   }

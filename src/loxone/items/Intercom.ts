@@ -43,14 +43,10 @@ export class Intercom extends LoxoneAccessory {
         const ipAddressMatch = alertImageURL.match(ipAddressRegex);
         const ipAddress = ipAddressMatch ? ipAddressMatch[1] : undefined;
 
-        // Extract login string from streamUrl using URLSearchParams
-        const streamUrl = valueData.videoInfo.streamUrl;
-        const urlSearchParams = new URLSearchParams(new URL(streamUrl).search);
-        const loginString = urlSearchParams.get('login');
-        const loginResult = loginString !== null ? loginString : 'v1noneed';
+        // Basic Authentication
+        const base64auth = Buffer.from(`${valueData.videoInfo.user}:${valueData.videoInfo.pass}`, 'utf8').toString('base64');
 
-        console.log('!!!!DEBUG !!!! Login String:', loginResult);
-        new Camera(this.platform, this.Accessory!, ipAddress, loginResult); // Register Intercom Camera
+        new Camera(this.platform, this.Accessory!, ipAddress, base64auth); // Register Intercom Camera
       });
 
     this.registerChildItems();

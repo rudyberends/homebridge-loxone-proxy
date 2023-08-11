@@ -8,7 +8,7 @@ export class Camera {
     readonly platform: LoxonePlatform,
     readonly accessory: PlatformAccessory,
     readonly ip?: string, // webcam ip
-    readonly login?: string, // optional login token
+    readonly base64auth?: string, // optional login token
   ) {
     this.setupService();
   }
@@ -18,7 +18,7 @@ export class Camera {
    */
   setupService(): void {
 
-    const delegate = new streamingDelegate(this.platform, this.ip!, this.login!);
+    const delegate = new streamingDelegate(this.platform, this.ip!, this.base64auth);
     this.accessory.configureController(delegate.controller);
 
   }

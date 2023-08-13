@@ -368,6 +368,12 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
 
     const ffmpegArgs: string[] = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-use_wallclock_as_timestamps', '1',
+      '-probesize', '32',
+      '-analyzeduration', '0',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
+      '-max_delay', '0',
       '-re',
       '-i', `http://${this.ip}/mjpg/video.mjpg`,
       '-an',
@@ -380,6 +386,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-f', 'rawvideo',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
+      '-crf', '22',
       '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-b:v', '299k',
       '-payload_type', '99',

@@ -71,8 +71,8 @@ import { RecordingDelegate } from './RecordingDelegate';
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
   public readonly recordingDelegate: CameraRecordingDelegate;
-  private readonly ip: string = '';
-  private readonly base64auth: string = '';
+  private readonly ip;
+  private readonly base64auth;
 
   private pendingSessions: { [index: string]: SessionInfo } = {};
   private ongoingSessions: { [index: string]: ActiveSession } = {};
@@ -82,11 +82,16 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   constructor(
       private readonly platform: LoxonePlatform,
       ip: string,
+      base64auth?: string,
   ) {
     //this.camera = camera;
     this.hap = this.platform.api.hap;
     this.ip = ip;
-    this.base64auth = Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
+
+    // Get authentication from constructor (V1) or use miniserver credentials (V2)
+    this.base64auth = base64auth ||
+      Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
+
 
     this.recordingDelegate = new RecordingDelegate(this.platform, this.ip);
 
@@ -363,6 +368,12 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
 
     const ffmpegArgs: string[] = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-use_wallclock_as_timestamps', '1',
+      '-probesize', '32',
+      '-analyzeduration', '0',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
+      '-max_delay', '0',
       '-re',
       '-i', `http://${this.ip}/mjpg/video.mjpg`,
       '-an',
@@ -375,6 +386,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-f', 'rawvideo',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
+      '-crf', '22',
       '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-b:v', '299k',
       '-payload_type', '99',

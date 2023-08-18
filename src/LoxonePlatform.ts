@@ -59,8 +59,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
     for (const uuid in LoxoneItems) {
       const Item = LoxoneItems[uuid];
-      Item.room = LoxoneRooms[Item.room].name;
-      Item.cat = LoxoneCats[Item.cat].type;
+      Item.room = LoxoneRooms[Item.room]?.name || 'undefined';
+      Item.cat = LoxoneCats[Item.cat]?.type || 'undefined';
     }
 
     this.mapLoxoneItems(Object.values(LoxoneItems));

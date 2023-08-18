@@ -27,6 +27,7 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 | `Dimmer` | Lightbulb | Auto | Individual Dimmers, or items parsed from LightControllerV2.
 |`Gate` | GarageDoorOpener | Auto
 |`Humidity` | HumiditySensor | Manual | Requires an alias in the config.
+|`Intercom` | Doorbell, Camera | Auto
 |`IntercomV2` | Doorbell, MotionSensor, Camera | Auto
 |`IRoomControllerV2` | Thermostat | Auto
 |`Jalousie` | Window Covering | Auto

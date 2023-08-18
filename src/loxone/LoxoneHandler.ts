@@ -176,6 +176,22 @@ class LoxoneHandler {
   }
 
   /**
+   * Gets securedDetails from item.
+   * @param {string} uuid - The UUID of the device.
+   */
+  public getsecuredDetails(uuid: string): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      this.socket.send(`jdev/sps/io/${uuid}/securedDetails`)
+        .then((file: string) => {
+          resolve(file);
+        })
+        .catch((error: any) => {
+          reject(error);
+        });
+    });
+  }
+
+  /**
    * Gets the last cached value for the specified UUID.
    * @param {string} uuid - The UUID of the device.
    * @returns {string} The last cached value for the UUID.

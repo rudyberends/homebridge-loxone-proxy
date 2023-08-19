@@ -88,6 +88,7 @@ export class LoxoneAccessory {
       message.service = itemState.service;
       message.state = itemState.state;
 
+      /* eslint-disable no-console */
       console.log('!!! DEBUG !!!');
       console.log(itemState);
       console.log(this.ItemStates[message.uuid]);

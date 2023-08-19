@@ -88,6 +88,12 @@ export class LoxoneAccessory {
       message.service = itemState.service;
       message.state = itemState.state;
 
+      console.log('!!! DEBUG !!!');
+      console.log(itemState);
+      console.log(this.ItemStates[message.uuid]);
+      console.log(message);
+      console.log('!!! DEBUG !!!');
+
       const updateService = new Function('message', `return this.Service.${this.ItemStates[message.uuid].service}.updateService(message);`);
       updateService.call(this, message);
     }

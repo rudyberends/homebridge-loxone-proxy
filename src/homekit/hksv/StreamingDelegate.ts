@@ -228,7 +228,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     // Spawn an ffmpeg process to capture a snapshot from the camera
     const ffmpeg = spawn('ffmpeg', [
       '-re',
-      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-i', `http://${this.ip}/jpg/image.jpg`,
       '-frames:v', '1',
       '-loglevel', 'info',
@@ -362,7 +362,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     //const videoBitrate = request.video.max_bit_rate;
 
     const ffmpegArgs: string[] = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-use_wallclock_as_timestamps', '1',
       '-probesize', '32',
       '-analyzeduration', '0',

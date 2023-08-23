@@ -82,7 +82,7 @@ export class LoxoneAccessory {
     }
   }
 
-  private callBack = (message: { uuid: string; state: string; service: string; value: number }): void => {
+  private callBack = (message: { uuid: string; state: string; service: string; value: string }): void => {
     if (message.uuid) {
       const itemState = this.ItemStates[message.uuid];
       message.service = itemState.service;

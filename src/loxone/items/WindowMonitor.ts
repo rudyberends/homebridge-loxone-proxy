@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { Window } from './Window';
+import { Contact } from './Contact';
 
 /**
  * Loxone WindowMonitor Item
@@ -10,22 +10,25 @@ export class WindowMonitor extends LoxoneAccessory {
 
     // This item is a collection of Windows and doors.
     // They will be registered as individual items in HomeKit.
-    this.registerWindowItems();
+    this.registerContactItems();
 
-    return false;
+    return false; // the item itself will not be mapped.
   }
 
   // Create individual WindowItems
-  registerWindowItems(): void {
+  registerContactItems(): void {
     for (const windowKey in this.device.details.windows) {
+
       const window = this.device.details.windows[windowKey];
 
       const windowItem = { ...this.device };
       windowItem.name = window.name;
-      windowItem.type = 'Window';
+      windowItem.type = 'Contact';
+      windowItem.cat = windowKey; // Store ID in CAT field
       windowItem.details = {};
+      windowItem.uuidAction = windowItem.uuidAction + '/' + windowKey;
 
-      new Window(this.platform, windowItem);
+      new Contact(this.platform, windowItem);
     }
   }
 }

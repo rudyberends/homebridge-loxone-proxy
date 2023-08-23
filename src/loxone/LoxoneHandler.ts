@@ -49,14 +49,18 @@ class LoxoneHandler {
         uuid, 'homebridge', WebSocketConfig.permission.APP, false);
 
       const handleAnyEvent = (uuid: string, message: string): void => {
-        this.uuidCache[uuid] = message;
         if (Object.prototype.hasOwnProperty.call(this.uuidCallbacks, uuid)) {
 
           // This fixes issues where the returned data from loxone does not contain an object with the defined structure.
           // Idealy this should be fixed within LxCommunicator
-          try {
-            JSON.parse(message);
-          } catch (error) {
+          if (typeof message === 'string') {
+            if (message.includes('->')) {
+              const parts = message.split('->');
+              if (parts.length === 2) {
+                message = parts[1].trim();
+              }
+            }
+
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             message = { uuid: uuid, value: message };
@@ -64,6 +68,7 @@ class LoxoneHandler {
 
           this.uuidCallbacks[uuid].forEach(callback => callback(message));
         }
+        this.uuidCache[uuid] = message; // store itementry in Cache.
       };
 
       webSocketConfig.delegate = {

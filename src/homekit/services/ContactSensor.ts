@@ -29,6 +29,11 @@ export class ContactSensor extends BaseService {
     const valuesArray = message.value.split(',');
     const itemEntry = valuesArray[this.device.cat]; // We saved our ItemEntry in CAT.
 
+    console.log(`ITEM: ${this.device.name}`);
+    console.log(`ITEM ID: ${this.device.cat}`);
+    console.log(`Full Message: ${message.value}`);
+    console.log(`ITEM Entry: ${itemEntry}`);
+
     this.platform.log.debug(`[${this.device.name}] Callback state update for ContactSensor: ${itemEntry}`);
 
     /*
@@ -50,6 +55,10 @@ export class ContactSensor extends BaseService {
         this.State.ContactSensorState = 1; // Open
     }
 
+    console.log(`Homebridge itemstate: ${this.State.ContactSensorState}`);
+    console.log('!!!!!!! DEBUG !!!!!!');
+    
+    
     // Also make sure this change is directly communicated to HomeKit
     this.service!.getCharacteristic(this.platform.Characteristic.ContactSensorState).updateValue(this.State.ContactSensorState);
   }

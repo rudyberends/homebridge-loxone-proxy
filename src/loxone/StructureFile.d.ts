@@ -144,9 +144,21 @@ export interface Control {
     defaultRating: number;
     isFavorite: boolean;
     isSecured: boolean;
-    details: { [key: string]: unknown };
+    details: ControlDetails;
     states: ControlStates;
     subControls?: Controls;
+}
+
+export interface ControlDetails {
+    animation?: string;
+    jLockable?: boolean;
+    windows?: WindowDetails[];
+}
+
+export interface WindowDetails {
+    name: string;
+    installPlace: string;
+    room: string;
 }
 
 export type ControlStates = { [key: string]: string };

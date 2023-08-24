@@ -42,6 +42,19 @@ export class ColorLightBulb extends LightBulb {
   }
 
   /**
+   * Updates the service with the new color value.
+   * @param message - The message containing the new color value.
+   */
+  updateService(message: { value: any }): void {
+    //super.updateService(message);
+    console.log(`todo: color${message.value}`);
+    //this.State.Brightness = message.value as number;
+
+    // Also make sure this change is directly communicated to HomeKit
+    //this.service!.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.State.Brightness);
+  }
+
+  /**
    * Sets the color state of the light bulb.
    */
   async setColorState(): Promise<void> {

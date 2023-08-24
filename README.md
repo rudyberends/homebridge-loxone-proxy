@@ -37,6 +37,7 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`PresenceDetector` | OccupancySensor | Auto
 |`Switch` | Switch, Outlet, or Lightbulb | Auto
 |`Ventilation` | Fanv2 | Auto
+|`WindowMonitor` | Window | Auto
 
 ### Manual mapping
 Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all motion detectors the convention "MoXX" in Loxone Config and then setting the alias "Mo" in the plugin will result in all items with "Mo" in the name being recognized as motion detectors.

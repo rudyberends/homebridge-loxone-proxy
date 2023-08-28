@@ -3,20 +3,6 @@ import { Doorbell } from '../../homekit/services/Doorbell';
 import { SwitchService } from '../../homekit/services/Switch';
 import { Camera } from '../../homekit/services/Camera';
 
-interface VideoInfo {
-  alertImage: string;
-  streamUrl: string;
-  deviceUuid: string;
-  user: string;
-  pass: string;
-}
-
-interface LLData {
-  control: string;
-  value: string;
-  Code: string;
-}
-
 /**
  * Loxone Intercom (V1) Item
 */
@@ -37,24 +23,28 @@ export class Intercom extends LoxoneAccessory {
     this.registerChildItems();
   }
 
-  protected configureCamera(): void {
-    this.platform.LoxoneHandler.getsecuredDetails(this.device.uuidAction)
-      .then((parsedData: { LL: LLData }) => {
+  protected async configureCamera(): Promise<void> {
+    const parsedData = await this.platform.LoxoneHandler.getsecuredDetails(this.device.uuidAction);
 
-        // Parse the nested JSON string inside the 'value' property
-        const valueData: { videoInfo: VideoInfo } = JSON.parse(parsedData.LL.value);
+    const valueData = JSON.parse(parsedData.LL.value);
+    const videoInfo = valueData.videoInfo;
+    let streamUrl = 'undefined';
 
-        // Extract IP address from alertImage
-        const alertImageURL = valueData.videoInfo.alertImage;
-        const ipAddressRegex = /\/\/([^/]+)/;
-        const ipAddressMatch = alertImageURL.match(ipAddressRegex);
-        const ipAddress = ipAddressMatch ? ipAddressMatch[1] : undefined;
+    if (this.device.details.deviceType === 0) { // Custom Intercom
+      streamUrl = videoInfo.streamUrl;
+    } else if (videoInfo.alertImage) { // Loxone V1/XL Intercom
+      const ipAddressMatch = videoInfo.alertImage.match(/\/\/([^/]+)/);
+      const ipAddress = ipAddressMatch ? ipAddressMatch[1] : undefined;
 
-        // Basic Authentication
-        const base64auth = Buffer.from(`${valueData.videoInfo.user}:${valueData.videoInfo.pass}`, 'utf8').toString('base64');
+      if (ipAddress) {
+        streamUrl = `http://${ipAddress}/mjpg/video.mjpg`;
+      }
+    }
 
-        this.setupCamera(ipAddress, base64auth);
-      });
+    // Basic Authentication
+    const base64auth = Buffer.from(`${videoInfo.user}:${videoInfo.pass}`, 'utf8').toString('base64');
+
+    this.setupCamera(streamUrl, base64auth);
   }
 
   protected setupCamera(ipAddress: string | undefined, base64auth?: string | undefined): void {

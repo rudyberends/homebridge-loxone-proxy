@@ -71,6 +71,7 @@ import { RecordingDelegate } from './RecordingDelegate';
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
   public readonly recordingDelegate: CameraRecordingDelegate;
+  private readonly streamUrl;
   private readonly ip;
   private readonly base64auth;
 
@@ -81,19 +82,20 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   private readonly hap: HAP;
   constructor(
       private readonly platform: LoxonePlatform,
-      ip: string,
+      streamUrl: string,
       base64auth?: string,
   ) {
     //this.camera = camera;
     this.hap = this.platform.api.hap;
-    this.ip = ip;
+    this.streamUrl = streamUrl;
+    this.ip = '1.1.1.1';
 
     // Get authentication from constructor (V1) or use miniserver credentials (V2)
     this.base64auth = base64auth ||
       Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
 
 
-    this.recordingDelegate = new RecordingDelegate(this.platform, this.ip);
+    this.recordingDelegate = new RecordingDelegate(this.platform, this.streamUrl);
 
     const resolutions: Resolution[] = [
       [320, 180, 30],
@@ -234,7 +236,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     const ffmpeg = spawn('ffmpeg', [
       '-re',
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
-      '-i', `http://${this.ip}/mjpg/video.mjpg`,
+      '-i', `${this.streamUrl}`,
       '-frames:v', '1',
       '-loglevel', 'info',
       '-f', 'image2',
@@ -375,7 +377,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-flags', 'low_delay',
       '-max_delay', '0',
       '-re',
-      '-i', `http://${this.ip}/mjpg/video.mjpg`,
+      '-i', `http://${this.streamUrl}`,
       '-an',
       '-sn',
       '-dn',

@@ -88,7 +88,13 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     //this.camera = camera;
     this.hap = this.platform.api.hap;
     this.streamUrl = streamUrl;
-    this.ip = '1.1.1.1';
+
+    // Extract the IP address using a regular expression
+    const ipAddressRegex = /http:\/\/([\d.]+)/;
+    const match = streamUrl.match(ipAddressRegex);
+    if (match && match[1]) {
+      this.ip = match[1];
+    }
 
     // Get authentication from constructor (V1) or use miniserver credentials (V2)
     this.base64auth = base64auth ||

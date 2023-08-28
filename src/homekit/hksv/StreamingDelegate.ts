@@ -383,7 +383,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-flags', 'low_delay',
       '-max_delay', '0',
       '-re',
-      '-i', `http://${this.streamUrl}`,
+      '-i', `${this.streamUrl}`,
       '-an',
       '-sn',
       '-dn',

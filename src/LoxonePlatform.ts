@@ -10,6 +10,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   public LoxoneHandler;
   public AccessoryCount = 1;
   public msInfo: MSInfo = {} as MSInfo;
+  public LoxoneItems: Controls = {} as Controls;
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
   public readonly accessories: PlatformAccessory[] = []; // this is used to track restored cached accessories
@@ -55,15 +56,15 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     this.msInfo = config.msInfo;
     const LoxoneRooms: Record<string, Room> = { ...config.rooms };
     const LoxoneCats: Record<string, CatValue> = { ...config.cats };
-    const LoxoneItems: Controls = { ...config.controls };
+    this.LoxoneItems = { ...config.controls };
 
-    for (const uuid in LoxoneItems) {
-      const Item = LoxoneItems[uuid];
+    for (const uuid in this.LoxoneItems) {
+      const Item = this.LoxoneItems[uuid];
       Item.room = LoxoneRooms[Item.room]?.name || 'undefined';
       Item.cat = LoxoneCats[Item.cat]?.type || 'undefined';
     }
 
-    this.mapLoxoneItems(Object.values(LoxoneItems));
+    this.mapLoxoneItems(Object.values(this.LoxoneItems));
     this.removeUnmappedAccessories();
   }
 

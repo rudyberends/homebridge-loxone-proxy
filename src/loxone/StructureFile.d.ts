@@ -152,6 +152,7 @@ export interface Control {
 export interface ControlDetails {
     animation?: string;
     deviceType?: number;
+    deviceUuid?: string;
     jLockable?: boolean;
     windows?: WindowDetails[];
 }

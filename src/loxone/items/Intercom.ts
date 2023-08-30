@@ -3,20 +3,6 @@ import { Doorbell } from '../../homekit/services/Doorbell';
 import { SwitchService } from '../../homekit/services/Switch';
 import { Camera } from '../../homekit/services/Camera';
 
-interface VideoInfo {
-  alertImage: string;
-  streamUrl: string;
-  deviceUuid: string;
-  user: string;
-  pass: string;
-}
-
-interface LLData {
-  control: string;
-  value: string;
-  Code: string;
-}
-
 /**
  * Loxone Intercom (V1) Item
 */
@@ -30,32 +16,45 @@ export class Intercom extends LoxoneAccessory {
 
     this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!);
 
-    // Loxone Intercom Present??
-    this.platform.LoxoneHandler.getsecuredDetails(this.device.uuidAction)
-      .then((parsedData: { LL: LLData }) => {
+    // Loxone Camera Present??
+    this.configureCamera();
 
-        // Parse the nested JSON string inside the 'value' property
-        const valueData: { videoInfo: VideoInfo } = JSON.parse(parsedData.LL.value);
-
-        // Extract IP address from alertImage
-        const alertImageURL = valueData.videoInfo.alertImage;
-        const ipAddressRegex = /\/\/([^/]+)/;
-        const ipAddressMatch = alertImageURL.match(ipAddressRegex);
-        const ipAddress = ipAddressMatch ? ipAddressMatch[1] : undefined;
-
-        // Basic Authentication
-        const base64auth = Buffer.from(`${valueData.videoInfo.user}:${valueData.videoInfo.pass}`, 'utf8').toString('base64');
-
-        new Camera(this.platform, this.Accessory!, ipAddress, base64auth); // Register Intercom Camera
-      });
-
+    // Register pushbuttons on the intercom
     this.registerChildItems();
+  }
+
+  protected async configureCamera(): Promise<void> {
+    const parsedData = await this.platform.LoxoneHandler.getsecuredDetails(this.device.uuidAction);
+
+    const valueData = JSON.parse(parsedData.LL.value);
+    const videoInfo = valueData.videoInfo;
+    let streamUrl = 'undefined';
+
+    if (this.device.details.deviceType === 0) { // Custom Intercom
+      streamUrl = videoInfo.streamUrl;
+    } else if (videoInfo.alertImage) { // Loxone V1/XL Intercom
+      const ipAddressMatch = videoInfo.alertImage.match(/\/\/([^/]+)/);
+      const ipAddress = ipAddressMatch ? ipAddressMatch[1] : undefined;
+
+      if (ipAddress) {
+        streamUrl = `http://${ipAddress}/mjpg/video.mjpg`;
+      }
+    }
+
+    // Basic Authentication
+    const base64auth = Buffer.from(`${videoInfo.user}:${videoInfo.pass}`, 'utf8').toString('base64');
+
+    this.setupCamera(streamUrl, base64auth);
+  }
+
+  protected setupCamera(ipAddress: string | undefined, base64auth?: string | undefined): void {
+    new Camera(this.platform, this.Accessory!, ipAddress, base64auth); // Register Intercom Camera
   }
 
   private registerChildItems(): void {
     for (const childUuid in this.device.subControls) {
       const ChildItem = this.device.subControls[childUuid];
-      const serviceName = ChildItem.name;
+      const serviceName = ChildItem.name.replace(/\s/g, ''); // Removes all spaces
       for (const stateName in ChildItem.states) {
         const stateUUID = ChildItem.states[stateName];
         this.ItemStates[stateUUID] = { service: serviceName, state: stateName };

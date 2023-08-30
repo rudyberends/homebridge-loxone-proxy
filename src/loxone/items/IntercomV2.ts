@@ -1,41 +1,38 @@
-import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { Doorbell } from '../../homekit/services/Doorbell';
-import { SwitchService } from '../../homekit/services/Switch';
-import { Camera } from '../../homekit/services/Camera';
+import { MotionSensor } from '../../homekit/services/MotionSensor';
+import { Intercom } from './Intercom';
 
 /**
  * Loxone IntercomV2 Item
 */
-export class IntercomV2 extends LoxoneAccessory {
+export class IntercomV2 extends Intercom {
 
-  configureServices(): void {
-
-    this.ItemStates = {
-      [this.device.states.bell]: {'service': 'PrimaryService', 'state': 'bell'},
-    };
-
-    this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!);
-
-    // Loxone Intercom Present??
+  async configureCamera(): Promise<void> {
     this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.address, (ip: string) => {
       this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
 
-      new Camera(this.platform, this.Accessory!, ip); // Register Intercom Camera
-      //new Motion(this.platform, this.accessory); // Register Intercom Motion Sensor
-    });
+      this.setupCamera(`http://${ip}/mjpg/video.mjpg`);
 
-    this.registerChildItems();
+      // Fetch Intercon MotionSensor;
+      this.configureMotionSensor();
+    });
   }
 
-  private registerChildItems(): void {
-    for (const childUuid in this.device.subControls) {
-      const ChildItem = this.device.subControls[childUuid];
-      const serviceName = ChildItem.name;
-      for (const stateName in ChildItem.states) {
-        const stateUUID = ChildItem.states[stateName];
+  async configureMotionSensor(): Promise<void> {
+    const targetUuidPrefix = this.device.details.deviceUuid!.split('-')[0];
+    const intercomMotionUuid = Object.keys(this.platform.LoxoneItems).filter(uuid => uuid.startsWith(targetUuidPrefix));
+
+    if (intercomMotionUuid) {
+      const matchingDevice = this.platform.LoxoneItems[`${intercomMotionUuid}`];
+      this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom MotionSensor`);
+
+      const serviceName = matchingDevice.name.replace(/\s/g, ''); // Removes all spaces
+      for (const stateName in matchingDevice.states) {
+        const stateUUID = matchingDevice.states[stateName];
         this.ItemStates[stateUUID] = { service: serviceName, state: stateName };
-        this.Service[serviceName] = new SwitchService(this.platform, this.Accessory!, ChildItem);
+        this.Service[serviceName] = new MotionSensor(this.platform, this.Accessory!, matchingDevice); // Register Intercom Motion Sensor
       }
+    } else {
+      this.platform.log.debug(`[${this.device.name}] Unable to find Loxone Intercom MotionSensor`);
     }
   }
 }

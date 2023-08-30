@@ -71,6 +71,7 @@ import { RecordingDelegate } from './RecordingDelegate';
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
   public readonly recordingDelegate: CameraRecordingDelegate;
+  private readonly streamUrl;
   private readonly ip;
   private readonly base64auth;
 
@@ -81,19 +82,26 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   private readonly hap: HAP;
   constructor(
       private readonly platform: LoxonePlatform,
-      ip: string,
+      streamUrl: string,
       base64auth?: string,
   ) {
     //this.camera = camera;
     this.hap = this.platform.api.hap;
-    this.ip = ip;
+    this.streamUrl = streamUrl;
+
+    // Extract the IP address using a regular expression
+    const ipAddressRegex = /http:\/\/([\d.]+)/;
+    const match = streamUrl.match(ipAddressRegex);
+    if (match && match[1]) {
+      this.ip = match[1];
+    }
 
     // Get authentication from constructor (V1) or use miniserver credentials (V2)
     this.base64auth = base64auth ||
       Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
 
 
-    this.recordingDelegate = new RecordingDelegate(this.platform, this.ip);
+    this.recordingDelegate = new RecordingDelegate(this.platform, this.streamUrl);
 
     const resolutions: Resolution[] = [
       [320, 180, 30],
@@ -233,8 +241,8 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     // Spawn an ffmpeg process to capture a snapshot from the camera
     const ffmpeg = spawn('ffmpeg', [
       '-re',
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-i', `http://${this.ip}/mjpg/video.mjpg`,
+      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+      '-i', `${this.streamUrl}`,
       '-frames:v', '1',
       '-loglevel', 'info',
       '-f', 'image2',
@@ -367,7 +375,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     //const videoBitrate = request.video.max_bit_rate;
 
     const ffmpegArgs: string[] = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-use_wallclock_as_timestamps', '1',
       '-probesize', '32',
       '-analyzeduration', '0',
@@ -375,14 +383,14 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-flags', 'low_delay',
       '-max_delay', '0',
       '-re',
-      '-i', `http://${this.ip}/mjpg/video.mjpg`,
+      '-i', `${this.streamUrl}`,
       '-an',
       '-sn',
       '-dn',
       '-codec:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-color_range', 'mpeg',
-      '-r', '30',
+      '-r', '25',
       '-f', 'rawvideo',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',

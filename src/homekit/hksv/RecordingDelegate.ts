@@ -132,11 +132,11 @@ export class RecordingDelegate implements CameraRecordingDelegate {
   }
 
   updateRecordingActive(active: boolean): void {
-    //throw new Error('Method not implemented.');
+    throw new Error('Method not implemented.');
   }
 
   updateRecordingConfiguration(configuration: CameraRecordingConfiguration | undefined): void {
-    //throw new Error('Method not implemented.');
+    throw new Error('Method not implemented.');
   }
 
   handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket, any, unknown> {

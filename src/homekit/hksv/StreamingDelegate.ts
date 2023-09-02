@@ -34,6 +34,8 @@ import { spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
 import { FfmpegStreamingProcess, StreamingDelegate as FfmpegStreamingDelegate } from './FfmpegStreamingProcess';
 import { RecordingDelegate } from './RecordingDelegate';
+import { RtpDescription, RtpOptions, SipCall } from './SipClient';
+import { RtpHelper } from './RtpHelper';
 
   interface SessionInfo {
       address: string; // address of the HAP controller
@@ -50,6 +52,12 @@ import { RecordingDelegate } from './RecordingDelegate';
       audioCryptoSuite: SRTPCryptoSuites;
       audioSRTP: Buffer;
       audioSSRC: number;
+
+      sipRtpOptions?: RtpOptions;
+      sipRemoteRtpDescription?: RtpDescription;
+      rtpHelper?: RtpHelper;
+      rtpLocalAudioPort?: number;
+      rtpLocalAudioPortRtcp?: number;
   }
 
   type ActiveSession = {
@@ -74,6 +82,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   private readonly streamUrl: string;
   private readonly ip: string = '';
   private readonly base64auth: string;
+  private readonly sipCall?: SipCall;
 
   private pendingSessions: { [index: string]: SessionInfo } = {};
   private ongoingSessions: { [index: string]: ActiveSession } = {};
@@ -180,6 +189,11 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
         delegate: this.recordingDelegate,
       },
     };
+
+    this.sipCall = new SipCall( this.platform, {
+      from: 'sip:192.168.1.252',
+      to: 'sip:192.168.1.201',
+    });
 
     this.controller = new this.hap.CameraController(options);
   }

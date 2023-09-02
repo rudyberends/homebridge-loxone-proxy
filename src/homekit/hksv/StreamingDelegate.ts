@@ -71,9 +71,9 @@ import { RecordingDelegate } from './RecordingDelegate';
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
   public readonly recordingDelegate: CameraRecordingDelegate;
-  private readonly streamUrl;
-  private readonly ip;
-  private readonly base64auth;
+  private readonly streamUrl: string;
+  private readonly ip: string = '';
+  private readonly base64auth: string;
 
   private pendingSessions: { [index: string]: SessionInfo } = {};
   private ongoingSessions: { [index: string]: ActiveSession } = {};
@@ -99,7 +99,6 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     // Get authentication from constructor (V1) or use miniserver credentials (V2)
     this.base64auth = base64auth ||
       Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
-
 
     this.recordingDelegate = new RecordingDelegate(this.platform, this.streamUrl);
 
@@ -135,7 +134,6 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       },
     };
 
-    /*
     const recordingOptions: CameraRecordingOptions = {
       overrideEventTriggerOptions: [
         EventTriggerOption.MOTION,
@@ -173,15 +171,14 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
         ],
       },
     };
-    */
 
     const options: CameraControllerOptions = {
       delegate: this,
       streamingOptions: streamingOptions,
-      //recording: {
-      //options: recordingOptions,
-      //delegate: this.recordingDelegate,
-      //},
+      recording: {
+        options: recordingOptions,
+        delegate: this.recordingDelegate,
+      },
     };
 
     this.controller = new this.hap.CameraController(options);
@@ -220,10 +217,8 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
           'Homebridge',
         );
       }
-
       delete this.ongoingSessions[sessionId];
-
-      this.platform.log.info('Stopped video stream.', this.ip);
+      this.platform.log.debug('Stopped video stream.', this.ip);
     }
   }
 
@@ -256,7 +251,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     ffmpeg.stdout.on('data', data => snapshotBuffers.push(data));
 
     ffmpeg.stderr.on('data', data => {
-      this.platform.log.info('SNAPSHOT: ' + String(data));
+      this.platform.log.debug('SNAPSHOT: ' + String(data));
     });
 
     ffmpeg.on('exit', (code, signal) => {
@@ -456,7 +451,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
         clearTimeout(activeSession.timeout);
       }
       activeSession.timeout = setTimeout(() => {
-        this.platform.log.info('Device appears to be inactive. Stopping stream.', this.ip);
+        this.platform.log.debug('Device appears to be inactive. Stopping stream.', this.ip);
         this.controller.forceStopStreamingSession(request.sessionID);
         this.stopStream(request.sessionID);
       }, request.video.rtcp_interval * 5 * 1000);

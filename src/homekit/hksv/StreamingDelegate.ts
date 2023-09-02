@@ -191,8 +191,8 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     };
 
     this.sipCall = new SipCall( this.platform, {
-      from: 'sip:192.168.1.252',
-      to: 'sip:192.168.1.201',
+      from: 'sip:192.168.1.201',
+      to: 'sip:192.168.1.252',
     });
 
     this.controller = new this.hap.CameraController(options);

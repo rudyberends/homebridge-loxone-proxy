@@ -124,7 +124,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
         resolutions: resolutions,
       },
       audio: {
-        twoWayAudio: false,
+        twoWayAudio: true,
         codecs: [
           {
             type: AudioStreamingCodecType.AAC_ELD,

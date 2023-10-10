@@ -18,12 +18,20 @@ export class IntercomV2 extends Intercom {
   }
 
   async configureMotionSensor(): Promise<void> {
+    console.log('!!! BEGIN DEBUG !!!');
+
     const targetUuidPrefix = this.device.details.deviceUuid!.split('-')[0];
     const intercomMotionUuid = Object.keys(this.platform.LoxoneItems).filter(uuid => uuid.startsWith(targetUuidPrefix));
+
+    console.log('targetUuidPrefix: ' + targetUuidPrefix);
+    console.log('intercomMotionUuid: ' + intercomMotionUuid);
 
     if (intercomMotionUuid) {
       const matchingDevice = this.platform.LoxoneItems[`${intercomMotionUuid}`];
       this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom MotionSensor`);
+
+      console.log(matchingDevice);
+      console.log('!!! END DEBUG !!!');
 
       const serviceName = matchingDevice.name.replace(/\s/g, ''); // Removes all spaces
       for (const stateName in matchingDevice.states) {

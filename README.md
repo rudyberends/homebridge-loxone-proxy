@@ -28,7 +28,7 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`Gate` | GarageDoorOpener | Auto
 |`Humidity` | HumiditySensor | Manual | Requires an alias in the config.
 |`Intercom` | Doorbell, Camera | Auto
-|`IntercomV2` | Doorbell, MotionSensor, Camera | Auto
+|`IntercomV2` | Doorbell, MotionSensor, Camera | Auto | "Use in userinterface" has to be enabled on the MotionSensor for it to be detected.
 |`IRoomControllerV2` | Thermostat | Auto
 |`Jalousie` | Window Covering | Auto
 |`Lock` | LockMechanism | Manual | A switch with an alias that is defined in the config.

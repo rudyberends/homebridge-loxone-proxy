@@ -35,7 +35,7 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`MoodSwitch` | Switch Group | Auto | all LightControllerV2 moods are mapped to a Switch Group as a seperate switch.
 |`Motion` | MotionSensor | Manual | Requires an alias in the config.
 |`PresenceDetector` | OccupancySensor | Auto
-|`Switch` | Switch, Outlet, or Lightbulb | Auto
+|`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto
 |`Ventilation` | Fanv2 | Auto
 |`WindowMonitor` | ContactSensor | Auto
 

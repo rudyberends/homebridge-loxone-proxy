@@ -45,15 +45,17 @@ export class Thermostat extends BaseService {
       case 'tempActual':
         this.State.CurrentTemperature = this.limitHomeKitTemperature(message.value);
         this.updateCharacteristicValue('CurrentTemperature', this.State.CurrentTemperature);
+        this.State.CurrentHeatingCoolingState = (this.State.CurrentTemperature < this.State.TargetTemperature) ? 1 : 0;
         break;
       case 'tempTarget':
         this.State.TargetTemperature = this.limitHomeKitTemperature(message.value);
         this.updateCharacteristicValue('TargetTemperature', this.State.TargetTemperature);
+        this.State.CurrentHeatingCoolingState = (this.State.CurrentTemperature < this.State.TargetTemperature) ? 1 : 0;
         break;
     }
   }
 
-  limitHomeKitTemperature(temp: number) {
+  private limitHomeKitTemperature(temp: number) {
     temp = (temp < 10) ? 10 : temp;
     temp = (temp > 38) ? 38 : temp;
     return temp;
@@ -104,6 +106,8 @@ export class Thermostat extends BaseService {
    */
   handleTargetTemperatureSet(value) {
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetTemperature:${value}`);
+    //const command = `setManualTemperature/${value}`;
+    //this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }
 
   /**

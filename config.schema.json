@@ -56,10 +56,13 @@
                 "type": "object",
                 "title": "InfoOnlyAnalog aliases",
                 "properties": {
+                    "Brightness": {
+                        "type": "string"
+                    },
                     "Humidity": {
                         "type": "string"
                     },
-                    "Brightness": {
+                    "Temperature": {
                         "type": "string"
                     }
                 }

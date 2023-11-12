@@ -36,6 +36,7 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`Motion` | MotionSensor | Manual | Requires an alias in the config.
 |`PresenceDetector` | OccupancySensor | Auto
 |`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto
+|`Temperature` | TemperatureSensor | Manual | Requires an alias in the config.
 |`Ventilation` | Fanv2 | Auto
 |`WindowMonitor` | ContactSensor | Auto
 

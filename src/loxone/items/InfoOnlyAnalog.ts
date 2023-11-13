@@ -9,25 +9,18 @@ import { TemperatureSensor } from '../../homekit/services/TemperatureSensor';
 export class InfoOnlyAnalog extends LoxoneAccessory {
   private ServiceType: (new (platform: any, accessory: any) => any) = HumiditySensor;
 
+  // Map InfoOnlyAnalog Items with Alias
   isSupported(): boolean {
-
-    // Map InfoOnlyAnalog Items with Alias
     if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Brightness)) {
       this.ServiceType = LightSensor;
-      return true;
-    }
-
-    if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Humidity)) {
+    } else if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Humidity)) {
       this.ServiceType = HumiditySensor;
-      return true;
-    }
-
-    if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Temperature)) {
+    } else if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Temperature)) {
       this.ServiceType = TemperatureSensor;
-      return true;
+    } else {
+      return false;
     }
-
-    return false;
+    return true;
   }
 
   configureServices(): void {

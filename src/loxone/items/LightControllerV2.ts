@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { SwitchService } from '../../homekit/services/Switch';
+import { MoodSwitch } from '../../homekit/services/MoodSwitch';
 import { ColorPickerV2 } from './ColorPickerV2';
 import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
@@ -33,7 +33,7 @@ export class LightControllerV2 extends LoxoneAccessory {
         };
         const stateUUID = this.device.states.activeMoods;
         this.ItemStates[stateUUID] = { service: moodSwitchItem.name, state: 'activeMoods' };
-        new SwitchService(this.platform, this.Accessory!, moodSwitchItem);
+        this.Service[mood.name] = new MoodSwitch(this.platform, this.Accessory!, moodSwitchItem);
       }
     }
   }

@@ -82,14 +82,26 @@ export class LoxoneAccessory {
     }
   }
 
-  private callBack = (message: { uuid: string; state: string; service: string; value: string }): void => {
+  private callBack = (message: { uuid: string; state: string; service: string; value: string | number }): void => {
     if (message.uuid) {
       const itemState = this.ItemStates[message.uuid];
       message.service = itemState.service;
       message.state = itemState.state;
 
-      const updateService = new Function('message', `return this.Service.${this.ItemStates[message.uuid].service}.updateService(message);`);
-      updateService.call(this, message);
+      if (message.state === 'activeMoods') {
+
+        const currentID: string = message.value as unknown as string;
+        message.value = currentID.replace(/[[\]']+/g, '');
+        message.value = parseInt(message.value);
+
+        for (const serviceName in this.Service) {
+          const updateService = new Function('message', `return this.Service["${serviceName}"].updateService(message);`);
+          updateService.call(this, message);
+        }
+      } else {
+        const updateService = new Function('message', `return this.Service.${message.service}.updateService(message);`);
+        updateService.call(this, message);
+      }
     }
   };
 }

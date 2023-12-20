@@ -75,18 +75,25 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const itemCache: { [key: string]: any } = {}; // Cache object to store imported item files
 
+    const ExcludedItems = this.config.Exclusions?.split(',') ?? [];
+
     for (const item of items) {
       try {
         const itemType = item.type;
 
-        if (!itemCache[itemType]) {  // Check if the item file has already been imported
-          const itemFile = await import(`./loxone/items/${itemType}`);
-          itemCache[itemType] = itemFile;
-        }
+        if (ExcludedItems.includes(itemType)) {
+          this.log.debug(`[mapLoxoneItem] Skipping Excluded ItemType: ${item.name} with type ${item.type}`);
+        } else {
 
-        const itemFile = itemCache[itemType];
-        const constructorName = Object.keys(itemFile)[0];
-        new itemFile[constructorName](this, item);
+          if (!itemCache[itemType]) {  // Check if the item file has already been imported
+            const itemFile = await import(`./loxone/items/${itemType}`);
+            itemCache[itemType] = itemFile;
+          }
+
+          const itemFile = itemCache[itemType];
+          const constructorName = Object.keys(itemFile)[0];
+          new itemFile[constructorName](this, item);
+        }
       } catch (error) {
         //console.log(error);
         this.log.debug(`[mapLoxoneItem] Skipping Unsupported ItemType: ${item.name} with type ${item.type}`);

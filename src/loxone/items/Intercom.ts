@@ -25,10 +25,13 @@ export class Intercom extends LoxoneAccessory {
 
   protected async configureCamera(): Promise<void> {
     const parsedData = await this.platform.LoxoneHandler.getsecuredDetails(this.device.uuidAction);
-
-    const valueData = JSON.parse(parsedData.LL.value);
-    const videoInfo = valueData.videoInfo;
+    const videoInfo = parsedData?.LL?.value ? JSON.parse(parsedData.LL.value)?.videoInfo : undefined;
     let streamUrl = 'undefined';
+
+    if (videoInfo === undefined) { // Intercom without Camera
+      this.platform.log.debug(`[${this.device.name}] Loxone Intercom without Camera`);
+      return;
+    }
 
     if (this.device.details.deviceType === 0) { // Custom Intercom
       streamUrl = videoInfo.streamUrl;

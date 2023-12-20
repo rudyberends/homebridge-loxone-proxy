@@ -35,13 +35,8 @@
                 }
             },
             "Exclusions": {
-                "type": "object",
-                "title": "Excluded Items",
-                "properties": {
-                    "Exclusions": {
-                        "type": "string"
-                    }
-                }
+                "type": "string",
+                "title": "Excluded Items"
             },
             "switchAlias": {
                 "type": "object",

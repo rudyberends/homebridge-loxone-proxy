@@ -40,6 +40,9 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`Ventilation` | Fanv2 | Auto
 |`WindowMonitor` | ContactSensor | Auto
 
+### Exclusions
+To exclude Itemtypes from being mapped, they can be added to the Excussions section in the config. Use a comma sepperated list for multiple ItemTypes.
+
 ### Manual mapping
 Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all motion detectors the convention "MoXX" in Loxone Config and then setting the alias "Mo" in the plugin will result in all items with "Mo" in the name being recognized as motion detectors.
 

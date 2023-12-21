@@ -136,7 +136,7 @@ export class Thermostat extends BaseService {
 
     // This will trigger an override on the Heating Schedule
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetTemperature:${value}`);
-    const command = `override/3/[${secondsDifference}]/[${value}]`;
+    const command = `override/3/[${secondsDifference}]/${value}`;
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }
 

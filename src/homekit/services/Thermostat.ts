@@ -5,6 +5,9 @@ import { BaseService } from './BaseService';
  */
 export class Thermostat extends BaseService {
 
+  // Epoch time for January 1, 2009 (in seconds)
+  LoxoneEpoch = new Date('2009-01-01T00:00:00Z').getTime() / 1000;
+
   State = {
     CurrentHeatingCoolingState: 0, // 0 = Off / 1 = Heat / 2 = Cool
     TargetHeatingCoolingState: 3, // 0 = Off / 1 = Heat / 2 = Cool / 3 = Auto
@@ -42,6 +45,23 @@ export class Thermostat extends BaseService {
     this.platform.log.debug(`[${this.device.name}] Callback ${message.state} update for Thermostat: ${message.value}`);
 
     switch (message.state) {
+      case 'operatingMode':
+        switch (message.value) {
+          case 0:
+          case 3:
+            this.State.TargetHeatingCoolingState = 3;
+            break;
+          case 1:
+          case 4:
+            this.State.TargetHeatingCoolingState = 1;
+            break;
+          case 2:
+          case 5:
+            this.State.TargetHeatingCoolingState = 2;
+            break;
+        }
+        break;
+
       case 'tempActual':
         this.State.CurrentTemperature = this.limitHomeKitTemperature(message.value);
         this.updateCharacteristicValue('CurrentTemperature', this.State.CurrentTemperature);
@@ -105,9 +125,19 @@ export class Thermostat extends BaseService {
    * Handle requests to set the "Target Temperature" characteristic
    */
   handleTargetTemperatureSet(value) {
+
+    // Get the current date and time
+    const currentDate = new Date();
+    const nextDayAtMidnight = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 1, 0, 0, 0);
+    const nextDayAtMidnightInSeconds = nextDayAtMidnight.getTime() / 1000;
+
+    // Calculate the difference between the Loxone Epoch and the next day at 12 am
+    const secondsDifference = nextDayAtMidnightInSeconds - this.LoxoneEpoch;
+
+    // This will trigger an override on the Heating Schedule
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetTemperature:${value}`);
-    //const command = `setManualTemperature/${value}`;
-    //this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    const command = `override/3/[${secondsDifference}]/[${value}]`;
+    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }
 
   /**

@@ -43,7 +43,7 @@ For the plugin to recognize the items, the item needs to be vissible in the user
 Configuration of the plugin can be done using HomeBridge ui. 
 
 ### Required Settings
-At a minimum, the plugin requires the required settings to connect to the miniserver.
+At a minimum, the plugin requires these settings to connect to the miniserver.
 
 | Parameter | Note |
 | --- | --- |
@@ -51,6 +51,8 @@ At a minimum, the plugin requires the required settings to connect to the minise
 | `port` | optional, port of your miniserver (default: 80) |
 | `username` | loxone username |
 | `password` | loxone password |
+
+If you create a dedicated user for the plugin, you can filter items by only assigning rights to items you want to expose to HomeBridge.
 
 ### Filters
 Filters allow you to select what to expose to HomeKit.

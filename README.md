@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/a320c391-de67-452e-9dd7-41bb47f3e310" />
+<img src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/03651512-cc14-4e60-80b5-8e1fc87a5b7b" />
 </p>
 
 # Homebridge Loxone Proxy 

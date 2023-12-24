@@ -1,8 +1,6 @@
 <p align="center">
-<img src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/03651512-cc14-4e60-80b5-8e1fc87a5b7b" />
+  <img width="1325" alt="logo" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/be6b9cee-865c-4f9d-a0c1-dafa0f89047e">
 </p>
-
-# Homebridge Loxone Proxy 
 
 [![npm](https://badgen.net/npm/v/homebridge-loxone-proxy)](https://npmjs.com/package/homebridge-loxone-proxy)
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)

@@ -11,7 +11,7 @@ Homebridge Proxy which exposes a Loxone System to Homekit.
 The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator) to setup a websocket connection to a Loxone miniserver.
 It retrieves the loxone StructureFile and tries to map all items to HomeKit accessories.
 
-### Mapped Items
+# Mapped Items
 The following list displays all supported itemtypes supported by this plugin.
 
 |loxone Item |HomeKit Accessory |Mapping |Note
@@ -39,13 +39,42 @@ For the plugin to recognize the items, the item needs to be vissible in the user
 
 <img width="408" alt="useinuserinterface" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/b422015b-4a5d-411e-b98c-42ef86cf8d58">
 
-### Exclusions
-To exclude Itemtypes from being mapped, they can be added to the Exclussions section in the config. Use a comma-seperated list for multiple ItemTypes. The itemtype name can be found in the "mapped items" table.
+# Configuration
+Configuration of the plugin can be done using HomeBridge ui. 
+
+### Required Settings
+At a minimum, the plugin requires the required settings to connect to the miniserver.
+
+| Parameter | Note |
+| --- | --- |
+| `host` | IP of your loxone miniserver |
+| `port` | optional, port of your miniserver (default: 80) |
+| `username` | loxone username |
+| `password` | loxone password |
+
+### Filters
+Filters allow you to select what to expose to HomeKit.
+
+#### Moodswitches
+When enabled, all LightControllerV2 moods are mapped to a homekit switch. All Switches from  the same LightController will be grouped together. 
+
+#### Exclusions
+To exclude Itemtypes from being mapped, they can be added to the Exclussions section in the config. Use a comma-seperated list for multiple ItemTypes.
+
+<img width="748" alt="filters" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/c61daa1b-83aa-467b-a258-8b648a6f575e">
+
+The itemtype name can be found in the "mapped items" table.
 
 ### Manual mapping
-Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all motion detectors the convention "MoXX" in Loxone Config and then setting the alias "Mo" in the plugin will result in all items with "Mo" in the name being recognized as motion detectors.
+Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all Brightness sensors the convention "MH0'XX'" in Loxone Config 
 
-Items that require an alias are listed in the table above.
+<img width="408" alt="mapping2" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/4fd61eaf-4080-41aa-bdc0-363b5ca0fcb1">
+
+and then setting the alias "MH0" in the plugin will result in all InfoOnlyAnalog items with "MH0" in the name being recognized as LightSensors.
+
+<img width="748" alt="filters" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/4ed2ce2b-4003-41bb-930c-f9eee7df517a">
+
+Items that require an alias are listed in the "mapped items" table.
 
 ### Limitations
 

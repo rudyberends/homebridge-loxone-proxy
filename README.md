@@ -1,6 +1,5 @@
-
 <p align="center">
-![homebridge-loxone](https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/d0dbd2de-1ad0-400f-85a5-3e35a859389b)
+<img src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/a320c391-de67-452e-9dd7-41bb47f3e310" />
 </p>
 
 # Homebridge Loxone Proxy 

@@ -9,7 +9,7 @@
 Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.
 
 The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator) to setup a websocket connection to a Loxone miniserver.
-It retrieves the loxone StructureFile and tries to map all items to HomeKit accessories.
+It retrieves the loxone StructureFile and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
 
 # Mapped Items
 The following list displays all supported itemtypes supported by this plugin.
@@ -17,21 +17,21 @@ The following list displays all supported itemtypes supported by this plugin.
 |loxone Item |HomeKit Accessory |Mapping |Note
 |--- |--- |--- |--- |
 | `Alarm` | SecuritySystem | Auto
-|`Brightness` | LightSensor | Manual | Requires an alias in the config.
+|`Brightness` | LightSensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
 | `ColorPickerV2` | Lightbulb | Auto | Individual ColorPickers, or items parsed from LightControllerV2.
 | `Dimmer` | Lightbulb | Auto | Individual Dimmers, or items parsed from LightControllerV2.
 |`Gate` | GarageDoorOpener | Auto
-|`Humidity` | HumiditySensor | Manual | Requires an alias in the config.
+|`Humidity` | HumiditySensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
 |`Intercom` | Doorbell, Camera | Auto
 |`IntercomV2` | Doorbell, MotionSensor, Camera | Auto | "Use in userinterface" has to be enabled on the MotionSensor for it to be detected.
 |`IRoomControllerV2` | Thermostat | Auto
 |`Jalousie` | Window Covering | Auto
 |`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to a Switch Group as a seperate switch. Individual lights are mapped to a Lightbulb.
-|`Lock` | LockMechanism | Manual | A switch with an alias that is defined in the config.
-|`Motion` | MotionSensor | Manual | Requires an alias in the config.
+|`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping.
+|`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`PresenceDetector` | OccupancySensor | Auto
 |`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto
-|`Temperature` | TemperatureSensor | Manual | Requires an alias in the config.
+|`Temperature` | TemperatureSensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
 |`Ventilation` | Fanv2 | Auto
 |`WindowMonitor` | ContactSensor | Auto
 
@@ -40,7 +40,7 @@ For the plugin to recognize the items, the item needs to be vissible in the user
 <img width="408" alt="useinuserinterface" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/b422015b-4a5d-411e-b98c-42ef86cf8d58">
 
 # Configuration
-Configuration of the plugin can be done using HomeBridge ui. 
+Configuration of the plugin can be done using the Homebridge UI without having to manually edit the Homebridge config.json file.
 
 ### Required Settings
 At a minimum, the plugin requires these settings to connect to the miniserver.

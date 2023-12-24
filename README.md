@@ -1,12 +1,6 @@
-
 <p align="center">
-
-<img src="https://github.com/homebridge/branding/blob/latest/logos/homebridge-wordmark-logo-horizontal.png" width="250">
-
+  <img width="1325" alt="logo" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/be6b9cee-865c-4f9d-a0c1-dafa0f89047e">
 </p>
-
-
-# Homebridge Loxone Proxy 
 
 [![npm](https://badgen.net/npm/v/homebridge-loxone-proxy)](https://npmjs.com/package/homebridge-loxone-proxy)
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
@@ -18,6 +12,7 @@ The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator
 It retrieves the loxone StructureFile and tries to map all items to HomeKit accessories.
 
 ### Mapped Items
+The following list displays all supported itemtypes supported by this plugin.
 
 |loxone Item |HomeKit Accessory |Mapping |Note
 |--- |--- |--- |--- |
@@ -31,8 +26,8 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`IntercomV2` | Doorbell, MotionSensor, Camera | Auto | "Use in userinterface" has to be enabled on the MotionSensor for it to be detected.
 |`IRoomControllerV2` | Thermostat | Auto
 |`Jalousie` | Window Covering | Auto
+|`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to a Switch Group as a seperate switch. Individual lights are mapped to a Lightbulb.
 |`Lock` | LockMechanism | Manual | A switch with an alias that is defined in the config.
-|`MoodSwitch` | Switch Group | Auto | all LightControllerV2 moods are mapped to a Switch Group as a seperate switch.
 |`Motion` | MotionSensor | Manual | Requires an alias in the config.
 |`PresenceDetector` | OccupancySensor | Auto
 |`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto
@@ -40,8 +35,12 @@ It retrieves the loxone StructureFile and tries to map all items to HomeKit acce
 |`Ventilation` | Fanv2 | Auto
 |`WindowMonitor` | ContactSensor | Auto
 
+For the plugin to recognize the items, the item needs to be vissible in the user interface. This can be done by enabling "use" in the userinterface section of the item.
+
+<img width="408" alt="useinuserinterface" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/b422015b-4a5d-411e-b98c-42ef86cf8d58">
+
 ### Exclusions
-To exclude Itemtypes from being mapped, they can be added to the Exclussions section in the config. Use a comma-seperated list for multiple ItemTypes.
+To exclude Itemtypes from being mapped, they can be added to the Exclussions section in the config. Use a comma-seperated list for multiple ItemTypes. The itemtype name can be found in the "mapped items" table.
 
 ### Manual mapping
 Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all motion detectors the convention "MoXX" in Loxone Config and then setting the alias "Mo" in the plugin will result in all items with "Mo" in the name being recognized as motion detectors.

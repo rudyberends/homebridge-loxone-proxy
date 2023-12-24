@@ -42,7 +42,7 @@
         },
         "Exclusions": {
             "type": "string",
-            "title": "Excluded Items"
+            "title": "Excluded ItemTypes"
         },
         "switchAlias": {
             "type": "object",
@@ -84,60 +84,71 @@
         }
     }
     },
-    "form": [
-      "host",
-      "username",
-      {
-        "key": "password",
-        "type": "password"
-      },
-      {
-        "type": "fieldset",
-        "expandable": true,
-        "title": "Options",
-        "description": "Select what to expose to HomeKit.",
-        "items": [
-          "options.MoodSwitches",
-          "Exclusions"
-        ]
-      },
-      {
-        "type": "fieldset",
-        "expandable": true,
-        "title": "SwitchItem Mappings",
-        "description": "Map Switch items using an Alias",
-        "items": [
-            "switchAlias.Lock"
-        ]
-      },
-      {
-        "type": "fieldset",
-        "expandable": true,
-        "title": "InfoOnlyAnalog Mappings",
-        "description": "Map InfoOnlyAnalog items using an Alias",
-        "items": [
-            "InfoOnlyAnalogAlias.Brightness",
-            "InfoOnlyAnalogAlias.Humidity",
-            "InfoOnlyAnalogAlias.Temperature"
-        ]
-      },
-      {
-        "type": "fieldset",
-        "expandable": true,
-        "title": "InfoOnlyDigital Mappings",
-        "description": "Map InfoOnlyDigital items using an Alias",
-        "items": [
-            "InfoOnlyDigitalAlias.Motion"
-        ]
-      },
-      {
-        "type": "fieldset",
-        "expandable": true,
-        "title": "Advanced Settings",
-        "description": "Don't change these, unless you understand what you're doing.",
-        "items": [
-          "port"
-        ]
-      }
-    ]
+    "layout": [
+        {
+          "type": "fieldset",
+          "title": "Required Settings",
+          "items": [
+            {
+              "type": "flex",
+              "flex-flow": "row wrap",
+              "items": [
+                "host",
+                "port"
+              ]
+            },
+            {
+              "type": "flex",
+              "flex-flow": "row wrap",
+              "items": [
+                "username",
+                {
+                  "key": "password",
+                  "type": "password"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "fieldset",
+          "title": "Filters",
+          "description": "Select what to expose to HomeKit.",
+          "expandable": true,
+          "expanded": false,
+          "items": [
+            "options.MoodSwitches",
+            "Exclusions"  
+          ]
+        },
+        {
+          "type": "fieldset",
+          "expandable": true,
+          "title": "SwitchItem Mappings",
+          "description": "Map Switch items using an Alias",
+          "items": [
+              "switchAlias.Lock"
+          ]
+        },
+        {
+          "type": "fieldset",
+          "expandable": true,
+          "title": "InfoOnlyAnalog Mappings",
+          "description": "Map InfoOnlyAnalog items using an Alias",
+          "items": [
+              "InfoOnlyAnalogAlias.Brightness",
+              "InfoOnlyAnalogAlias.Humidity",
+              "InfoOnlyAnalogAlias.Temperature"
+          ]
+        },
+        {
+          "type": "fieldset",
+          "expandable": true,
+          "title": "InfoOnlyDigital Mappings",
+          "description": "Map InfoOnlyDigital items using an Alias",
+          "items": [
+              "InfoOnlyDigitalAlias.Motion"
+          ]
+        }
+      ]
   }

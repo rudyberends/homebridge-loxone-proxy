@@ -1,10 +1,7 @@
 
 <p align="center">
-
-<img src="https://github.com/homebridge/branding/blob/latest/logos/homebridge-wordmark-logo-horizontal.png" width="250">
-
+![homebridge-loxone](https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/d0dbd2de-1ad0-400f-85a5-3e35a859389b)
 </p>
-
 
 # Homebridge Loxone Proxy 
 

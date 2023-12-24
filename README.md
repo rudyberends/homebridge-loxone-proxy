@@ -56,7 +56,7 @@ At a minimum, the plugin requires the required settings to connect to the minise
 Filters allow you to select what to expose to HomeKit.
 
 #### Moodswitches
-When enabled, all LightControllerV2 moods are mapped to a homekit switch. All Switches from  the same LightController will be grouped together. 
+When enabled, all LightControllerV2 moods are mapped to a homekit switch. All Switches from  the same LightController will be grouped together. In homeKit this works as a radio switch, so only one switch (mood) can be active at the same time. Mixing moods is not possible. 
 
 #### Exclusions
 To exclude Itemtypes from being mapped, they can be added to the Exclussions section in the config. Use a comma-seperated list for multiple ItemTypes.

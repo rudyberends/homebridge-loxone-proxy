@@ -9,7 +9,7 @@
 Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.
 
 The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator) to setup a websocket connection to a Loxone miniserver.
-It retrieves the loxone StructureFile and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
+It retrieves the loxone [StructureFile](https://www.loxone.com/wp-content/uploads/datasheets/StructureFile.pdf) and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
 
 # Mapped Items
 The following list displays all supported itemtypes supported by this plugin.
@@ -78,6 +78,5 @@ and then setting the alias "MH0" in the plugin will result in all InfoOnlyAnalog
 
 Items that require an alias are listed in the "mapped items" table.
 
-### Limitations
-
+# Limitations
 Apple does not allow more than 150 items per bridge. This plugin will not map more than 150 items, but if you have other plugins activated, you might still hit this limit. To prevent this you can run this plugin as a child bridge. Another way to solve it is to use a dedicated loxone user for the plugin and only expose the items that you want to use in HomeKit.

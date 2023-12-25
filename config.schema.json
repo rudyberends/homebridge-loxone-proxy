@@ -3,7 +3,7 @@
     "pluginType": "platform",
     "singular": true,
     "headerDisplay": "Homebridge Proxy which exposes a Loxone System to Homekit",
-    "footerDisplay": "",
+    "footerDisplay": "For setup information, bug reports and feature requests please visit the [Plugin Homepage](https://github.com/rudyberends/homebridge-loxone-proxy).",
     "schema": {
       "type": "object",
       "properties": {

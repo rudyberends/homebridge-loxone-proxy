@@ -9,7 +9,7 @@
 Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.
 
 The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator) to setup a websocket connection to a Loxone miniserver.
-It retrieves the loxone [StructureFile](https://www.loxone.com/wp-content/uploads/datasheets/StructureFile.pdf) and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
+It retrieves the loxone [Structure-File](https://www.loxone.com/wp-content/uploads/datasheets/StructureFile.pdf) and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
 
 # Mapped Items
 The following list displays all supported itemtypes supported by this plugin.

@@ -10,6 +10,7 @@ export class Alarm extends LoxoneAccessory {
     // Define the item states and their corresponding services
     this.ItemStates = {
       [this.device.states.armed]: {'service': 'PrimaryService', 'state': 'armed'},
+      [this.device.states.level]: {'service': 'PrimaryService', 'state': 'level'},
       [this.device.states.disabledMove]: {'service': 'PrimaryService', 'state': 'disabledMove'},
     };
 

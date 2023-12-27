@@ -18,10 +18,6 @@
             "tempUnits": "c",
             "lang": "en",
             "platform": "config"
-        },
-        {
-            "name": "PLUGIN_NAME",
-            "platform": "PLATFORM_NAME"
         }
     ]
 }

@@ -3,7 +3,7 @@
   "displayName": "Homebridge Loxone Proxy",
   "name": "homebridge-loxone-proxy",
   "version": "1.0.6",
-  "description": "Homebridge plugin which exposes a Loxone system to HomeKit.",
+  "description": "Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

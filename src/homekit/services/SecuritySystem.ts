@@ -3,6 +3,8 @@ import { CharacteristicValue } from 'homebridge';
 
 export class SecuritySystem extends BaseService {
   State = {
+    level: 0,
+    disabledMove: 1,
     SecuritySystemCurrentState: 3,
     SecuritySystemTargetState: 3,
   };
@@ -20,16 +22,30 @@ export class SecuritySystem extends BaseService {
       .onSet(this.handleSecuritySystemTargetStateSet.bind(this));
   }
 
-  updateService(message: { value: number }): void {
-    this.platform.log.debug(`[${this.device.name}] Callback state update for SecuritySystem: ${message.value}`);
-
-    this.State.SecuritySystemTargetState = message.value;
-    this.State.SecuritySystemCurrentState = message.value;
+  updateAlarmState(): void {
+    if (this.State.level > 0) {
+      this.State.SecuritySystemCurrentState = this.State.SecuritySystemTargetState = 4;
+    } else if (this.State.SecuritySystemCurrentState === 1 && this.State.disabledMove === 1) {
+      this.State.SecuritySystemCurrentState = this.State.SecuritySystemTargetState = 2;
+    }
 
     this.service!.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
       .updateValue(this.State.SecuritySystemTargetState);
     this.service!.getCharacteristic(this.platform.Characteristic.SecuritySystemCurrentState)
       .updateValue(this.State.SecuritySystemCurrentState);
+  }
+
+  updateService(message: { state: string; value: number }): void {
+    this.platform.log.debug(`[${this.device.name}] Callback state update for SecuritySystem: ${message.state}: ${message.value}`);
+
+    if (message.state === 'level') { // State: level
+      this.State.level = message.value;
+    } else if (message.state === 'disabledMove') { // State: disabledMove
+      this.State.disabledMove = message.value;
+    } else { // State: armed
+      this.State.SecuritySystemTargetState = this.State.SecuritySystemCurrentState = message.value;
+    }
+    this.updateAlarmState();
   }
 
   handleSecuritySystemCurrentStateGet(): number {
@@ -43,8 +59,7 @@ export class SecuritySystem extends BaseService {
   }
 
   handleSecuritySystemTargetStateSet(value: CharacteristicValue): void {
-    if (typeof value === 'number') {
-      // Handle the set operation based on the provided number value
+    if (typeof value === 'number') { // Handle the set operation based on the provided number value
       this.platform.log.debug('Triggered SET SecuritySystemTargetState:' + value);
     } else {
       this.platform.log.error('Invalid value type for SecuritySystemTargetState');

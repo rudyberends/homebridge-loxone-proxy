@@ -9,7 +9,7 @@
 Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.
 
 The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator) to setup a websocket connection to a Loxone miniserver.
-It retrieves the loxone StructureFile and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
+It retrieves the loxone [Structure-File](https://www.loxone.com/wp-content/uploads/datasheets/StructureFile.pdf) and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
 
 # Mapped Items
 The following list displays all supported itemtypes supported by this plugin.
@@ -42,7 +42,7 @@ For the plugin to recognize the items, the item needs to be vissible in the user
 # Configuration
 Configuration of the plugin can be done using the Homebridge UI without having to manually edit the Homebridge config.json file.
 
-### Required Settings
+## Required Settings
 At a minimum, the plugin requires these settings to connect to the miniserver.
 
 | Parameter | Note |
@@ -54,20 +54,23 @@ At a minimum, the plugin requires these settings to connect to the miniserver.
 
 If you create a dedicated user for the plugin, you can filter items by only assigning rights to items you want to expose to HomeBridge.
 
-### Filters
+## Filters
 Filters allow you to select what to expose to HomeKit.
 
-#### Moodswitches
+### Moodswitches
 When enabled, all LightControllerV2 moods are mapped to a homekit switch. All Switches from  the same LightController will be grouped together. In homeKit this works as a radio switch, so only one switch (mood) can be active at the same time. Mixing moods is not possible. 
 
-#### Exclusions
+### Exclusions
 To exclude Itemtypes from being mapped, they can be added to the Exclussions section in the config. Use a comma-seperated list for multiple ItemTypes.
 
 <img width="748" alt="filters" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/c61daa1b-83aa-467b-a258-8b648a6f575e">
 
 The itemtype name can be found in the "mapped items" table.
 
-### Manual mapping
+### Room Filter
+The roomfilter List can fuction as a filter for certain rooms. Use a comma-seperated list for multiple Rooms. Depending on the roomfilter Type, this serves as an inclusion, or exclusion list.
+
+## Manual mapping
 Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all Brightness sensors the convention "MH0'XX'" in Loxone Config 
 
 <img width="408" alt="mapping2" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/4fd61eaf-4080-41aa-bdc0-363b5ca0fcb1">
@@ -78,6 +81,5 @@ and then setting the alias "MH0" in the plugin will result in all InfoOnlyAnalog
 
 Items that require an alias are listed in the "mapped items" table.
 
-### Limitations
-
+# Limitations
 Apple does not allow more than 150 items per bridge. This plugin will not map more than 150 items, but if you have other plugins activated, you might still hit this limit. To prevent this you can run this plugin as a child bridge. Another way to solve it is to use a dedicated loxone user for the plugin and only expose the items that you want to use in HomeKit.

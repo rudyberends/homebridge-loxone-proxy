@@ -75,16 +75,31 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const itemCache: { [key: string]: any } = {}; // Cache object to store imported item files
 
-    const ExcludedItems = this.config.Exclusions?.split(',') ?? [];
+    const ExcludedItemTypes = this.config.Exclusions?.split(',') ?? [];
+    const RoomFilterList = this.config.roomfilter?.list?.split(',') ?? [];
+    const RoomFilterType = this.config.roomfilter?.type || 'exclusion';
+
+    let RoomInclusions: string[] = [];
+    let RoomExclusions: string[] = [];
+
+    if (RoomFilterType === 'exclusion') {
+      RoomExclusions = RoomFilterList;
+    } else if (RoomFilterType === 'inclusion') {
+      RoomInclusions = RoomFilterList;
+    }
 
     for (const item of items) {
       try {
         const itemType = item.type;
 
-        if (ExcludedItems.includes(itemType)) {
-          this.log.debug(`[mapLoxoneItem] Skipping Excluded ItemType: ${item.name} with type ${item.type}`);
-        } else {
+        if (ExcludedItemTypes.includes(itemType)) { // Exclude ItemTypes on ExclusionList
+          this.log.debug(`[mapLoxoneItem][ItemTypeExlusion] Skipping Excluded ItemType: ${item.name} with type ${item.type}`);
 
+        // Room Exluded?
+        } else if (RoomExclusions.includes(item.room) || (RoomFilterType === 'inclusion' && !RoomInclusions.includes(item.room))) {
+          this.log.debug(`[mapLoxoneItem][RoomExlusion] Skipping Excluded Room: ${item.name} in room ${item.room}`);
+
+        } else { // Map Item
           if (!itemCache[itemType]) {  // Check if the item file has already been imported
             const itemFile = await import(`./loxone/items/${itemType}`);
             itemCache[itemType] = itemFile;

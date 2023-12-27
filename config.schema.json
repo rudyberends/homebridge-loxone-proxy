@@ -1,154 +1,178 @@
 {
-    "pluginAlias": "LoxonePlatform",
-    "pluginType": "platform",
-    "singular": true,
-    "headerDisplay": "Homebridge Proxy which exposes a Loxone System to Homekit",
-    "footerDisplay": "For setup information, bug reports and feature requests please visit the [Plugin Homepage](https://github.com/rudyberends/homebridge-loxone-proxy).",
-    "schema": {
-      "type": "object",
-      "properties": {
-        "host": {
-            "title": "MiniServer IP Address",
+  "pluginAlias": "LoxonePlatform",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Homebridge Proxy which exposes a Loxone System to Homekit",
+  "footerDisplay": "For setup information, bug reports and feature requests please visit the [Plugin Homepage](https://github.com/rudyberends/homebridge-loxone-proxy).",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "host": {
+        "title": "MiniServer IP Address",
+        "type": "string",
+        "format": "ipv4",
+        "required": true
+      },
+      "port": {
+        "title": "MiniServer HTTP Port",
+        "type": "integer",
+        "default": "80",
+        "required": true
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "required": true
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "required": true
+      },
+      "options": {
+        "type": "object",
+        "title": "Options",
+        "properties": {
+          "MoodSwitches": {
             "type": "string",
-            "format": "ipv4",
-            "required": true
-        },
-        "port": {
-            "title": "MiniServer HTTP Port",
-            "type": "integer",
-            "default": "80",
-            "required": true
-        },
-        "username": {
-            "title": "Username",
-            "type": "string",
-            "required": true
-        },
-        "password": {
-            "title": "Password",
-            "type": "string",
-            "required": true
-        },
-        "options": {
-            "type": "object",
-            "title": "Options",
-            "properties": {
-                "MoodSwitches": {
-                    "type": "string",
-                    "default": "enabled",
-                    "enum": ["enabled","disabled"]
-                }
-            }
-        },
-        "Exclusions": {
-            "type": "string",
-            "title": "Excluded ItemTypes"
-        },
-        "switchAlias": {
-            "type": "object",
-            "title": "Switch aliases",
-            "properties": {
-                "Lock": {
-                    "title" : "Lock (Will map all SwitchItems starting with this alias to a HomeKit DoorLock)",
-                    "type": "string"
-                }
-            }
-        },
-        "InfoOnlyDigitalAlias": {
-            "type": "object",
-            "title": "InfoOnlyDigital aliases",
-            "properties": {
-                "Motion": {
-                    "title" : "Motion (Will map all items starting with this alias to a HomeKit MotionSensor)",
-                    "type": "string"
-                }
-            }
-        },
-        "InfoOnlyAnalogAlias": {
-            "type": "object",
-            "title": "InfoOnlyAnalog aliases",
-            "properties": {
-                "Brightness": {
-                    "title" : "Brightness (Will map all items starting with this alias to a HomeKit LightSensor)",
-                    "type": "string"
-                },
-                "Humidity": {
-                    "title" : "Humidity (Will map all items starting with this alias to a HomeKit HumiditySensor)",
-                    "type": "string"
-                },
-                "Temperature": {
-                    "title" : "Temperature (Will map all items starting with this alias to a HomeKit TemperatureSensor)",
-                    "type": "string"
-                }
-            }
+            "default": "enabled",
+            "enum": [
+              "enabled",
+              "disabled"
+            ]
+          }
         }
+      },
+      "Exclusions": {
+        "type": "string",
+        "title": "Excluded ItemTypes"
+      },
+      "roomfilter": {
+        "type": "object",
+        "title": "Room Filter",
+        "properties": {
+          "list": {
+            "type": "string",
+            "title": "Room Filter List"
+          },
+          "type": {
+            "type": "string",
+            "default": "exclusion",
+            "title": "Room Filter Type",
+            "enum": [
+              "inclusion",
+              "exclusion"
+            ]
+          }
+        }
+      },
+      "switchAlias": {
+        "type": "object",
+        "title": "Switch aliases",
+        "properties": {
+          "Lock": {
+            "title": "Lock (Will map all SwitchItems starting with this alias to a HomeKit DoorLock)",
+            "type": "string"
+          }
+        }
+      },
+      "InfoOnlyDigitalAlias": {
+        "type": "object",
+        "title": "InfoOnlyDigital aliases",
+        "properties": {
+          "Motion": {
+            "title": "Motion (Will map all items starting with this alias to a HomeKit MotionSensor)",
+            "type": "string"
+          }
+        }
+      },
+      "InfoOnlyAnalogAlias": {
+        "type": "object",
+        "title": "InfoOnlyAnalog aliases",
+        "properties": {
+          "Brightness": {
+            "title": "Brightness (Will map all items starting with this alias to a HomeKit LightSensor)",
+            "type": "string"
+          },
+          "Humidity": {
+            "title": "Humidity (Will map all items starting with this alias to a HomeKit HumiditySensor)",
+            "type": "string"
+          },
+          "Temperature": {
+            "title": "Temperature (Will map all items starting with this alias to a HomeKit TemperatureSensor)",
+            "type": "string"
+          }
+        }
+      }
     }
-    },
-    "layout": [
+  },
+  "layout": [
+    {
+      "type": "fieldset",
+      "title": "Required Settings",
+      "items": [
         {
-          "type": "fieldset",
-          "title": "Required Settings",
+          "type": "flex",
+          "flex-flow": "row wrap",
           "items": [
+            "host",
+            "port"
+          ]
+        },
+        {
+          "type": "flex",
+          "flex-flow": "row wrap",
+          "items": [
+            "username",
             {
-              "type": "flex",
-              "flex-flow": "row wrap",
-              "items": [
-                "host",
-                "port"
-              ]
-            },
-            {
-              "type": "flex",
-              "flex-flow": "row wrap",
-              "items": [
-                "username",
-                {
-                  "key": "password",
-                  "type": "password"
-                }
-              ]
+              "key": "password",
+              "type": "password"
             }
-          ]
-        },
-        {
-          "type": "fieldset",
-          "title": "Filters",
-          "description": "Select what to expose to HomeKit.",
-          "expandable": true,
-          "expanded": false,
-          "items": [
-            "options.MoodSwitches",
-            "Exclusions"  
-          ]
-        },
-        {
-          "type": "fieldset",
-          "expandable": true,
-          "title": "SwitchItem Mappings",
-          "description": "Map Switch items using an Alias",
-          "items": [
-              "switchAlias.Lock"
-          ]
-        },
-        {
-          "type": "fieldset",
-          "expandable": true,
-          "title": "InfoOnlyAnalog Mappings",
-          "description": "Map InfoOnlyAnalog items using an Alias",
-          "items": [
-              "InfoOnlyAnalogAlias.Brightness",
-              "InfoOnlyAnalogAlias.Humidity",
-              "InfoOnlyAnalogAlias.Temperature"
-          ]
-        },
-        {
-          "type": "fieldset",
-          "expandable": true,
-          "title": "InfoOnlyDigital Mappings",
-          "description": "Map InfoOnlyDigital items using an Alias",
-          "items": [
-              "InfoOnlyDigitalAlias.Motion"
           ]
         }
       ]
-  }
+    },
+    {
+      "type": "fieldset",
+      "title": "Filters",
+      "description": "Select what to expose to HomeKit.",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "options.MoodSwitches",
+        "Exclusions",
+        "roomfilter.type",
+        "roomfilter.list"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "expandable": true,
+      "title": "SwitchItem Mappings",
+      "description": "Map Switch items using an Alias",
+      "items": [
+        "switchAlias.Lock"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "expandable": true,
+      "title": "InfoOnlyAnalog Mappings",
+      "description": "Map InfoOnlyAnalog items using an Alias",
+      "items": [
+        "InfoOnlyAnalogAlias.Brightness",
+        "InfoOnlyAnalogAlias.Humidity",
+        "InfoOnlyAnalogAlias.Temperature"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "expandable": true,
+      "title": "InfoOnlyDigital Mappings",
+      "description": "Map InfoOnlyDigital items using an Alias",
+      "items": [
+        "InfoOnlyDigitalAlias.Motion"
+      ]
+    }
+  ]
+}

@@ -119,7 +119,7 @@ export class ColorLightBulb extends LightBulb {
       command = `temp(${State.Brightness},${homekitToLoxoneColorTemperature(State.ColorTemperature)})`;
     }
 
-    platform.log.info(`[${name}] HomeKit - send message: ${command}`);
+    platform.log.debug(`[${name}] HomeKit - send message: ${command}`);
     LoxoneHandler.sendCommand(uuidAction, command);
 
     State.On = State.Brightness > 0;

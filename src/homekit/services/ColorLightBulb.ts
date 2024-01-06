@@ -8,10 +8,6 @@ import { LightBulb } from './LightBulb';
 export class ColorLightBulb extends LightBulb {
   private lastSetMode = '';
   //private lastUpdate = 0;
-  private minCtLoxone = 2700;
-  private maxCtLoxone = 6500;
-  private minCtHomekit = 153;
-  private maxCtHomekit = 500;
 
   State = {
     On: false,
@@ -202,15 +198,15 @@ export class ColorLightBulb extends LightBulb {
 }
 
 // transform Homekit color temperature (expressed 140-500 to Loxone values expressed in Kelvins 2700-6500k)
-function homekitToLoxoneColorTemperature(this: any, ct: number) {
-  const percent = 1 - ((ct - this.minCtHomekit) / (this.maxCtHomekit - this.minCtHomekit));
-  return Math.round(this.minCtLoxone + ((this.maxCtLoxone - this.minCtLoxone) * percent));
+function homekitToLoxoneColorTemperature(ct: number) {
+  const percent = 1 - ((ct - 153) / (500 - 153));
+  return Math.round(2700 + ((6500 - 2700) * percent));
 }
 
 // transform Loxone color temperature (expressed in Kelvins 2700-6500k to Homekit values 140-500)
-function loxoneToHomekitColorTemperature(this: any, ct: number) {
-  const percent = 1 - ((ct - this.minCtLoxone) / (this.maxCtLoxone - this.minCtLoxone));
-  return Math.round(this.minCtHomekit + ((this.maxCtHomekit - this.minCtHomekit) * percent));
+function loxoneToHomekitColorTemperature(ct: number) {
+  const percent = 1 - ((ct - 2700) / (6500 - 2700));
+  return Math.round(153 + ((500 - 153) * percent));
 }
 
 /**

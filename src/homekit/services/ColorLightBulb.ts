@@ -7,7 +7,11 @@ import { LightBulb } from './LightBulb';
  */
 export class ColorLightBulb extends LightBulb {
   private lastSetMode = '';
-  private lastUpdate = 0;
+  //private lastUpdate = 0;
+  private minCtLoxone = 2700;
+  private maxCtLoxone = 6500;
+  private minCtHomekit = 153;
+  private maxCtHomekit = 500;
 
   State = {
     On: false,
@@ -42,23 +46,67 @@ export class ColorLightBulb extends LightBulb {
   }
 
   /**
-   * Updates the service with the new color value.
-   * @param message - The message containing the new color value.
+   * Updates the service with the new value.
+   * @param message - The message containing the new value.
    */
   updateService(message: { value: any }): void {
-    //super.updateService(message);
-    console.log(`todo: color${message.value}`);
-    //this.State.Brightness = message.value as number;
+    this.platform.log.debug(`[${this.device.name}] Callback state update for ColorLightBulb: ${message.value}`);
 
-    // Also make sure this change is directly communicated to HomeKit
-    //this.service!.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.State.Brightness);
+    const hsvRegex = /^\W*hsv?\(([^)]*)\)\W*$/i;
+    const tempRegex = /^\W*temp?\(([^)]*)\)\W*$/i;
+
+    const parseParams = (params: string[]) => {
+      const regex = /^\s*(\d*)(\.\d+)?\s*$/;
+      const [mH, mS, mV] = params.map(param => param.match(regex));
+
+      if (mH && mS && mV) {
+        this.State.Hue = parseFloat((mH[1] || '0') + (mH[2] || ''));
+        this.State.Saturation = parseFloat((mS[1] || '0') + (mS[2] || ''));
+        this.State.Brightness = parseFloat((mV[1] || '0') + (mV[2] || ''));
+        this.State.On = this.State.Brightness > 0;
+        this.lastSetMode = 'color';
+      }
+    };
+
+    const processHSV = (value: string) => {
+      const match = value.match(hsvRegex);
+      if (match) {
+        const params = match[1].split(',');
+        parseParams(params);
+      }
+    };
+
+    const processTemp = (value: string) => {
+      const match = value.match(tempRegex);
+      if (match) {
+        const params = match[1].split(',');
+        const rgb = colorTemperatureToRGB(parseInt(params[1]));
+        const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+
+        this.State.ColorTemperature = loxoneToHomekitColorTemperature(parseInt(params[1]));
+        this.State.Hue = 360 * hsv.h;
+        this.State.Saturation = hsv.s * 100;
+        this.State.Brightness = parseInt(params[0]);
+        this.State.On = this.State.Brightness > 0;
+        this.lastSetMode = 'colortemperature';
+      }
+    };
+
+    processHSV(message.value);
+    processTemp(message.value);
+
+    this.service!.getCharacteristic(this.platform.Characteristic.Hue).updateValue(this.State.Hue);
+    this.service!.getCharacteristic(this.platform.Characteristic.Saturation).updateValue(this.State.Saturation);
+    this.service!.getCharacteristic(this.platform.Characteristic.ColorTemperature).updateValue(this.State.ColorTemperature);
+    this.service!.getCharacteristic(this.platform.Characteristic.On).updateValue(this.State.On);
+    this.service!.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.State.Brightness);
   }
 
   /**
    * Sets the color state of the light bulb.
    */
   async setColorState(): Promise<void> {
-    this.lastUpdate = Date.now();
+    //this.lastUpdate = Date.now();
 
     const { device, platform, State } = this;
     const { name, uuidAction } = device;
@@ -154,16 +202,90 @@ export class ColorLightBulb extends LightBulb {
 }
 
 // transform Homekit color temperature (expressed 140-500 to Loxone values expressed in Kelvins 2700-6500k)
-function homekitToLoxoneColorTemperature(ct: number) {
+function homekitToLoxoneColorTemperature(this: any, ct: number) {
+  const percent = 1 - ((ct - this.minCtHomekit) / (this.maxCtHomekit - this.minCtHomekit));
+  return Math.round(this.minCtLoxone + ((this.maxCtLoxone - this.minCtLoxone) * percent));
+}
 
-  const minCtLoxone = 2700;
-  const maxCtLoxone = 6500;
+// transform Loxone color temperature (expressed in Kelvins 2700-6500k to Homekit values 140-500)
+function loxoneToHomekitColorTemperature(this: any, ct: number) {
+  const percent = 1 - ((ct - this.minCtLoxone) / (this.maxCtLoxone - this.minCtLoxone));
+  return Math.round(this.minCtHomekit + ((this.maxCtHomekit - this.minCtHomekit) * percent));
+}
 
-  const minCtHomekit = 153;
-  const maxCtHomekit = 500;
+/**
+ * Converts color temperature in Kelvin to an RGB color.
+ * @param kelvin - The color temperature in Kelvin.
+ * @returns An object representing the RGB color.
+ */
+function colorTemperatureToRGB(kelvin: number) {
 
-  const percent = 1 - ((ct - minCtHomekit) / (maxCtHomekit - minCtHomekit));
-  const newValue = Math.round(minCtLoxone + ((maxCtLoxone - minCtLoxone) * percent));
+  const temperature: number = kelvin / 100;
+  let red: number, green: number, blue: number;
 
-  return newValue;
+  if (temperature <= 66) {
+    red = 255;
+    green = 99.4708025861 * Math.log(temperature) - 161.1195681661;
+    blue = temperature <= 19 ? 0 : 138.5177312231 * Math.log(temperature - 10) - 305.0447927307;
+  } else {
+    red = 329.698727446 * Math.pow(temperature - 60, -0.1332047592);
+    green = 288.1221695283 * Math.pow(temperature - 60, -0.0755148492);
+    blue = 255;
+  }
+
+  return {
+    r: clamp(red, 0, 255),
+    g: clamp(green, 0, 255),
+    b: clamp(blue, 0, 255),
+  };
+}
+
+/**
+ * Clamps a value between a minimum and maximum value.
+ * @param value - The value to be clamped.
+ * @param min - The minimum allowed value.
+ * @param max - The maximum allowed value.
+ * @returns The clamped value.
+ */
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Converts RGB values to HSV (Hue, Saturation, Value) representation.
+ * @param r - The red component of the RGB color (0 to 255).
+ * @param g - The green component of the RGB color (0 to 255).
+ * @param b - The blue component of the RGB color (0 to 255).
+ * @returns An object containing the HSV components.
+ */
+function rgbToHsv(r: number, g: number, b: number) {
+  r /= 255, g /= 255, b /= 255; // Normalize RGB values to the range of 0 to 1
+
+  // Find the maximum and minimum values among R, G, B
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+
+  let h = 0; // Initialize hue
+
+  // Calculate hue component
+  if (d !== 0) {
+    switch (max) {
+      case r:
+        h = ((g - b) / d) + (g < b ? 6 : 0);
+        break;
+      case g:
+        h = ((b - r) / d) + 2;
+        break;
+      case b:
+        h = ((r - g) / d) + 4;
+        break;
+    }
+    h /= 6; // Normalize hue to the range of 0 to 1
+  }
+
+  const s = max === 0 ? 0 : d / max; // Calculate saturation
+  const v = max; // Value is the maximum of R, G, B
+
+  return { h, s, v }; // Return an object containing the calculated HSV components
 }

@@ -45,6 +45,7 @@ export class ColorLightBulb extends LightBulb {
    * Updates the service with the new value.
    * @param message - The message containing the new value.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateService(message: { value: any }): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for ColorLightBulb: ${message.value}`);
 

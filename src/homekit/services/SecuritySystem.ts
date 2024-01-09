@@ -75,6 +75,12 @@ export class SecuritySystem extends BaseService {
       this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
       this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
 
+      this.State.SecuritySystemCurrentState = value;
+
+      this.service!.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
+      .updateValue(this.State.SecuritySystemTargetState);
+
+
     } else {
       this.platform.log.error('Invalid value type for SecuritySystemTargetState');
     }

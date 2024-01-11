@@ -4,7 +4,7 @@ import { LightBulb } from '../../homekit/services/LightBulb';
 /**
  * Loxone Dimmer Item
 */
-export class Dimmer extends LoxoneAccessory {
+export class EIBDimmer extends LoxoneAccessory {
 
   configureServices(): void {
 

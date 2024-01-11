@@ -2,7 +2,7 @@
   "private": false,
   "displayName": "Homebridge Loxone Cedric",
   "name": "homebridge-loxone-cedricb",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.",
   "license": "Apache-2.0",
   "repository": {

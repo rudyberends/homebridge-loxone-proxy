@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { MoodSwitch } from '../../homekit/services/MoodSwitch';
+import { SwitchService } from '../../homekit/services/Switch';
 import { ColorPickerV2 } from './ColorPickerV2';
 import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
@@ -36,9 +36,7 @@ export class LightControllerV2 extends LoxoneAccessory {
           details: {},
           subControls: {},
         };
-        //const stateUUID = this.device.states.activeMoods;
-        //this.ItemStates[stateUUID] = { service: moodSwitchItem.name, state: 'activeMoods' };
-        this.Service[mood.name] = new MoodSwitch(this.platform, this.Accessory!, moodSwitchItem);
+        this.Service[mood.name] = new SwitchService(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this));
       }
     }
   }
@@ -73,13 +71,22 @@ export class LightControllerV2 extends LoxoneAccessory {
   }
 
   protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
-    const currentID: string = message.value as unknown as string;
-    message.value = currentID.replace(/[[\]']+/g, '');
-    message.value = parseInt(message.value);
+    const currentIDpreg = message.value as string;
+    const currentID = parseInt(currentIDpreg.replace(/[[\]']+/g, ''));
 
     for (const serviceName in this.Service) {
+      const service: any = this.Service[serviceName];
+      message.value = currentID === parseInt(service.device.cat) ? 1 : 0;
+
       const updateService = new Function('message', `return this.Service["${serviceName}"].updateService(message);`);
       updateService.call(this, message);
     }
+  }
+
+  protected handleLoxoneCommand(value : string): void {
+    this.platform.log.debug(`[${this.device.name}] MoodSwitch update from Homekit ->`, value);
+    const command = `changeTo/${value}`;
+    this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
+    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }
 }

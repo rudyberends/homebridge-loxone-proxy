@@ -61,6 +61,26 @@ export class SecuritySystem extends BaseService {
   handleSecuritySystemTargetStateSet(value: CharacteristicValue): void {
     if (typeof value === 'number') { // Handle the set operation based on the provided number value
       this.platform.log.debug('Triggered SET SecuritySystemTargetState:' + value);
+
+      let command = '';
+
+      if (value === 0 || value === 3) { //Off
+        command = 'off';
+      } else if (value === 1){ // Night
+        command = 'delayedon/1';
+      } else if (value === 2) { // Away
+        command = 'delayedon/0';
+      }
+
+      this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
+      this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+
+      this.State.SecuritySystemCurrentState = value;
+
+      this.service!.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
+      .updateValue(this.State.SecuritySystemTargetState);
+
+
     } else {
       this.platform.log.error('Invalid value type for SecuritySystemTargetState');
     }

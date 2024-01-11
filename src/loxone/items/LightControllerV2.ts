@@ -1,7 +1,7 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { MoodSwitch } from '../../homekit/services/MoodSwitch';
 import { ColorPickerV2 } from './ColorPickerV2';
-import { Dimmer } from './Dimmer';
+import { EIBDimmer } from './EIBDimmer';
 import { Switch } from './Switch';
 
 /**
@@ -56,8 +56,8 @@ export class LightControllerV2 extends LoxoneAccessory {
         case 'ColorPickerV2':
           new ColorPickerV2(this.platform, lightItem);
           break;
-        case 'Dimmer':
-          new Dimmer(this.platform, lightItem);
+        case 'EIBDimmer':
+          new EIBDimmer(this.platform, lightItem);
           break;
         case 'Switch':
           new Switch(this.platform, lightItem);

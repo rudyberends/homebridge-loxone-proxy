@@ -53,7 +53,7 @@ export class LoxoneAccessory {
 
     if (!accessory) {
       accessory = new this.platform.api.platformAccessory(this.device.name, uuid);
-      this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
+      this.platform.api.registerPlatformAccessories('homebridge-loxone-cedricb', 'LoxonePlatform', [accessory]);
       this.platform.log.debug(`[${this.device.type}Item] Adding new accessory:`, this.device.name);
     } else {
       this.platform.log.debug(`[${this.device.type}Item] Restoring accessory from cache:`, accessory.displayName);

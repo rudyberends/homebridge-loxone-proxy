@@ -3,7 +3,7 @@ import { WindowCovering } from '../../homekit/services/WindowCovering';
 
 /**
  * Loxone UpDownDigital Item
-*/
+ */
 export class UpDownDigital extends LoxoneAccessory {
 
   configureServices(): void {

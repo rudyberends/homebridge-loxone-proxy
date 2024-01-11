@@ -51,6 +51,7 @@ export class SwitchService extends BaseService {
 
     const command = this.State.On ? 'On' : 'Off';
     this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
+    //HERE YOU SEE THING WITH THE UUID
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }
 

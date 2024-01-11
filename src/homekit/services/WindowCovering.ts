@@ -1,57 +1,68 @@
-import { BaseService } from './BaseService';
+import { BaseService } from "./BaseService";
+import { CharacteristicValue } from "homebridge";
 
 export class WindowCovering extends BaseService {
   State = {
-    CurrentPosition: 0, // Represent the actual position
-    TargetPosition: 0,  // Represent the target position
-    PositionState: 2,   // 0 - Going to the minimum value, 1 - Going to the maximum value, 2 - Stopped
+    CurrentPosition: 0,
+    TargetPosition: 0,
+    PositionState: 2, // Stopped
   };
 
-  setupService() {
+  setupService(): void {
     this.service =
       this.accessory.getService(this.platform.Service.WindowCovering) ||
       this.accessory.addService(this.platform.Service.WindowCovering);
 
-    // create handlers for required characteristics
-    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition)
-      .onGet(this.handleCurrentPositionGet.bind(this));
+    this.service
+      .getCharacteristic(this.platform.Characteristic.CurrentPosition)
+      .onGet(() => this.State.CurrentPosition);
 
-    this.service.getCharacteristic(this.platform.Characteristic.TargetPosition)
-      .onGet(this.handleTargetPositionGet.bind(this))
-      .onSet(this.handleTargetPositionSet.bind(this));
+    this.service
+      .getCharacteristic(this.platform.Characteristic.TargetPosition)
+      .onGet(() => this.State.TargetPosition)
+      .onSet((value) => this.handleTargetPositionSet(value));
 
-    this.service.getCharacteristic(this.platform.Characteristic.PositionState)
-      .onGet(this.handlePositionStateGet.bind(this));
+    this.service
+      .getCharacteristic(this.platform.Characteristic.PositionState)
+      .onGet(() => this.State.PositionState);
   }
 
-  updateService = (message: { state: string; value: number }) => {
-    this.platform.log.debug(`[${this.device.name}] ${message.state} Callback update for UpDownDigital: ${message.value}`);
-
-    switch (message.state) {
-      case 'position':
-        // Update the current and target position based on the message value
-        // You'll need to map the message value to the corresponding position value in HomeKit
-        break;
+  async handleTargetPositionSet(value: CharacteristicValue): Promise<void> {
+    const targetPosition = Number(value);
+    if (isNaN(targetPosition)) {
+      this.platform.log.error(
+        `[${this.device.name}] Invalid target position: ${value}`
+      );
+      return;
     }
-  };
 
-  handleCurrentPositionGet() {
-    this.platform.log.debug(`[${this.device.name}] Triggered GET CurrentPosition`);
-    return this.State.CurrentPosition;
-  }
+    this.platform.log.debug(
+      `[${this.device.name}] Setting target position to ${targetPosition}`
+    );
 
-  handleTargetPositionGet() {
-    this.platform.log.debug(`[${this.device.name}] Triggered GET TargetPosition`);
-    return this.State.TargetPosition;
-  }
+    const command = targetPosition > this.State.CurrentPosition ? "up" : "down";
+    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
 
-  handleTargetPositionSet(value) {
-    this.platform.log.debug(`[${this.device.name}] Triggered SET TargetPosition:` + value);
-    // Map the value to corresponding UpDownDigital command and send it
-  }
+    this.State.CurrentPosition = targetPosition;
+    if (this.service) {
+      this.service
+        .getCharacteristic(this.platform.Characteristic.CurrentPosition)
+        .updateValue(this.State.CurrentPosition);
 
-  handlePositionStateGet() {
-    this.platform.log.debug(`[${this.device.name}] Triggered GET PositionState`);
-    return this.State.PositionState;
+      this.State.PositionState =
+        targetPosition > this.State.CurrentPosition ? 1 : 0; // Moving up or down
+      setTimeout(() => {
+        this.State.PositionState = 2; // Stopped
+        if (this.service) {
+          this.service
+            .getCharacteristic(this.platform.Characteristic.PositionState)
+            .updateValue(this.State.PositionState);
+        }
+      }, 1000); // Adjust delay as needed
+    } else {
+      this.platform.log.error(`[${this.device.name}] Service is undefined`);
+    }
+
+    this.platform.log.debug(`[${this.device.name}] Command sent: ${command}`);
   }
 }

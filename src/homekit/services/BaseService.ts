@@ -16,12 +16,16 @@ export class BaseService {
    * @param platform - The LoxonePlatform instance.
    * @param accessory - The PlatformAccessory instance.
    */
+
   constructor(
     readonly platform: LoxonePlatform,
     readonly accessory: PlatformAccessory,
     readonly secondaryService?: Control, // for aditional services on same Accesory
+    readonly handleLoxoneCommand?: (value : string) => void,
+
   ) {
 
+ 
     this.device = (this.secondaryService)
       ? this.secondaryService
       : this.accessory.context.device;

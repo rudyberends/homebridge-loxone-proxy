@@ -49,9 +49,13 @@ export class SwitchService extends BaseService {
     this.State.On = value as boolean;
     this.platform.log.debug(`[${this.device.name}] Characteristic.On update from Homekit ->`, value);
 
-    const command = this.State.On ? 'On' : 'Off';
-    this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    if (this.handleLoxoneCommand && this.State.On) { // Custom Handler for updating the LoxoneItem
+      this.handleLoxoneCommand(this.secondaryService?.cat as string);
+    } else { // Default handling for Switch Service
+      const command = this.State.On ? 'On' : 'Off';
+      this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
+      this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    }
   }
 
   /**

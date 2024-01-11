@@ -19,7 +19,7 @@ The following list displays all supported itemtypes supported by this plugin.
 | `Alarm` | SecuritySystem | Auto
 |`Brightness` | LightSensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
 | `ColorPickerV2` | Lightbulb | Auto | Individual ColorPickers, or items parsed from LightControllerV2.
-| `Dimmer` | Lightbulb | Auto | Individual Dimmers, or items parsed from LightControllerV2.
+| `Dimmer, EIBDimmer` | Lightbulb | Auto | Individual Dimmers, or items parsed from LightControllerV2.
 |`Gate` | GarageDoorOpener | Auto
 |`Humidity` | HumiditySensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
 |`Intercom` | Doorbell, Camera | Auto
@@ -30,6 +30,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping.
 |`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`PresenceDetector` | OccupancySensor | Auto
+|`Radio` | Switch (Group) | Auto | All Radio outputs are mapped to a Switch Group as a seperate switch.
 |`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto
 |`Temperature` | TemperatureSensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
 |`Ventilation` | Fanv2 | Auto

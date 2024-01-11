@@ -75,6 +75,11 @@ export class LoxoneAccessory {
     // Implement the configuration of services for the accessory
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected handleLoxoneCommand(value : string): void {
+    this.platform.log.info(`[${this.device.name}][handleLoxoneCommand] Function Not Implemented`);
+  }
+
   private setupListeners(): void {
     this.platform.log.debug(`[${this.device.name}] Register Listeners for ${this.device.type}Item`);
     for (const state in this.ItemStates) {
@@ -87,21 +92,12 @@ export class LoxoneAccessory {
       const itemState = this.ItemStates[message.uuid];
       message.service = itemState.service;
       message.state = itemState.state;
-
-      if (message.state === 'activeMoods') {
-
-        const currentID: string = message.value as unknown as string;
-        message.value = currentID.replace(/[[\]']+/g, '');
-        message.value = parseInt(message.value);
-
-        for (const serviceName in this.Service) {
-          const updateService = new Function('message', `return this.Service["${serviceName}"].updateService(message);`);
-          updateService.call(this, message);
-        }
-      } else {
-        const updateService = new Function('message', `return this.Service.${message.service}.updateService(message);`);
-        updateService.call(this, message);
-      }
+      this.callBackHandler(message);
     }
   };
+
+  protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
+    const updateService = new Function('message', `return this.Service.${message.service}.updateService(message);`);
+    updateService.call(this, message);
+  }
 }

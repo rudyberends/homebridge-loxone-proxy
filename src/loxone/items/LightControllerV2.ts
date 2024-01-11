@@ -62,6 +62,7 @@ export class LightControllerV2 extends LoxoneAccessory {
           new ColorPickerV2(this.platform, lightItem);
           break;
         case 'Dimmer':
+        case 'EIBDimmer':
           new Dimmer(this.platform, lightItem);
           break;
         case 'Switch':

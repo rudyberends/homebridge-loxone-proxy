@@ -16,6 +16,11 @@ export class LightControllerV2 extends LoxoneAccessory {
   }
 
   configureServices(): void {
+
+    this.ItemStates = {
+      [this.device.states.activeMoods]: { 'service': 'PrimaryService', 'state': 'activeMoods' },
+    };
+
     this.registerMoodSwitches();
   }
 
@@ -31,8 +36,8 @@ export class LightControllerV2 extends LoxoneAccessory {
           details: {},
           subControls: {},
         };
-        const stateUUID = this.device.states.activeMoods;
-        this.ItemStates[stateUUID] = { service: moodSwitchItem.name, state: 'activeMoods' };
+        //const stateUUID = this.device.states.activeMoods;
+        //this.ItemStates[stateUUID] = { service: moodSwitchItem.name, state: 'activeMoods' };
         this.Service[mood.name] = new MoodSwitch(this.platform, this.Accessory!, moodSwitchItem);
       }
     }
@@ -63,6 +68,17 @@ export class LightControllerV2 extends LoxoneAccessory {
           new Switch(this.platform, lightItem);
           break;
       }
+    }
+  }
+
+  protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
+    const currentID: string = message.value as unknown as string;
+    message.value = currentID.replace(/[[\]']+/g, '');
+    message.value = parseInt(message.value);
+
+    for (const serviceName in this.Service) {
+      const updateService = new Function('message', `return this.Service["${serviceName}"].updateService(message);`);
+      updateService.call(this, message);
     }
   }
 }

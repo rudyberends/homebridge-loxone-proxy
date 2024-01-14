@@ -150,12 +150,15 @@ export interface Control {
 }
 
 export interface ControlDetails {
+    allOff?: string;
+    outputs?: any;
     animation?: string;
     deviceType?: number;
     deviceUuid?: string;
     jLockable?: boolean;
     windows?: WindowDetails[];
 }
+
 
 export interface WindowDetails {
     name: string;

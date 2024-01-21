@@ -19,6 +19,7 @@ export class LightControllerV2 extends LoxoneAccessory {
   isSupported(): boolean {
     this.registerChildItems();
 
+    this.device.name = `${this.device.room} Moods`;
     return (this.platform.config.options.MoodSwitches === 'enabled') ? true : false;
   }
 

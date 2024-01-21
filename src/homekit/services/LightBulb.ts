@@ -1,11 +1,11 @@
 import { CharacteristicValue } from 'homebridge';
-import { SwitchService } from './Switch';
+import { Switch } from './Switch';
 
 /**
  * Switch
  * Represents a Switch service for Homebridge.
  */
-export class LightBulb extends SwitchService {
+export class LightBulb extends Switch {
   State = {
     On: false,
     Brightness: 0,

@@ -1,7 +1,7 @@
 import { CharacteristicValue } from 'homebridge';
 import { BaseService } from './BaseService';
 
-export class SwitchService extends BaseService {
+export class Switch extends BaseService {
   State = {
     On: false,
   };

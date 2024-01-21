@@ -1,6 +1,6 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { LockMechanism } from '../../homekit/services/LockMechanism';
-import { SwitchService } from '../../homekit/services/Switch';
+import { Switch as SwitchService } from '../../homekit/services/Switch'; // prevents conflict with local class
 
 /**
  * Loxone Switch Item

@@ -26,11 +26,13 @@ The following list displays all supported itemtypes supported by this plugin.
 |`IntercomV2` | Doorbell, MotionSensor, Camera | Auto | "Use in userinterface" has to be enabled on the MotionSensor for it to be detected.
 |`IRoomControllerV2` | Thermostat | Auto
 |`Jalousie` | Window Covering | Auto
+|`Leak` | LeakSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to a Switch Group as a seperate switch. Individual lights are mapped to a Lightbulb.
 |`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping.
 |`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`PresenceDetector` | OccupancySensor | Auto
 |`Radio` | Switch (Group) | Auto | All Radio outputs are mapped to a Switch Group as a seperate switch.
+|`Smoke` | SmokeSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto
 |`Temperature` | TemperatureSensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
 |`Ventilation` | Fanv2 | Auto

@@ -28,7 +28,9 @@ export class Switch extends BaseService {
   }
 
   getSwitchType(): any {
-    return this.platform.Service.Switch;
+    return this.device.cat === 'lights'
+      ? this.platform.Service.Lightbulb // This is a Lightbulb (no dimming)
+      : this.platform.Service.Switch;
   }
 
   /**

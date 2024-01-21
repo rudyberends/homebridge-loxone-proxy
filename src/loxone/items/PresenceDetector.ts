@@ -8,6 +8,8 @@ export class PresenceDetector extends LoxoneAccessory {
 
   configureServices(): void {
 
+    this.device.name = `${this.device.room} ${this.device.name}`;
+
     this.ItemStates = {
       [this.device.states.active]: {'service': 'PrimaryService', 'state': 'active'},
     };

@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { SwitchService } from '../../homekit/services/Switch';
+import { Outlet } from '../../homekit/services/Outlet';
 
 /**
  * Loxone Radio Item
@@ -23,12 +23,12 @@ export class Radio extends LoxoneAccessory {
     for (const radioSwitchKey in this.device.details.outputs) {
       const radioSwitch = this.device.details.outputs[radioSwitchKey];
       const radioItem = { ...this.device };
-      radioItem.name = `radio_${radioSwitch}`;
+      radioItem.name = radioSwitch;
       radioItem.type = 'Switch';
       radioItem.cat = radioSwitchKey; // Store ID in CAT field
       radioItem.details = {};
 
-      this.Service[radioItem.name] = new SwitchService(this.platform, this.Accessory!, radioItem, this.handleLoxoneCommand.bind(this));
+      this.Service[radioItem.name] = new Outlet(this.platform, this.Accessory!, radioItem, this.handleLoxoneCommand.bind(this));
     }
   }
 

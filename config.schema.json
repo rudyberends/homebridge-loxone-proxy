@@ -83,6 +83,14 @@
           "Motion": {
             "title": "Motion (Will map all items starting with this alias to a HomeKit MotionSensor)",
             "type": "string"
+          },
+          "Smoke": {
+            "title": "Smoke (Will map all items starting with this alias to a HomeKit SmokeSensor)",
+            "type": "string"
+          },
+          "Leak": {
+            "title": "Leak (Will map all items starting with this alias to a HomeKit LeakSensor)",
+            "type": "string"
           }
         }
       },
@@ -171,7 +179,9 @@
       "title": "InfoOnlyDigital Mappings",
       "description": "Map InfoOnlyDigital items using an Alias",
       "items": [
-        "InfoOnlyDigitalAlias.Motion"
+        "InfoOnlyDigitalAlias.Motion",
+        "InfoOnlyDigitalAlias.Smoke",
+        "InfoOnlyDigitalAlias.Leak"
       ]
     }
   ]

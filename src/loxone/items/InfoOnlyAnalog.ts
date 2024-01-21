@@ -11,15 +11,19 @@ export class InfoOnlyAnalog extends LoxoneAccessory {
 
   // Map InfoOnlyAnalog Items with Alias
   isSupported(): boolean {
-    if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Brightness)) {
+    const { config } = this.platform;
+    const aliases = config.InfoOnlyAnalogAlias;
+
+    if (this.device.name.includes(aliases?.Brightness)) {
       this.ServiceType = LightSensor;
-    } else if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Humidity)) {
+    } else if (this.device.name.includes(aliases?.Humidity)) {
       this.ServiceType = HumiditySensor;
-    } else if (this.device.name.includes(this.platform.config.InfoOnlyAnalogAlias?.Temperature)) {
+    } else if (this.device.name.includes(aliases?.Temperature)) {
       this.ServiceType = TemperatureSensor;
     } else {
       return false;
     }
+    this.device.name = `${this.device.room} (${this.device.name})`;
     return true;
   }
 

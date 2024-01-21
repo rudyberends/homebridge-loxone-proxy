@@ -1,7 +1,7 @@
 import { CharacteristicValue } from 'homebridge';
 import { BaseService } from './BaseService';
 
-export class SwitchService extends BaseService {
+export class Switch extends BaseService {
   State = {
     On: false,
   };
@@ -10,9 +10,7 @@ export class SwitchService extends BaseService {
    * Sets up the switch service.
    */
   setupService(): void {
-    const switchType = this.device.cat === 'lights'
-      ? this.platform.Service.Lightbulb
-      : this.platform.Service.Switch;
+    const switchType = this.getSwitchType();
 
     this.service = (this.secondaryService)
       ? this.accessory.getService(this.device.name) ||
@@ -27,6 +25,12 @@ export class SwitchService extends BaseService {
     this.service.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setOn.bind(this))
       .onGet(this.getOn.bind(this));
+  }
+
+  getSwitchType(): any {
+    return this.device.cat === 'lights'
+      ? this.platform.Service.Lightbulb // This is a Lightbulb (no dimming)
+      : this.platform.Service.Switch;
   }
 
   /**

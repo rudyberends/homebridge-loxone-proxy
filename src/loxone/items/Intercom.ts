@@ -1,6 +1,6 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { Doorbell } from '../../homekit/services/Doorbell';
-import { SwitchService } from '../../homekit/services/Switch';
+import { Switch } from '../../homekit/services/Switch';
 import { Camera } from '../../homekit/services/Camera';
 
 /**
@@ -61,7 +61,7 @@ export class Intercom extends LoxoneAccessory {
       for (const stateName in ChildItem.states) {
         const stateUUID = ChildItem.states[stateName];
         this.ItemStates[stateUUID] = { service: serviceName, state: stateName };
-        this.Service[serviceName] = new SwitchService(this.platform, this.Accessory!, ChildItem);
+        this.Service[serviceName] = new Switch(this.platform, this.Accessory!, ChildItem);
       }
     }
   }

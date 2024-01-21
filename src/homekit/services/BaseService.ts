@@ -25,7 +25,6 @@ export class BaseService {
 
   ) {
 
- 
     this.device = (this.secondaryService)
       ? this.secondaryService
       : this.accessory.context.device;

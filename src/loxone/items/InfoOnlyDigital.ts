@@ -1,5 +1,7 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
+import { LeakSensor } from '../../homekit/services/LeakSensor';
 import { MotionSensor } from '../../homekit/services/MotionSensor';
+import { SmokeSensor } from '../../homekit/services/SmokeSensor';
 
 /**
  * Loxone InfoOnlyDigital Item
@@ -9,11 +11,20 @@ export class InfoOnlyDigital extends LoxoneAccessory {
 
 
   isSupported(): boolean {
-    if (this.device.name.includes(this.platform.config.InfoOnlyDigitalAlias?.Motion)) {
+    const { config } = this.platform;
+    const aliases = config.InfoOnlyDigitalAlias;
+
+    if (this.device.name.includes(aliases?.Motion)) {
       this.ServiceType = MotionSensor;
-      return true;
+    } else if (this.device.name.includes(aliases?.Smoke)) {
+      this.ServiceType = SmokeSensor;
+    } else if (this.device.name.includes(aliases?.Leak)) {
+      this.ServiceType = LeakSensor;
+    } else {
+      return false;
     }
-    return false;
+    this.device.name = `${this.device.room} (${this.device.name})`;
+    return true;
   }
 
   configureServices(): void {

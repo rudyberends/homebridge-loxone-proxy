@@ -1,11 +1,11 @@
 import { CharacteristicValue } from 'homebridge';
-import { SwitchService } from './Switch';
+import { Switch } from './Switch';
 
 /**
  * Switch
  * Represents a Switch service for Homebridge.
  */
-export class LightBulb extends SwitchService {
+export class LightBulb extends Switch {
   State = {
     On: false,
     Brightness: 0,
@@ -19,6 +19,10 @@ export class LightBulb extends SwitchService {
 
     this.service!.getCharacteristic(this.platform.Characteristic.Brightness)
       .onSet(this.setBrightness.bind(this));
+  }
+
+  getSwitchType(): any {
+    return this.platform.Service.Lightbulb;
   }
 
   /**

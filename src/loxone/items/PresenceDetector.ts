@@ -6,10 +6,12 @@ import { OccupancySensor } from '../../homekit/services/OccupancySensor';
 */
 export class PresenceDetector extends LoxoneAccessory {
 
-  configureServices(): void {
-
+  protected isSupported(): boolean {
     this.device.name = `${this.device.room} ${this.device.name}`;
+    return true;
+  }
 
+  configureServices(): void {
     this.ItemStates = {
       [this.device.states.active]: {'service': 'PrimaryService', 'state': 'active'},
     };

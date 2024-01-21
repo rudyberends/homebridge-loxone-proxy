@@ -4,6 +4,13 @@ import { ColorPickerV2 } from './ColorPickerV2';
 import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
 
+const typeClassMap = {
+  'ColorPickerV2': ColorPickerV2,
+  'Dimmer': Dimmer,
+  'EIBDimmer': Dimmer,
+  'Switch': Switch,
+};
+
 /**
  * Loxone LightControllerV2 Item
 */
@@ -27,45 +34,33 @@ export class LightControllerV2 extends LoxoneAccessory {
   // Create Mood Switches if enabled in config
   registerMoodSwitches(): void {
     const moods = JSON.parse(this.platform.LoxoneHandler.getLastCachedValue(this.device.states.moodList));
-    for (const mood of moods) {
-      if (mood.id !== 778) {
-        const moodSwitchItem = {
-          ...this.device,
-          name: `${mood.name}`,
-          cat: mood.id,
-          details: {},
-          subControls: {},
-        };
-        this.Service[mood.name] = new Outlet(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this));
-      }
-    }
+    moods.filter(mood => mood.id !== 778).forEach(mood => {
+      const moodSwitchItem = {
+        ...this.device,
+        name: `${mood.name}`,
+        cat: mood.id,
+        details: {},
+        subControls: {},
+      };
+      this.Service[mood.name] = new Outlet(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this));
+    });
   }
 
   // Create individual LightItems
   registerChildItems(): void {
     for (const childUuid in this.device.subControls) {
       const lightItem = this.device.subControls[childUuid];
-      if (
-        lightItem.uuidAction.indexOf('/masterValue') !== -1 ||
-        lightItem.uuidAction.indexOf('/masterColor') !== -1
-      ) {
+
+      if (lightItem.uuidAction.includes('/masterValue') || lightItem.uuidAction.includes('/masterColor')) {
         continue;
       }
 
       lightItem.room = this.device.room;
       lightItem.cat = this.device.cat;
 
-      switch (lightItem.type) {
-        case 'ColorPickerV2':
-          new ColorPickerV2(this.platform, lightItem);
-          break;
-        case 'Dimmer':
-        case 'EIBDimmer':
-          new Dimmer(this.platform, lightItem);
-          break;
-        case 'Switch':
-          new Switch(this.platform, lightItem);
-          break;
+      const ControlClass = typeClassMap[lightItem.type];
+      if (ControlClass) {
+        new ControlClass(this.platform, lightItem);
       }
     }
   }

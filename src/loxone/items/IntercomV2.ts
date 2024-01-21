@@ -12,7 +12,7 @@ export class IntercomV2 extends Intercom {
 
       this.setupCamera(`http://${ip}/mjpg/video.mjpg`);
 
-      // Fetch Intercon MotionSensor;
+      // Fetch Intercom MotionSensor;
       this.configureMotionSensor();
     });
   }

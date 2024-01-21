@@ -21,6 +21,10 @@ export class LightBulb extends SwitchService {
       .onSet(this.setBrightness.bind(this));
   }
 
+  getSwitchType(): any {
+    return this.platform.Service.Lightbulb;
+  }
+
   /**
    * Updates the service with the new brightness value.
    * @param message - The message containing the new brightness value.

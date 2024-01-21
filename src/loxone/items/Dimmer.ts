@@ -12,7 +12,6 @@ export class Dimmer extends LoxoneAccessory {
       [this.device.states.position]: {'service': 'PrimaryService', 'state': 'position'},
     };
 
-    this.device.cat = 'lights';  // force Lightbulb for Dimmer Items
     this.Service.PrimaryService = new LightBulb(this.platform, this.Accessory!);
   }
 }

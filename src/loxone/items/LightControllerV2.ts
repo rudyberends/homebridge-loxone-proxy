@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { SwitchService } from '../../homekit/services/Switch';
+import { Outlet } from '../../homekit/services/Outlet';
 import { ColorPickerV2 } from './ColorPickerV2';
 import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
@@ -36,7 +36,7 @@ export class LightControllerV2 extends LoxoneAccessory {
           details: {},
           subControls: {},
         };
-        this.Service[mood.name] = new SwitchService(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this));
+        this.Service[mood.name] = new Outlet(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this));
       }
     }
   }

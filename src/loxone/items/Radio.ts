@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { SwitchService } from '../../homekit/services/Switch';
+import { Outlet } from '../../homekit/services/Outlet';
 
 /**
  * Loxone Radio Item
@@ -28,7 +28,7 @@ export class Radio extends LoxoneAccessory {
       radioItem.cat = radioSwitchKey; // Store ID in CAT field
       radioItem.details = {};
 
-      this.Service[radioItem.name] = new SwitchService(this.platform, this.Accessory!, radioItem, this.handleLoxoneCommand.bind(this));
+      this.Service[radioItem.name] = new Outlet(this.platform, this.Accessory!, radioItem, this.handleLoxoneCommand.bind(this));
     }
   }
 

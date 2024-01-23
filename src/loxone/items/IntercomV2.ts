@@ -7,13 +7,17 @@ import { Intercom } from './Intercom';
 export class IntercomV2 extends Intercom {
 
   async configureCamera(): Promise<void> {
+    let isConfigured = false;
+
     this.platform.LoxoneHandler.registerListenerForUUID(this.device.states.address, (ip: string) => {
+      if (isConfigured) {
+        return;
+      }
+
       this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
-
       this.setupCamera(`http://${ip}/mjpg/video.mjpg`);
-
-      // Fetch Intercom MotionSensor;
-      this.configureMotionSensor();
+      this.configureMotionSensor();  // Fetch Intercom MotionSensor;
+      isConfigured = true;
     });
   }
 

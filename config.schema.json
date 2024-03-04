@@ -73,6 +73,10 @@
           "Lock": {
             "title": "Lock (Will map all SwitchItems starting with this alias to a HomeKit DoorLock)",
             "type": "string"
+          },
+          "ReverseLockSwitch": {
+            "title": "Reverse the Switch order (Switch ON equals door Unlocked)",
+            "type": "boolean"
           }
         }
       },
@@ -137,6 +141,13 @@
               "type": "password"
             }
           ]
+        },
+        {
+          "type": "flex",
+          "flex-flow": "row wrap",
+          "items": [
+            "TLS"
+          ]
         }
       ]
     },
@@ -159,7 +170,8 @@
       "title": "SwitchItem Mappings",
       "description": "Map Switch items using an Alias",
       "items": [
-        "switchAlias.Lock"
+        "switchAlias.Lock",
+        "switchAlias.ReverseLockSwitch"
       ]
     },
     {

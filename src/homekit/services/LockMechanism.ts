@@ -1,3 +1,4 @@
+import { config } from 'process';
 import { BaseService } from './BaseService';
 
 /**
@@ -27,6 +28,12 @@ export class LockMechanism extends BaseService {
   }
 
   updateService = (message: { value: number }) => {
+
+    // If switch reversal is enabled, reverse the order of the switch
+    if (this.platform.config.switchAlias?.ReverseLockSwitch) {
+      message.value = message.value === 0 ? 1 : 0;
+    }
+
     this.platform.log.debug(`[${this.device.name}] Callback state update for Lock: ${message.value}`);
     this.State.LockTargetState = message.value;
 

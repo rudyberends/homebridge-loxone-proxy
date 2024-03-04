@@ -1,4 +1,3 @@
-import { config } from 'process';
 import { BaseService } from './BaseService';
 
 /**

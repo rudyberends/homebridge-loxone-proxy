@@ -48,7 +48,7 @@ export class LockMechanism extends BaseService {
       this.service!
         .getCharacteristic(this.platform.Characteristic.LockCurrentState)
         .updateValue(this.State.LockCurrentState);
-    }, 5000);
+    }, 6000);
   };
 
   /**
@@ -72,7 +72,7 @@ export class LockMechanism extends BaseService {
    */
   handleLockTargetStateSet(value) {
     this.platform.log.debug('Triggered SET LockTargetState:' + value);
-    const command = this.State.LockTargetState ? 'Off' : 'On';
+    const command = this.State.LockTargetState === 1 ? 'Off' : 'On';
     this.platform.log.debug(`[${this.device.name}] - send message: ${command}`);
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }

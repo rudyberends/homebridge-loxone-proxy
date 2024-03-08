@@ -78,7 +78,7 @@ export class LockMechanism extends BaseService {
     }
 
     this.platform.log.debug('Triggered SET LockTargetState:' + value);
-    const command = this.State.LockTargetState ? 'Off' : 'On';
+    const command = this.State.LockTargetState === 0 ? 'Off' : 'On';
     this.platform.log.debug(`[${this.device.name}] - send message: ${command}`);
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }

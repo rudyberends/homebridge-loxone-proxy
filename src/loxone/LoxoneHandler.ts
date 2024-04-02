@@ -14,6 +14,7 @@ class LoxoneHandler {
   private log: any;
   private host: string;
   private port: number;
+  private tls: boolean;
   private username: string;
   private password: string;
   private uuidCallbacks: { [uuid: string]: ((message: string) => void)[] };
@@ -29,6 +30,7 @@ class LoxoneHandler {
     this.log = platform.log;
     this.host = platform.config.host;
     this.port = platform.config.port;
+    this.tls = platform.config.TLS;
     this.username = platform.config.username;
     this.password = platform.config.password;
     this.uuidCallbacks = {};
@@ -126,7 +128,9 @@ class LoxoneHandler {
   private connect(): Promise<boolean> {
     this.log.info('Trying to connect to Miniserver');
 
-    return this.socket.open(this.host + ':' + this.port, this.username, this.password)
+    const protocol = this.tls ? 'https://' : 'http://';
+
+    return this.socket.open(protocol + this.host + ':' + this.port, this.username, this.password)
       .then(() => this.socket.send('data/LoxAPP3.json'))
       .then((file: string) => {
         this.loxdata = JSON.parse(file);

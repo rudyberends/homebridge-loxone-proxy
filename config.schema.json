@@ -8,9 +8,8 @@
     "type": "object",
     "properties": {
       "host": {
-        "title": "MiniServer IP Address",
+        "title": "MiniServer hostname/IP Address",
         "type": "string",
-        "format": "ipv4",
         "required": true
       },
       "port": {
@@ -18,6 +17,10 @@
         "type": "integer",
         "default": "80",
         "required": true
+      },
+      "TLS": {
+        "title": "TLS",
+        "type": "boolean"
       },
       "username": {
         "title": "Username",

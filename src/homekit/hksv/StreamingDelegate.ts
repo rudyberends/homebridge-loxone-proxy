@@ -176,6 +176,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     */
 
     const options: CameraControllerOptions = {
+      cameraStreamCount: 5,
       delegate: this,
       streamingOptions: streamingOptions,
       //recording: {

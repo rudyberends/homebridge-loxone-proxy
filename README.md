@@ -54,6 +54,7 @@ At a minimum, the plugin requires these settings to connect to the miniserver.
 | `port` | optional, port of your miniserver (default: 80) |
 | `username` | loxone username |
 | `password` | loxone password |
+| `TLS` | use a secure connection |
 
 If you create a dedicated user for the plugin, you can filter items by only assigning rights to items you want to expose to HomeBridge.
 

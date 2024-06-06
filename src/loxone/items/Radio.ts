@@ -39,12 +39,13 @@ export class Radio extends LoxoneAccessory {
       const service: any = this.Service[serviceName];
       message.value = currentValue as number === parseInt(service.device.cat) ? 1 : 0;
 
-      const updateService = new Function('message', `return this.Service.${serviceName}.updateService(message);`);
+      // Use bracket notation to safely access the method even if the serviceName contains spaces
+      const updateService = new Function('message', `return this.Service["${serviceName}"].updateService(message);`);
       updateService.call(this, message);
     }
   }
 
-  protected handleLoxoneCommand(value : string): void {
+  protected handleLoxoneCommand(value: string): void {
     const command = parseInt(value) === 0 ? 'reset' : value;
 
     this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);

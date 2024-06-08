@@ -27,6 +27,12 @@ export class LockMechanism extends BaseService {
   }
 
   updateService = (message: { value: number }) => {
+
+    // If switch reversal is enabled, reverse the order of the switch
+    if (this.platform.config.switchAlias?.ReverseLockSwitch) {
+      message.value = message.value === 0 ? 1 : 0;
+    }
+
     this.platform.log.debug(`[${this.device.name}] Callback state update for Lock: ${message.value}`);
     this.State.LockTargetState = message.value;
 
@@ -42,7 +48,7 @@ export class LockMechanism extends BaseService {
       this.service!
         .getCharacteristic(this.platform.Characteristic.LockCurrentState)
         .updateValue(this.State.LockCurrentState);
-    }, 5000);
+    }, 6000);
   };
 
   /**
@@ -65,8 +71,13 @@ export class LockMechanism extends BaseService {
    * Handle requests to set the "Lock Target State" characteristic.
    */
   handleLockTargetStateSet(value) {
+
     this.platform.log.debug('Triggered SET LockTargetState:' + value);
-    const command = this.State.LockTargetState ? 'Off' : 'On';
+
+    // If switch reversal is enabled, reverse the order of the switch
+    const reverse = this.platform.config.switchAlias?.ReverseLockSwitch;
+    const command = reverse ? (this.State.LockTargetState === 0 ? 'Off' : 'On') : (this.State.LockTargetState === 0 ? 'On' : 'Off');
+
     this.platform.log.debug(`[${this.device.name}] - send message: ${command}`);
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }

@@ -8,9 +8,8 @@
     "type": "object",
     "properties": {
       "host": {
-        "title": "MiniServer IP Address",
+        "title": "MiniServer hostname/IP Address",
         "type": "string",
-        "format": "ipv4",
         "required": true
       },
       "port": {
@@ -18,6 +17,10 @@
         "type": "integer",
         "default": "80",
         "required": true
+      },
+      "TLS": {
+        "title": "TLS",
+        "type": "boolean"
       },
       "username": {
         "title": "Username",
@@ -73,6 +76,10 @@
           "Lock": {
             "title": "Lock (Will map all SwitchItems starting with this alias to a HomeKit DoorLock)",
             "type": "string"
+          },
+          "ReverseLockSwitch": {
+            "title": "Reverse the Switch order (Switch ON equals door Unlocked)",
+            "type": "boolean"
           }
         }
       },
@@ -137,6 +144,13 @@
               "type": "password"
             }
           ]
+        },
+        {
+          "type": "flex",
+          "flex-flow": "row wrap",
+          "items": [
+            "TLS"
+          ]
         }
       ]
     },
@@ -159,7 +173,8 @@
       "title": "SwitchItem Mappings",
       "description": "Map Switch items using an Alias",
       "items": [
-        "switchAlias.Lock"
+        "switchAlias.Lock",
+        "switchAlias.ReverseLockSwitch"
       ]
     },
     {

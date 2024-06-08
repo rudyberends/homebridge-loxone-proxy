@@ -28,7 +28,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |`Jalousie` | Window Covering | Auto
 |`Leak` | LeakSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to a Switch Group as a seperate switch. Individual lights are mapped to a Lightbulb.
-|`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping.
+|`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping. By default, it expects the switch to be ON for the dooor to be locked. There is an option in the config to reverse this behavior.
 |`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`PresenceDetector` | OccupancySensor | Auto
 |`Radio` | Switch (Group) | Auto | All Radio outputs are mapped to a Switch Group as a seperate switch.
@@ -54,6 +54,7 @@ At a minimum, the plugin requires these settings to connect to the miniserver.
 | `port` | optional, port of your miniserver (default: 80) |
 | `username` | loxone username |
 | `password` | loxone password |
+| `TLS` | use a secure connection |
 
 If you create a dedicated user for the plugin, you can filter items by only assigning rights to items you want to expose to HomeBridge.
 

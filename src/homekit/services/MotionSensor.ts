@@ -1,4 +1,7 @@
 import { BaseService } from './BaseService';
+import { PlatformAccessory } from 'homebridge';
+import { LoxonePlatform } from '../../LoxonePlatform';
+import { Camera } from './Camera';  // Import the Camera class
 
 /**
  * Represents a Motion Sensor accessory.
@@ -7,6 +10,14 @@ export class MotionSensor extends BaseService {
   State = {
     MotionDetected: false,
   };
+
+  private camera?: Camera;
+
+  constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device: any, camera?: Camera) {
+    super(platform, accessory, device);
+    this.camera = camera;  // Optional camera reference
+    this.setupService();
+  }
 
   /**
    * Sets up the motion sensor service.
@@ -27,6 +38,11 @@ export class MotionSensor extends BaseService {
 
     // Also make sure this change is directly communicated to HomeKit
     this.service!.getCharacteristic(this.platform.Characteristic.MotionDetected).updateValue(this.State.MotionDetected);
+
+    // Trigger camera recording if motion is detected
+    if (this.State.MotionDetected && this.camera) {
+      this.camera.handleMotionDetection();
+    }
   };
 
   /**

@@ -1,10 +1,10 @@
-import { MotionSensor } from '../../homekit/services/MotionSensor';
 import { Intercom } from './Intercom';
+import { MotionSensor } from '../../homekit/services/MotionSensor';
+import { Camera } from '../../homekit/services/Camera';
 
-/**
- * Loxone IntercomV2 Item
-*/
 export class IntercomV2 extends Intercom {
+
+  private camera?: Camera;
 
   async configureCamera(): Promise<void> {
     let isConfigured = false;
@@ -15,8 +15,8 @@ export class IntercomV2 extends Intercom {
       }
 
       this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
-      this.setupCamera(`http://${ip}/mjpg/video.mjpg`);
-      this.configureMotionSensor();  // Fetch Intercom MotionSensor;
+      this.camera = new Camera(this.platform, this.Accessory!, `http://${ip}/mjpg/video.mjpg`);
+      this.configureMotionSensor();  // Fetch Intercom MotionSensor
       isConfigured = true;
     });
   }
@@ -33,7 +33,8 @@ export class IntercomV2 extends Intercom {
       for (const stateName in matchingDevice.states) {
         const stateUUID = matchingDevice.states[stateName];
         this.ItemStates[stateUUID] = { service: serviceName, state: stateName };
-        this.Service[serviceName] = new MotionSensor(this.platform, this.Accessory!, matchingDevice); // Register Intercom Motion Sensor
+        // Pass camera reference to MotionSensor
+        this.Service[serviceName] = new MotionSensor(this.platform, this.Accessory!, matchingDevice, this.camera);
       }
     } else {
       this.platform.log.debug(`[${this.device.name}] Unable to find Loxone IntercomV2 MotionSensor`);

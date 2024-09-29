@@ -61,6 +61,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     for (const uuid in this.LoxoneItems) {
       const Item = this.LoxoneItems[uuid];
       Item.room = LoxoneRooms[Item.room]?.name || 'undefined';
+      Item.catIcon = LoxoneCats[Item.cat]?.image || 'undefined';
       Item.cat = LoxoneCats[Item.cat]?.type || 'undefined';
     }
 

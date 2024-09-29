@@ -141,6 +141,8 @@ export interface Control {
     uuidAction: string;
     room: string;
     cat: string;
+    catIcon: string;
+    defaultIcon: string;
     defaultRating: number;
     isFavorite: boolean;
     isSecured: boolean;

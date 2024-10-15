@@ -16,7 +16,7 @@ export class Switch extends LoxoneAccessory {
 
     // Determine the appropriate HomeKit service based on the device characteristics
     const isLock = this.device.name.includes(this.platform.config.switchAlias?.Lock);
-    const isOutlet = this.device.catIcon.includes('outlet') || this.device.defaultIcon.includes('outlet');
+    const isOutlet = this.device.catIcon?.includes('outlet') || this.device.defaultIcon?.includes('outlet');
 
     this.Service.PrimaryService = isOutlet
       ? new Outlet(this.platform, this.Accessory!)

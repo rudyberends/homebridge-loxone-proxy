@@ -152,6 +152,7 @@ export interface Control {
 }
 
 export interface ControlDetails {
+    format?: string;
     allOff?: string;
     outputs?: any;
     animation?: string;

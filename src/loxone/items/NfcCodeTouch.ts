@@ -4,33 +4,25 @@ import { MotionSensor } from '../../homekit/services/MotionSensor';
 
 /**
  * NfcCodeTouch Item
-*/
+ */
+type NfcCodeTouchMapping = 'DoorBell' | 'MotionSensor';
+
 export class NfcCodeTouch extends LoxoneAccessory {
 
   configureServices(): void {
-    const mapping = this.platform.config.Advanced.NfcCodeTouchMapping;
+    const mapping: NfcCodeTouchMapping = this.platform.config.Advanced.NfcCodeTouchMapping;
     this.platform.log.debug('Configuring NfcCodeTouch with mapping:', mapping);
 
-    if (mapping === 'DoorBell') {
-      this.initializeDoorbellService();
-    } else {
-      this.initializeMotionSensorService();
-    }
+    // Dynamically initialize the service based on the mapping
+    this.initializeService(mapping);
   }
 
-  private initializeDoorbellService(): void {
+  private initializeService(mapping: NfcCodeTouchMapping): void {
+    const serviceClass = mapping === 'DoorBell' ? Doorbell : MotionSensor;
     this.ItemStates = {
-      [this.device.states.events]: { 'service': 'PrimaryService', 'state': 'bell' },
+      [this.device.states.events]: { 'service': 'PrimaryService', 'state': 'events' },
     };
-    this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!);
-    this.platform.log.debug('Doorbell service initialized.');
-  }
-
-  private initializeMotionSensorService(): void {
-    this.ItemStates = {
-      [this.device.states.events]: { 'service': 'PrimaryService', 'state': 'MotionDetected' },
-    };
-    this.Service.PrimaryService = new MotionSensor(this.platform, this.Accessory!);
-    this.platform.log.debug('MotionSensor service initialized.');
+    this.Service.PrimaryService = new serviceClass(this.platform, this.Accessory!);
+    this.platform.log.debug(`${serviceClass.name} service initialized.`);
   }
 }

@@ -8,8 +8,6 @@ import { MotionSensor } from '../../homekit/services/MotionSensor';
 export class NfcCodeTouch extends LoxoneAccessory {
 
   configureServices(): void {
-    console.log('!!!!!')
-    console.log('!!!!!')
     const mapping = this.platform.config.Advanced.NfcCodeTouchMapping;
     this.platform.log.debug('Configuring NfcCodeTouch with mapping:', mapping);
 

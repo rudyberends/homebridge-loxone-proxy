@@ -46,6 +46,20 @@
           }
         }
       },
+     "Advanced": {
+        "type": "object",
+        "title": "Advanced",
+        "properties": {
+          "NfcCodeTouchMapping": {
+            "type": "string",
+            "default": "Doorbell",
+            "enum": [
+              "Doorbell",
+              "MotionSensor"
+            ]
+          }
+        }
+      }, 
       "Exclusions": {
         "type": "string",
         "title": "Excluded ItemTypes"
@@ -197,6 +211,15 @@
         "InfoOnlyDigitalAlias.Motion",
         "InfoOnlyDigitalAlias.Smoke",
         "InfoOnlyDigitalAlias.Leak"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "expandable": true,
+      "title": "Advanced",
+      "description": "",
+      "items": [
+        "Advanced.NfcCodeTouchMapping"
       ]
     }
   ]

@@ -13,7 +13,7 @@ export class MotionSensor extends BaseService {
 
   private camera?: Camera;
 
-  constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device: any, camera?: Camera) {
+  constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device?: any, camera?: Camera) {
     super(platform, accessory, device);
     this.camera = camera;  // Optional camera reference
     this.setupService();
@@ -32,7 +32,14 @@ export class MotionSensor extends BaseService {
       .onGet(this.handleMotionDetectedGet.bind(this));
   }
 
-  updateService = (message: { value: boolean }) => {
+  updateService = (message: { value: number }) => {
+
+    // Only proceed if the message value is 0 or 1 (Ignore NfcCodeTouch values other than doorbell)
+    if (message.value !== 0 && message.value !== 1) {
+      this.platform.log.debug(`[${this.device.name}] Ignored message value: ${message.value}`);
+      return;
+    }
+
     this.platform.log.debug(`[${this.device.name}] Callback state update for MotionSensor: ${!!message.value}`);
     this.State.MotionDetected = !!message.value;
 

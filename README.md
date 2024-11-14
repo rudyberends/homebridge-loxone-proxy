@@ -30,7 +30,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to a Switch Group as a seperate switch. Individual lights are mapped to a Lightbulb.
 |`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping. By default, it expects the switch to be ON for the dooor to be locked. There is an option in the config to reverse this behavior.
 |`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
-|`NfcCodeTouch` | Doorbell, MotionSensor | Auto
+|`NfcCodeTouch` | Doorbell, MotionSensor | Auto | It will map to a Doorbell by default. There is an advanced switch in the config to set it to MotionSensor
 |`PresenceDetector` | OccupancySensor | Auto
 |`Radio` | Switch (Group) | Auto | All Radio outputs are mapped to a Switch Group as a seperate switch.
 |`Smoke` | SmokeSensor | Manual | InfoOnlyDigital Item. Requires a mapping.

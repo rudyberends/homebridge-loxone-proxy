@@ -52,9 +52,9 @@
         "properties": {
           "NfcCodeTouchMapping": {
             "type": "string",
-            "default": "Doorbell",
+            "default": "DoorBell",
             "enum": [
-              "Doorbell",
+              "DoorBell",
               "MotionSensor"
             ]
           }

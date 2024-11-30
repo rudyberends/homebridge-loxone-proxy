@@ -17,11 +17,11 @@ The following list displays all supported itemtypes supported by this plugin.
 |loxone Item |HomeKit Accessory |Mapping |Note
 |--- |--- |--- |--- |
 | `Alarm` | SecuritySystem | Auto
-|`Brightness` | LightSensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
+|`Brightness` | LightSensor | Auto | InfoOnlyAnalog Item. Tries to map based on its format. Can be overridden with a mapping.
 | `ColorPickerV2` | Lightbulb | Auto | Individual ColorPickers, or items parsed from LightControllerV2.
 | `Dimmer, EIBDimmer` | Lightbulb | Auto | Individual Dimmers, or items parsed from LightControllerV2.
 |`Gate` | GarageDoorOpener | Auto
-|`Humidity` | HumiditySensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
+|`Humidity` | HumiditySensor | Auto | InfoOnlyAnalog Item. Tries to map based on its format. Can be overridden with a mapping.
 |`Intercom` | Doorbell, Camera | Auto
 |`IntercomV2` | Doorbell, MotionSensor, Camera | Auto | "Use in userinterface" has to be enabled on the MotionSensor for it to be detected.
 |`IRoomControllerV2` | Thermostat | Auto
@@ -30,11 +30,12 @@ The following list displays all supported itemtypes supported by this plugin.
 |`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to a Switch Group as a seperate switch. Individual lights are mapped to a Lightbulb.
 |`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping. By default, it expects the switch to be ON for the dooor to be locked. There is an option in the config to reverse this behavior.
 |`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
+|`NfcCodeTouch` | Doorbell, MotionSensor | Auto | It will map to a Doorbell by default. There is an advanced switch in the config to set it to MotionSensor
 |`PresenceDetector` | OccupancySensor | Auto
 |`Radio` | Switch (Group) | Auto | All Radio outputs are mapped to a Switch Group as a seperate switch.
 |`Smoke` | SmokeSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
-|`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto
-|`Temperature` | TemperatureSensor | Manual | InfoOnlyAnalog Item. Requires a mapping.
+|`Switch, Pushbutton` | Switch, Outlet, or Lightbulb | Auto | Proxy determines type using the configured icons.
+|`Temperature` | TemperatureSensor | Auto | InfoOnlyAnalog Item. Tries to map based on its format. Can be overridden with a mapping.
 |`Ventilation` | Fanv2 | Auto
 |`WindowMonitor` | ContactSensor | Auto
 

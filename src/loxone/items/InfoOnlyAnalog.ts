@@ -22,6 +22,8 @@ export class InfoOnlyAnalog extends LoxoneAccessory {
 
     const formatTypeMap = new Map<string, new (platform: any, accessory: any) => any>([
       ['%.1f°', TemperatureSensor],
+      ['%.0fLx', LightSensor],
+      ['%.0f%%', HumiditySensor],
     ]);
 
     // Check for service type based on format first

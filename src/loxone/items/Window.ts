@@ -10,7 +10,7 @@ export class Window extends LoxoneAccessory {
 
     this.ItemStates = {
       [this.device.states.position]: {'service': 'PrimaryService', 'state': 'position'},
-      [this.device.states.shadePosition]: {'service': 'PrimaryService', 'state': 'targetPosition'},
+      [this.device.states.targetPosition]: {'service': 'PrimaryService', 'state': 'targetPosition'},
       [this.device.states.direction]: {'service': 'PrimaryService', 'state': 'direction'},
       //[this.device.states.type]: {'service': 'PrimaryService', 'state': 'type'}, // Contains Window Type for Visualisation. No use for now
     };

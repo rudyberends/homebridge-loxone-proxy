@@ -1,52 +1,108 @@
-import { CharacteristicValue } from 'homebridge';
 import { BaseService } from './BaseService';
 
 export class Window extends BaseService {
-  State = {
-    On: false,
+  State: { CurrentPosition: number; PositionState: number; TargetPosition: number } = {
+    CurrentPosition: 0,
+    PositionState: 2,
+    TargetPosition: 0,
   };
 
   /**
-    * Sets up the Window service.
-    * Creates the required characteristics and their event handlers.
-    */
+   * Sets up the Window service.
+   * Creates the required characteristics and their event handlers.
+   */
   setupService(): void {
     this.service =
       this.accessory.getService(this.platform.Service.Window) ||
       this.accessory.addService(this.platform.Service.Window);
-  }
 
+    // Create handlers for the required characteristics
+    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition)
+      .onGet(() => this.handleCurrentPosition());
 
-  /**
-   * Updates the service with the new switch state.
-   * @param message - The message containing the new switch state.
-   */
-  updateService(message: { value: number }): void {
-    this.platform.log.debug(`[${this.device.name}] Callback state update for Switch: ${!!message.value}`);
-    this.State.On = !!message.value;
+    this.service.getCharacteristic(this.platform.Characteristic.TargetPosition)
+      .onGet(() => this.handleTargetPositionGet())
+      .onSet((value) => this.handleTargetPositionSet(value as number));
 
-    // Also make sure this change is directly communicated to HomeKit
-    this.service!.getCharacteristic(this.platform.Characteristic.On).updateValue(this.State.On);
+    this.service.getCharacteristic(this.platform.Characteristic.PositionState)
+      .onGet(() => this.handlePositionState());
   }
 
   /**
-   * Sets the switch state.
-   * @param value - The switch state value to set.
+   * Updates the Window service with the latest state.
+   * @param message - The message containing the updated state and value.
    */
-  async setOn(value: CharacteristicValue): Promise<void> {
-    this.State.On = value as boolean;
-    this.platform.log.debug(`[${this.device.name}] Characteristic.On update from Homekit ->`, value);
+  updateService(message: { state: string; value: number }): void {
+    this.platform.log.debug(`[${this.device.name}] Full Callback Message:`, message);
 
-    const command = this.State.On ? 'On' : 'Off';
-    this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
+    switch (message.state) {
+      case 'direction':
+        switch (message.value) {
+          case -1:
+            this.State.PositionState = this.platform.Characteristic.PositionState.DECREASING;
+            break;
+          case 0:
+            this.State.PositionState = this.platform.Characteristic.PositionState.STOPPED;
+            break;
+          case 1:
+            this.State.PositionState = this.platform.Characteristic.PositionState.INCREASING;
+            break;
+        }
+        this.platform.log.debug(`[${this.device.name}] Updated PositionState: ${this.State.PositionState}`);
+        this.service?.getCharacteristic(this.platform.Characteristic.PositionState)?.updateValue(this.State.PositionState);
+        break;
+
+      case 'position':
+        this.State.CurrentPosition = Math.round(message.value * 100);
+        this.platform.log.debug(`[${this.device.name}] Updated CurrentPosition: ${this.State.CurrentPosition}`);
+        this.service?.getCharacteristic(this.platform.Characteristic.CurrentPosition)?.updateValue(this.State.CurrentPosition);
+        break;
+
+      case 'targetPosition':
+        this.State.TargetPosition = Math.round(message.value * 100);
+        this.platform.log.debug(`[${this.device.name}] Updated TargetPosition: ${this.State.TargetPosition}`);
+        this.service?.getCharacteristic(this.platform.Characteristic.TargetPosition)?.updateValue(this.State.TargetPosition);
+        break;
+
+      default:
+        this.platform.log.warn(`[${this.device.name}] Unknown state received: ${message.state}`);
+        break;
+    }
+  }
+
+
+
+  /**
+   * Handles the GET event for the CurrentPosition characteristic.
+   * @returns The current value of the CurrentPosition characteristic.
+   */
+  handleCurrentPosition(): number {
+    this.platform.log.debug('Triggered GET handleCurrentPosition');
+    return this.State.CurrentPosition;
+  }
+
+  /**
+   * Handles the GET event for the TargetPosition characteristic.
+   * @returns The target value of the TargetPosition characteristic.
+   */
+  handleTargetPositionGet(): number {
+    this.platform.log.debug('Triggered GET handleTargetPosition');
+    return this.State.TargetPosition;
+  }
+
+  handleTargetPositionSet(value) {
+    this.platform.log.debug(`[${this.device.name}] Triggered SET TargetPosition:` + value);
+
+    const command = value === 0 ? 'fullclose' : 'fullopen';
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
   }
 
   /**
-   * Retrieves the current switch state.
-   * @returns The current switch state.
+   * Handles the GET event for the PositionState characteristic.
+   * @returns The current position state.
    */
-  async getOn(): Promise<CharacteristicValue> {
-    return this.State.On;
+  handlePositionState(): number {
+    this.platform.log.debug('Triggered GET handlePositionState');
+    return this.State.PositionState;
   }
 }

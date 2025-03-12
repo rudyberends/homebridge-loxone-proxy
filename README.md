@@ -38,6 +38,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |`Temperature` | TemperatureSensor | Auto | InfoOnlyAnalog Item. Tries to map based on its format. Can be overridden with a mapping.
 |`Ventilation` | Fanv2 | Auto
 |`WindowMonitor` | ContactSensor | Auto
+|`Window` | Window | Auto
 
 For the plugin to recognize the items, the item needs to be vissible in the user interface. This can be done by enabling "use" in the userinterface section of the item.
 

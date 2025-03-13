@@ -54,7 +54,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }> = new Map();
 
   private recordingActive = false;
-
   private recordingConfig?: any;
 
   constructor(
@@ -87,7 +86,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           },
           resolutions,
         },
-        // Audio removed since FFmpeg uses -an
       },
       recording: {
         options: {
@@ -104,8 +102,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           audio: {
             codecs: [
               {
-                type: this.hap.AudioRecordingCodecType.AAC_ELD, // or another supported codec
-                samplerate: this.hap.AudioRecordingSamplerate.KHZ_16, // kHz, minimum valid value
+                type: this.hap.AudioRecordingCodecType.AAC_ELD,
+                samplerate: this.hap.AudioRecordingSamplerate.KHZ_16,
               },
             ],
           },
@@ -128,6 +126,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-c:v', 'libx264',
       '-r', '30',
       '-b:v', '2000k',
+      '-g', '30', // Force keyframes every 1 second
       '-f', 'tee',
       '-map', '0:v',
       '[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof]pipe:1',
@@ -165,7 +164,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
             this.preBuffer.push({ data: atom, timestamp: now, isKeyFrame: this.isKeyFrame(atom) });
             this.preBuffer = this.preBuffer.filter(entry => entry.timestamp > now - this.preBufferDuration);
             if (!this.snapshotCache || this.snapshotCache.timestamp < now - 5000) {
-              this.snapshotCache = { data: this.extractSnapshot(), timestamp: now };
+              this.extractSnapshot().then(snapshot => {
+                if (snapshot.length > 0) {
+                  this.snapshotCache = { data: snapshot, timestamp: now };
+                }
+              }).catch(err => this.log.error(`Snapshot extraction failed: ${err}`));
             }
           }
           buffer = buffer.slice(length);
@@ -178,40 +181,71 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private isKeyFrame(atom: Buffer): boolean {
     const data = atom.slice(8);
-    return data.length > 4 && (data[4] & 0x1F) === 5;
+    if (data.length <= 4) {
+      return false;
+    }
+    const nalUnitType = data[4] & 0x1F;
+    const isKey = nalUnitType === 5; // IDR frame
+    this.log.debug(`Checking keyframe: NAL type=${nalUnitType}, isKeyFrame=${isKey}`);
+    return isKey;
   }
 
-  private extractSnapshot(): Buffer {
+  private async extractSnapshot(): Promise<Buffer> {
     const latestKeyFrame = this.preBuffer
       .filter(entry => entry.isKeyFrame)
       .sort((a, b) => b.timestamp - a.timestamp)[0];
 
-    if (latestKeyFrame) {
-      this.log.debug(`Extracted snapshot from key frame, size: ${latestKeyFrame.data.length} bytes`);
-      return latestKeyFrame.data;
+    if (!latestKeyFrame) {
+      this.log.warn('No keyframe found for snapshot');
+      return Buffer.alloc(0);
     }
-    this.log.warn('No key frame found for snapshot');
-    return Buffer.alloc(0);
+
+    return new Promise((resolve, reject) => {
+      const cp = spawn('ffmpeg', [
+        '-i', 'pipe:',
+        '-frames:v', '1',
+        '-f', 'image2',
+        '-c:v', 'mjpeg',
+        'pipe:',
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      const chunks: Buffer[] = [];
+      cp.stdout.on('data', (data) => chunks.push(data));
+      cp.stderr.on('data', (data) => this.log.debug(`Snapshot extract stderr: ${data}`));
+      cp.on('exit', (code) => {
+        if (code === 0) {
+          const snapshot = Buffer.concat(chunks);
+          this.log.debug(`Extracted snapshot: ${snapshot.length} bytes`);
+          resolve(snapshot);
+        } else {
+          reject(new Error(`Snapshot extraction failed with code ${code}`));
+        }
+      });
+      cp.stdin.write(latestKeyFrame.data);
+      cp.stdin.end();
+    });
   }
 
   async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
     this.log.debug(`Snapshot requested: ${request.width} x ${request.height}`);
-
     if (this.snapshotCache && this.snapshotCache.timestamp > Date.now() - 5000 && this.snapshotCache.data.length > 0) {
       this.log.debug('Returning cached snapshot');
       return callback(undefined, this.snapshotCache.data);
     }
 
     try {
-      const snapshot = await this.generateSnapshot();
-      if (snapshot.length > 0) {
+      const snapshot = await this.extractSnapshot();
+      if (snapshot.length === 0) {
+        this.log.warn('Falling back to generateSnapshot');
+        const fallback = await this.generateSnapshot();
+        this.snapshotCache = { data: fallback, timestamp: Date.now() };
+        callback(undefined, fallback);
+      } else {
         this.snapshotCache = { data: snapshot, timestamp: Date.now() };
         callback(undefined, snapshot);
-      } else {
-        throw new Error('Generated snapshot is empty');
       }
     } catch (err) {
-      this.log.error(`Snapshot generation failed: ${err}`);
+      this.log.error(`Snapshot failed: ${err}`);
       callback(err instanceof Error ? err : new Error('Snapshot failed'));
     }
   }
@@ -252,10 +286,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const port = await this.reservePort();
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
     const videoSRTP = Buffer.concat([request.video.srtp_key, request.video.srtp_salt]);
-    const address = request.targetAddress || '127.0.0.1';
+    const address = request.targetAddress; // Use HomeKit-provided address
     this.activeStreams.set(request.sessionID, { cp: null, port, address, videoSRTP, videoSSRC });
     this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, ` +
-      `Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}`);
+      `Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}, ` +
+      `Key: ${request.video.srtp_key.toString('base64')}, Salt: ${request.video.srtp_salt.toString('base64')}`);
     callback(undefined, {
       video: { port, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
     });
@@ -284,7 +319,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       return callback(new Error('Session not found'));
     }
 
-    const mtu = request.video.mtu || 1316;
+    const mtu = request.video.mtu || 1378;
     const ffmpegArgs: string[] = [
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-use_wallclock_as_timestamps', '1',
@@ -294,20 +329,18 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-flags', 'low_delay',
       '-max_delay', '0',
       '-re',
-      '-i', `${this.streamUrl}`,
-      '-an',
-      '-sn',
-      '-dn',
-      '-codec:v', 'libx264',
+      '-i', this.streamUrl,
+      '-an', '-sn', '-dn',
+      '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-color_range', 'mpeg',
-      '-r', '25',
-      '-f', 'rawvideo',
+      '-r', request.video.fps.toString(),
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
-      '-crf', '22',
+      '-b:v', `${request.video.max_bit_rate}k`,
+      '-maxrate', `${request.video.max_bit_rate}k`,
+      '-bufsize', `${request.video.max_bit_rate * 2}k`,
       '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-b:v', '299k',
       '-payload_type', '99',
       '-ssrc', `${session.videoSSRC}`,
       '-f', 'rtp',
@@ -334,7 +367,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       let hasOutput = false;
       cp.stderr.on('data', (data) => {
         const stderr = data.toString();
-        this.log.debug(`Stream FFmpeg stderr: ${stderr}`);
         if (stderr.includes('frame=') && stderr.match(/frame=\s*\d+/)[0] !== 'frame=    0') {
           hasOutput = true;
           this.log.debug('Stream FFmpeg started outputting frames');
@@ -343,10 +375,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           reject(new Error(`FFmpeg error: ${stderr}`));
         }
       });
-      cp.on('error', (err) => reject(err));
       setTimeout(() => {
         if (!hasOutput) {
-          reject(new Error('Stream FFmpeg output wait timeout reached with no frames'));
+          reject(new Error('No frames output after 5s'));
         } else {
           resolve();
         }
@@ -358,9 +389,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.log.debug('Stream callback triggered');
       callback();
     } catch (err) {
-      this.log.error(`Failed to start stream: ${err}`);
+      this.log.error(`Stream failed to start: ${err}`);
       callback(err as Error);
-      return;
     }
   }
 
@@ -458,6 +488,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     server.listen(0);
     await once(server, 'listening');
     const port = (server.address() as AddressInfo).port;
+    this.log.debug(`Reserved port: ${port}`);
     server.close();
     return port;
   }

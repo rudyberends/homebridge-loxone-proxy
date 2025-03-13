@@ -24,7 +24,7 @@ import { ChildProcess, spawn } from 'child_process';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { once } from 'events';
 import { Readable } from 'stream';
-import { AddressInfo, createServer, Server } from 'net';
+import { AddressInfo, createServer } from 'net';
 
 interface PreBufferEntry {
   data: Buffer;
@@ -44,8 +44,17 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private preBuffer: PreBufferEntry[] = [];
   private preBufferDuration = 4000;
   private snapshotCache?: { data: Buffer; timestamp: number };
-  private activeStreams: Map<string, { cp: ChildProcess | null; port: number; address: string; videoSRTP: Buffer; videoSSRC: number }> = new Map();
+
+  private activeStreams: Map<string, {
+    cp: ChildProcess | null;
+    port: number;
+    address: string;
+    videoSRTP: Buffer;
+    videoSSRC: number;
+  }> = new Map();
+
   private recordingActive = false;
+
   private recordingConfig?: any;
 
   constructor(
@@ -58,7 +67,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.log = platform.log;
     this.streamUrl = streamUrl;
     this.base64auth = base64auth;
-    this.cameraName = streamUrl.split('/').pop() || 'Camera';
+    this.cameraName = accessory.displayName;
 
     const resolutions: [number, number, number][] = [
       [320, 180, 30], [320, 240, 15], [320, 240, 30], [480, 270, 30],
@@ -102,7 +111,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           },
         },
         delegate: this,
-      }, 
+      },
     };
 
     this.controller = new this.hap.CameraController(options);
@@ -155,7 +164,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
             this.preBuffer.push({ data: atom, timestamp: now, isKeyFrame: this.isKeyFrame(atom) });
             this.preBuffer = this.preBuffer.filter(entry => entry.timestamp > now - this.preBufferDuration);
             if (!this.snapshotCache || this.snapshotCache.timestamp < now - 5000) {
-              this.snapshotCache = { data: this.extractSnapshot(atom), timestamp: now };
+              this.snapshotCache = { data: this.extractSnapshot(), timestamp: now };
             }
           }
           buffer = buffer.slice(length);
@@ -171,7 +180,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     return data.length > 4 && (data[4] & 0x1F) === 5;
   }
 
-  private extractSnapshot(atom: Buffer): Buffer {
+  private extractSnapshot(): Buffer {
     return Buffer.alloc(0); // Fallback to generateSnapshot
   }
 
@@ -224,14 +233,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   async prepareStream(
     request: PrepareStreamRequest,
-    callback: (error?: Error, response?: PrepareStreamResponse) => void
+    callback: (error?: Error, response?: PrepareStreamResponse) => void,
   ): Promise<void> {
     const port = await this.reservePort();
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
     const videoSRTP = Buffer.concat([request.video.srtp_key, request.video.srtp_salt]);
     const address = request.targetAddress || '127.0.0.1';
     this.activeStreams.set(request.sessionID, { cp: null, port, address, videoSRTP, videoSSRC });
-    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}`);
+    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, ` +
+      `Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}`);
     callback(undefined, {
       video: { port, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
     });
@@ -290,20 +300,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-srtp_out_params', session.videoSRTP.toString('base64'),
       `srtp://${session.address}:${session.port}?rtcpport=${session.port}&pkt_size=${mtu}`,
     ];
-
-    // const net = require('net');
-    const net: { createServer: () => Server } = { createServer };
-    const isPortFree = (port: number, host: string) => new Promise((resolve) => {
-      const server = net.createServer();
-      server.once('error', () => resolve(false));
-      server.once('listening', () => { server.close(); resolve(true); });
-      server.listen(port, host);
-    });
-
-    if (!(await isPortFree(session.port, session.address))) {
-      this.log.error(`Port ${session.port} on ${session.address} is in use`);
-      return callback(new Error('Port in use'));
-    }
 
     this.log.debug(`Starting stream with args: ${ffmpegArgs.join(' ')}`);
     const cp = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -438,7 +434,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private stopAll(): void {
     this.ffmpegProcess?.kill();
     this.activeStreams.forEach(session => {
-      if (session.cp) session.cp.kill();
+      if (session.cp) {
+        session.cp.kill();
+      }
     });
     this.activeStreams.clear();
   }

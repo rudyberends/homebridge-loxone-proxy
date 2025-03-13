@@ -237,16 +237,19 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   async prepareStream(
     request: PrepareStreamRequest,
-    callback: (error?: Error, response?: PrepareStreamResponse) => void
+    callback: (error?: Error, response?: PrepareStreamResponse) => void,
   ): Promise<void> {
     const port = await this.reservePort();
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
+    const audioSSRC = this.hap.CameraController.generateSynchronisationSource(); // Add audio SSRC
     const videoSRTP = Buffer.concat([request.video.srtp_key, request.video.srtp_salt]);
-    const address = request.targetAddress || '127.0.0.1'; // Use targetAddress if provided
+    const audioSRTP = videoSRTP; // Reuse video SRTP for simplicity (since audio is disabled in FFmpeg)
+    const address = request.targetAddress || '127.0.0.1';
     this.activeStreams.set(request.sessionID, { cp: null as any, port, address, videoSRTP, videoSSRC });
-    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, SRTP: ${videoSRTP.toString('base64')}, SSRC: ${videoSSRC}`);
+    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}, Audio SSRC: ${audioSSRC}`);
     callback(undefined, {
       video: { port, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
+      audio: { port, ssrc: audioSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt }, // Dummy audio response
     });
   }
 
@@ -337,8 +340,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private stopStream(sessionId: string): void {
     const session = this.activeStreams.get(sessionId);
-    if (session) {
-      session.cp?.kill();
+    if (session && session.cp) { // Check for cp existence
+      session.cp.kill();
       this.activeStreams.delete(sessionId);
     }
   }
@@ -435,7 +438,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private stopAll(): void {
     this.ffmpegProcess?.kill();
-    this.activeStreams.forEach(session => session.cp.kill());
+    this.activeStreams.forEach(session => {
+      if (session.cp) {
+        session.cp.kill();
+      } // Safely kill only if cp exists
+    });
     this.activeStreams.clear();
   }
 

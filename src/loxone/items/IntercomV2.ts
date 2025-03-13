@@ -43,8 +43,13 @@ export class IntercomV2 extends LoxoneAccessory {
       if (isConfigured) {
         return;
       }
+
       this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
-      this.camera = new CameraService(this.platform, this.Accessory!, `http://${ip}/mjpg/video.mjpg`);
+
+      // Get authentication from constructor (V1) or use miniserver credentials (V2)
+      const base64auth = Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
+
+      this.camera = new CameraService(this.platform, this.Accessory!, `http://${ip}/mjpg/video.mjpg`, base64auth);
       this.configureMotionSensor();
       isConfigured = true;
     });

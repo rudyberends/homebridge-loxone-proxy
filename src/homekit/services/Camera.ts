@@ -21,15 +21,13 @@ import {
   H264Level,
   AudioStreamingCodecType,
   AudioStreamingSamplerate,
-  AudioRecordingCodecType,
-  AudioRecordingSamplerate,
 } from 'homebridge';
 import { ChildProcess, spawn } from 'child_process';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { once } from 'events';
 import { Readable } from 'stream';
 import { createServer } from 'net';
-import { AddressInfo } from 'net';
+import { AddressInfo, createServer as createNetServer } from 'net';
 
 interface PreBufferEntry {
   data: Buffer;
@@ -49,7 +47,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private preBuffer: PreBufferEntry[] = [];
   private preBufferDuration = 4000;
   private snapshotCache?: { data: Buffer; timestamp: number };
-  private activeStreams: Map<string, { cp: ChildProcess; port: number; address: string; videoSRTP: Buffer; videoSSRC: number }> = new Map();
+  private activeStreams: Map<string, { cp: ChildProcess | null; port: number; address: string; videoSRTP: Buffer; videoSSRC: number }> = new Map();
   private recordingActive = false;
   private recordingConfig?: any;
 
@@ -62,13 +60,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.hap = platform.api.hap;
     this.log = platform.log;
     this.streamUrl = streamUrl;
+    this.base64auth = base64auth;
     this.cameraName = accessory.displayName;
-
-    // Get authentication from constructor (V1) or use miniserver credentials (V2)
-    this.base64auth = base64auth || Buffer.from(
-      `${this.platform.config.username}:${this.platform.config.password}`,
-      'utf8',
-    ).toString('base64');
 
     const resolutions: [number, number, number][] = [
       [320, 180, 30], [320, 240, 15], [320, 240, 30], [480, 270, 30],
@@ -89,8 +82,12 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           resolutions,
         },
         audio: {
-          twoWayAudio: false,
-          codecs: [],
+          codecs: [
+            {
+              type: AudioStreamingCodecType.AAC_ELD,
+              samplerate: AudioStreamingSamplerate.KHZ_16,
+            },
+          ],
         },
       },
       recording: {
@@ -108,8 +105,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           audio: {
             codecs: [
               {
-                type: AudioRecordingCodecType.AAC_LC,
-                samplerate: AudioRecordingSamplerate.KHZ_16,
+                samplerate: this.hap.AudioRecordingSamplerate.KHZ_32,
+                type: this.hap.AudioRecordingCodecType.AAC_LC,
               },
             ],
           },
@@ -241,15 +238,12 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   ): Promise<void> {
     const port = await this.reservePort();
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
-    const audioSSRC = this.hap.CameraController.generateSynchronisationSource(); // Add audio SSRC
     const videoSRTP = Buffer.concat([request.video.srtp_key, request.video.srtp_salt]);
-    const audioSRTP = videoSRTP; // Reuse video SRTP for simplicity (since audio is disabled in FFmpeg)
     const address = request.targetAddress || '127.0.0.1';
-    this.activeStreams.set(request.sessionID, { cp: null as any, port, address, videoSRTP, videoSSRC });
-    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}, Audio SSRC: ${audioSSRC}`);
+    this.activeStreams.set(request.sessionID, { cp: null, port, address, videoSRTP, videoSSRC });
+    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}`);
     callback(undefined, {
       video: { port, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
-      audio: { port, ssrc: audioSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt }, // Dummy audio response
     });
   }
 
@@ -276,7 +270,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       return callback(new Error('Session not found'));
     }
 
-    const mtu = request.video.mtu || 1316; // Default MTU from HomeKit spec
+    const mtu = request.video.mtu || 1316;
     const ffmpegArgs: string[] = [
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-use_wallclock_as_timestamps', '1',
@@ -295,9 +289,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-f', 'rawvideo',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
-      '-crf', '22',
-      '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-b:v', `${request.video.max_bit_rate}k`,
+      '-maxrate', `${request.video.max_bit_rate}k`,
+      '-bufsize', `${request.video.max_bit_rate * 2}k`,
+      '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-payload_type', '99',
       '-ssrc', `${session.videoSSRC}`,
       '-f', 'rtp',
@@ -305,6 +300,22 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-srtp_out_params', session.videoSRTP.toString('base64'),
       `srtp://${session.address}:${session.port}?rtcpport=${session.port}&pkt_size=${mtu}`,
     ];
+
+    // Check if port is available
+    const net = { createServer: createNetServer };
+    const isPortFree = (port: number, host: string) => new Promise((resolve) => {
+      const server = net.createServer();
+      server.once('error', () => resolve(false));
+      server.once('listening', () => {
+        server.close(); resolve(true);
+      });
+      server.listen(port, host);
+    });
+
+    if (!(await isPortFree(session.port, session.address))) {
+      this.log.error(`Port ${session.port} on ${session.address} is in use`);
+      return callback(new Error('Port in use'));
+    }
 
     this.log.debug(`Starting stream with args: ${ffmpegArgs.join(' ')}`);
     const cp = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -321,8 +332,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     });
 
     const waitForOutput = new Promise<void>((resolve) => {
-      cp.stderr.once('data', (data) => {
-        if (data.toString().includes('frame=')) {
+      cp.stderr.on('data', (data) => {
+        if (data.toString().includes('frame=') && data.toString().match(/frame=\s*\d+/)[0] !== 'frame=    0') {
           this.log.debug('Stream FFmpeg started outputting frames');
           resolve();
         }
@@ -330,7 +341,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       setTimeout(() => {
         this.log.debug('Stream FFmpeg output wait timeout reached');
         resolve();
-      }, 2000);
+      }, 5000); // Increased to 5s
     });
 
     await waitForOutput;
@@ -340,7 +351,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private stopStream(sessionId: string): void {
     const session = this.activeStreams.get(sessionId);
-    if (session && session.cp) { // Check for cp existence
+    if (session && session.cp) {
       session.cp.kill();
       this.activeStreams.delete(sessionId);
     }
@@ -441,7 +452,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.activeStreams.forEach(session => {
       if (session.cp) {
         session.cp.kill();
-      } // Safely kill only if cp exists
+      }
     });
     this.activeStreams.clear();
   }

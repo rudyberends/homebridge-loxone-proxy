@@ -231,7 +231,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   async prepareStream(
     request: PrepareStreamRequest,
-    callback: (error?: Error, response?: PrepareStreamResponse) => void
+    callback: (error?: Error, response?: PrepareStreamResponse) => void,
   ): Promise<void> {
     const port = await this.reservePort();
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
@@ -261,16 +261,20 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private async startStream(request: StartStreamRequest, callback: StreamRequestCallback): Promise<void> {
     const session = this.activeStreams.get(request.sessionID);
     if (!session) {
+      this.log.error('Session not found for streaming');
       return callback(new Error('Session not found'));
     }
 
     const args = [
-      '-re', // Added for real-time streaming
+      '-re', // Real-time input
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
       '-c:v', 'libx264',
       '-r', request.video.fps.toString(),
       '-b:v', `${request.video.max_bit_rate}k`,
+      '-preset', 'ultrafast', // Faster encoding for real-time
+      '-tune', 'zerolatency', // Minimize latency
+      '-g', '15', // Keyframe every 15 frames (0.5s at 30fps) for HomeKit compatibility
       '-f', 'rtp',
       '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
       '-srtp_out_params', session.videoSRTP.toString('base64'),
@@ -278,15 +282,33 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     ];
 
     this.log.debug(`Starting stream with args: ${args.join(' ')}`);
+    this.log.debug(`Stream port: ${session.port}, SRTP params: ${session.videoSRTP.toString('base64')}`);
     const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     session.cp = cp;
+
     cp.stderr.on('data', (data) => this.log.debug(`Stream FFmpeg stderr: ${data}`));
     cp.on('error', (err) => {
       this.log.error(`Stream FFmpeg error: ${err}`, this.cameraName);
       callback(err);
     });
-    cp.on('exit', () => this.stopStream(request.sessionID));
-    callback();
+    cp.on('exit', (code) => {
+      this.log.debug(`Stream FFmpeg exited with code ${code}`);
+      this.stopStream(request.sessionID);
+    });
+
+    // Wait for FFmpeg to start outputting (or a short timeout) before callback
+    const waitForOutput = new Promise<void>((resolve) => {
+      cp.stderr.once('data', (data) => {
+        if (data.toString().includes('frame=')) {
+          this.log.debug('Stream FFmpeg started outputting frames');
+          resolve();
+        }
+      });
+      setTimeout(resolve, 1000); // Fallback after 1s if no frame data
+    });
+
+    await waitForOutput;
+    callback(); // Signal HomeKit that streaming has started
   }
 
   private stopStream(sessionId: string): void {

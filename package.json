@@ -33,11 +33,12 @@
   ],
   "dependencies": {
     "@homebridge/camera-utils": "^2.2.0",
+    "ffmpeg-for-homebridge": "^2.1.7",
     "lxcommunicator": "^1.1.1",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@types/node": "^16.10.9",
+    "@types/node": "^16.18.126",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
     "eslint": "^8.0.1",

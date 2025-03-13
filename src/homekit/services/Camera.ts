@@ -488,6 +488,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   updateRecordingConfiguration(configuration?: any): void {
     this.recordingConfig = configuration;
     this.log.debug(`Recording config updated: ${JSON.stringify(configuration)}`, this.cameraName);
+    if (configuration && !configuration.videoCodec?.bitrate) {
+      this.log.warn('Recording config missing bitrate, defaulting to 2000k', this.cameraName);
+      this.recordingConfig.videoCodec = { ...configuration.videoCodec, bitrate: 2000 }; // Fallback
+    }
   }
 
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
@@ -499,12 +503,13 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     // Start recording with pre-buffer and live stream
     const preBufferData = this.getPreBufferVideo();
+    const bitrate = this.recordingConfig.videoCodec?.bitrate || 2000; // Fallback to 2000k if undefined
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
       '-c:v', 'libx264',
       '-r', '30',
-      '-b:v', '2000k',
+      '-b:v', `${bitrate}k`, // Use safe bitrate
       '-g', '15', // Keyframe every 0.5s
       '-keyint_min', '15',
       '-x264-params', 'keyint=15:min-keyint=15:scenecut=0:no-scenecut=1:open-gop=0:force-cfr=1',
@@ -517,6 +522,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       'pipe:',
     ];
 
+    this.log.debug(`Starting recording with args: ${args.join(' ')}`);
     this.recordingProcess = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     this.recordingProcess.stderr?.on('data', (data) => this.log.debug(`Recording FFmpeg stderr: ${data}`));
     this.recordingProcess.on('error', (err) => this.log.error(`Recording FFmpeg error: ${err}`, this.cameraName));
@@ -549,6 +555,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           }
         }
       }
+      // Signal end of stream
+      yield { data: Buffer.alloc(0), isLast: true };
+    } catch (err) {
+      this.log.error(`Recording stream failed: ${err}`, this.cameraName);
+      throw err; // Let Homebridge handle the error
     } finally {
       this.stopAllRecordings();
       this.log.info(`Recording stream ${streamId} ended`, this.cameraName);

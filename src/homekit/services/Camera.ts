@@ -68,8 +68,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.hap = platform.api.hap;
     this.log = platform.log;
     this.streamUrl = streamUrl;
-    this.base64auth = base64auth;
-    this.cameraName = streamUrl.split('/').pop() || 'Camera';
+    this.cameraName = accessory.displayName;
+
+    // Get authentication from constructor (V1) or use miniserver credentials (V2)
+    this.base64auth = base64auth ||
+      Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
 
     const videoParameters: H264CodecParameters = {
       profiles: [H264Profile.MAIN],

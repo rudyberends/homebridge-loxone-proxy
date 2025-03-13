@@ -153,6 +153,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     stream.on('data', (chunk: Buffer) => {
       this.log.debug(`Pre-buffer chunk received: ${chunk.length} bytes`);
       buffer = Buffer.concat([buffer, chunk]);
+      this.log.debug(`Buffer size: ${buffer.length}, First 8 bytes: ${buffer.slice(0, 8).toString('hex')}`);
       while (buffer.length >= 8) {
         const length = buffer.readUInt32BE(0);
         if (buffer.length >= length) {
@@ -181,21 +182,34 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private extractSnapshot(): Buffer {
-    return Buffer.alloc(0); // Fallback to generateSnapshot
+    const latestKeyFrame = this.preBuffer
+      .filter(entry => entry.isKeyFrame)
+      .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+    if (latestKeyFrame) {
+      this.log.debug(`Extracted snapshot from key frame, size: ${latestKeyFrame.data.length} bytes`);
+      return latestKeyFrame.data;
+    }
+    this.log.warn('No key frame found for snapshot');
+    return Buffer.alloc(0);
   }
 
   async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
     this.log.debug(`Snapshot requested: ${request.width} x ${request.height}`);
 
-    if (this.snapshotCache && this.snapshotCache.timestamp > Date.now() - 5000) {
+    if (this.snapshotCache && this.snapshotCache.timestamp > Date.now() - 5000 && this.snapshotCache.data.length > 0) {
       this.log.debug('Returning cached snapshot');
       return callback(undefined, this.snapshotCache.data);
     }
 
     try {
       const snapshot = await this.generateSnapshot();
-      this.snapshotCache = { data: snapshot, timestamp: Date.now() };
-      callback(undefined, snapshot);
+      if (snapshot.length > 0) {
+        this.snapshotCache = { data: snapshot, timestamp: Date.now() };
+        callback(undefined, snapshot);
+      } else {
+        throw new Error('Generated snapshot is empty');
+      }
     } catch (err) {
       this.log.error(`Snapshot generation failed: ${err}`);
       callback(err instanceof Error ? err : new Error('Snapshot failed'));
@@ -286,7 +300,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-pix_fmt', 'yuv420p',
       '-color_range', 'mpeg',
       '-r', request.video.fps.toString(),
-      '-f', 'rawvideo',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
       '-b:v', `${request.video.max_bit_rate}k`,
@@ -308,29 +321,45 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     cp.stderr.on('data', (data) => this.log.debug(`Stream FFmpeg stderr: ${data}`));
     cp.on('error', (err) => {
       this.log.error(`Stream FFmpeg error: ${err}`, this.cameraName);
-      callback(err);
+      callback(err as Error);
     });
     cp.on('exit', (code) => {
       this.log.debug(`Stream FFmpeg exited with code ${code}`);
       this.stopStream(request.sessionID);
     });
 
-    const waitForOutput = new Promise<void>((resolve) => {
+    const waitForOutput = new Promise<void>((resolve, reject) => {
+      let hasOutput = false;
       cp.stderr.on('data', (data) => {
-        if (data.toString().includes('frame=') && data.toString().match(/frame=\s*\d+/)[0] !== 'frame=    0') {
+        const stderr = data.toString();
+        this.log.debug(`Stream FFmpeg stderr: ${stderr}`);
+        if (stderr.includes('frame=') && stderr.match(/frame=\s*\d+/)[0] !== 'frame=    0') {
+          hasOutput = true;
           this.log.debug('Stream FFmpeg started outputting frames');
           resolve();
+        } else if (stderr.includes('error') || stderr.includes('failed')) {
+          reject(new Error(`FFmpeg error: ${stderr}`));
         }
       });
+      cp.on('error', (err) => reject(err));
       setTimeout(() => {
-        this.log.debug('Stream FFmpeg output wait timeout reached');
-        resolve();
-      }, 5000); // Increased to 5s
+        if (!hasOutput) {
+          reject(new Error('Stream FFmpeg output wait timeout reached with no frames'));
+        } else {
+          resolve();
+        }
+      }, 5000);
     });
 
-    await waitForOutput;
-    this.log.debug('Stream callback triggered');
-    callback();
+    try {
+      await waitForOutput;
+      this.log.debug('Stream callback triggered');
+      callback();
+    } catch (err) {
+      this.log.error(`Failed to start stream: ${err}`);
+      callback(err as Error);
+      return;
+    }
   }
 
   private stopStream(sessionId: string): void {

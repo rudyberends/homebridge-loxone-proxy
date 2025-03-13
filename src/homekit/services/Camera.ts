@@ -19,15 +19,12 @@ import {
   MediaContainerType,
   H264Profile,
   H264Level,
-  AudioStreamingCodecType,
-  AudioStreamingSamplerate,
 } from 'homebridge';
 import { ChildProcess, spawn } from 'child_process';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { once } from 'events';
 import { Readable } from 'stream';
-import { createServer } from 'net';
-import { AddressInfo, createServer as createNetServer } from 'net';
+import { AddressInfo, createServer, Server } from 'net';
 
 interface PreBufferEntry {
   data: Buffer;
@@ -61,7 +58,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.log = platform.log;
     this.streamUrl = streamUrl;
     this.base64auth = base64auth;
-    this.cameraName = accessory.displayName;
+    this.cameraName = streamUrl.split('/').pop() || 'Camera';
 
     const resolutions: [number, number, number][] = [
       [320, 180, 30], [320, 240, 15], [320, 240, 30], [480, 270, 30],
@@ -81,14 +78,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           },
           resolutions,
         },
-        audio: {
-          codecs: [
-            {
-              type: AudioStreamingCodecType.AAC_ELD,
-              samplerate: AudioStreamingSamplerate.KHZ_16,
-            },
-          ],
-        },
+        // Audio removed since FFmpeg uses -an
       },
       recording: {
         options: {
@@ -105,14 +95,14 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           audio: {
             codecs: [
               {
-                samplerate: this.hap.AudioRecordingSamplerate.KHZ_32,
-                type: this.hap.AudioRecordingCodecType.AAC_LC,
+                type: this.hap.AudioRecordingCodecType.AAC_ELD, // or another supported codec
+                samplerate: this.hap.AudioRecordingSamplerate.KHZ_16, // kHz, minimum valid value
               },
             ],
           },
         },
         delegate: this,
-      },
+      }, 
     };
 
     this.controller = new this.hap.CameraController(options);
@@ -234,7 +224,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   async prepareStream(
     request: PrepareStreamRequest,
-    callback: (error?: Error, response?: PrepareStreamResponse) => void,
+    callback: (error?: Error, response?: PrepareStreamResponse) => void
   ): Promise<void> {
     const port = await this.reservePort();
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
@@ -301,14 +291,12 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       `srtp://${session.address}:${session.port}?rtcpport=${session.port}&pkt_size=${mtu}`,
     ];
 
-    // Check if port is available
-    const net = { createServer: createNetServer };
+    // const net = require('net');
+    const net: { createServer: () => Server } = { createServer };
     const isPortFree = (port: number, host: string) => new Promise((resolve) => {
       const server = net.createServer();
       server.once('error', () => resolve(false));
-      server.once('listening', () => {
-        server.close(); resolve(true);
-      });
+      server.once('listening', () => { server.close(); resolve(true); });
       server.listen(port, host);
     });
 
@@ -450,9 +438,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private stopAll(): void {
     this.ffmpegProcess?.kill();
     this.activeStreams.forEach(session => {
-      if (session.cp) {
-        session.cp.kill();
-      }
+      if (session.cp) session.cp.kill();
     });
     this.activeStreams.clear();
   }

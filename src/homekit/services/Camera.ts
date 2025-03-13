@@ -59,6 +59,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     videoSRTP: Buffer;
     videoSSRC: number;
   }> = new Map();
+
   private ongoingSessions: Map<string, ActiveSession> = new Map();
 
   private recordingActive = false;
@@ -134,11 +135,13 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-c:v', 'libx264',
       '-r', '30',
       '-b:v', '2000k',
-      '-g', '30',
-      '-force_key_frames', 'expr:gte(t,n_forced*1)',
-      '-f', 'tee',
-      '-map', '0:v',
-      '[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof]pipe:1',
+      '-g', '15', // GOP size of 15 frames (~0.5s at 30 fps)
+      '-keyint_min', '15', // Minimum keyframe interval
+      '-x264-params', 'keyint=15:min-keyint=15:scenecut=0', // Explicitly force IDR every 15 frames, disable scene detection
+      '-force_key_frames', 'expr:gte(t,n_forced*0.5)', // Additional forcing every 0.5s
+      '-f', 'h264',
+      '-bsf:v', 'h264_mp4toannexb',
+      'pipe:1',
     ];
 
     this.log.debug(`Starting pre-buffer with args: ${args.join(' ')}`);
@@ -156,35 +159,47 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     stream.on('data', (chunk: Buffer) => {
       this.log.debug(`Pre-buffer chunk received: ${chunk.length} bytes`);
       buffer = Buffer.concat([buffer, chunk]);
-      while (buffer.length >= 8) {
-        const length = buffer.readUInt32BE(0);
-        if (buffer.length >= length) {
-          const atom = buffer.slice(0, length);
-          const type = atom.slice(4, 8).toString();
-          const now = Date.now();
-          if (type === 'mdat') {
-            this.log.debug(`Pre-buffer mdat atom: ${atom.length} bytes, first 16 bytes: ${atom.slice(0, 16).toString('hex')}`);
-            this.preBuffer.push({ data: atom, timestamp: now, isKeyFrame: this.isKeyFrame(atom) });
-            this.preBuffer = this.preBuffer.filter(entry => entry.timestamp > now - this.preBufferDuration);
-            if (!this.snapshotCache || this.snapshotCache.timestamp < now - 5000) {
-              this.extractSnapshot().then(snapshot => {
-                if (snapshot.length > 0) {
-                  this.snapshotCache = { data: snapshot, timestamp: now };
-                }
-              }).catch(err => this.log.error(`Snapshot extraction failed: ${err}`));
-            }
+      while (buffer.length >= 5) {
+        let nalStart = -1;
+        for (let i = 0; i < buffer.length - 4; i++) {
+          if (buffer[i] === 0 && buffer[i + 1] === 0 && buffer[i + 2] === 0 && buffer[i + 3] === 1) {
+            nalStart = i;
+            break;
           }
-          buffer = buffer.slice(length);
-        } else {
+        }
+        if (nalStart === -1) {
           break;
+        }
+
+        let nalEnd = buffer.length;
+        for (let i = nalStart + 4; i < buffer.length - 4; i++) {
+          if (buffer[i] === 0 && buffer[i + 1] === 0 && buffer[i + 2] === 0 && buffer[i + 3] === 1) {
+            nalEnd = i;
+            break;
+          }
+        }
+
+        const nalUnit = buffer.slice(nalStart, nalEnd);
+        const now = Date.now();
+        this.preBuffer.push({ data: nalUnit, timestamp: now, isKeyFrame: this.isKeyFrame(nalUnit) });
+        this.preBuffer = this.preBuffer.filter(entry => entry.timestamp > now - this.preBufferDuration);
+        buffer = buffer.slice(nalEnd);
+
+        if (!this.snapshotCache || this.snapshotCache.timestamp < now - 5000) {
+          this.extractSnapshot().then(snapshot => {
+            if (snapshot.length > 0) {
+              this.snapshotCache = { data: snapshot, timestamp: now };
+            }
+          }).catch(err => this.log.error(`Snapshot extraction failed: ${err}`));
         }
       }
     });
   }
 
-  private isKeyFrame(atom: Buffer): boolean {
-    const data = atom.slice(8);
-    if (data.length <= 4) return false;
+  private isKeyFrame(data: Buffer): boolean {
+    if (data.length <= 4) {
+      return false;
+    }
     const nalUnitType = data[4] & 0x1F;
     const isKey = nalUnitType === 5 || nalUnitType === 7; // Accept IDR or SPS
     this.log.debug(`Checking keyframe: NAL type=${nalUnitType}, isKeyFrame=${isKey}`);
@@ -192,34 +207,25 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private async extractSnapshot(): Promise<Buffer> {
-    const keyFrameIdx = this.preBuffer.findIndex(entry => entry.isKeyFrame);
+    const keyFrameIdx = this.preBuffer.findIndex(entry => entry.isKeyFrame && (entry.data[4] & 0x1F) === 5); // Look for IDR specifically
     if (keyFrameIdx === -1) {
-      this.log.warn('No keyframe found for snapshot');
+      this.log.warn('No IDR keyframe found for snapshot');
       return Buffer.alloc(0);
     }
 
-    // Take entries until we find an IDR or hit a max of 10 atoms
     const entries: PreBufferEntry[] = [];
-    let hasIdr = false;
     for (let i = keyFrameIdx; i < this.preBuffer.length && entries.length < 10; i++) {
       entries.push(this.preBuffer[i]);
-      const nalType = this.preBuffer[i].data.slice(8, 13)[4] & 0x1F;
-      if (nalType === 5) {
-        hasIdr = true;
-        break;
-      }
     }
 
-    const h264Data = Buffer.concat(entries.map(entry => entry.data.slice(8)));
-    this.log.debug(`Extracting snapshot from ${entries.length} atoms, total size: ${h264Data.length} bytes, has IDR: ${hasIdr}`);
+    const h264Data = Buffer.concat(entries.map(entry => entry.data));
+    this.log.debug(`Extracting snapshot from ${entries.length} NAL units, total size: ${h264Data.length} bytes`);
 
-    // Log NAL types for debugging
-    let offset = 0;
     const nalTypes: number[] = [];
+    let offset = 0;
     while (offset < h264Data.length - 4) {
       if (h264Data[offset] === 0 && h264Data[offset + 1] === 0 && h264Data[offset + 2] === 0 && h264Data[offset + 3] === 1) {
-        const nalType = h264Data[offset + 4] & 0x1F;
-        nalTypes.push(nalType);
+        nalTypes.push(h264Data[offset + 4] & 0x1F);
         offset += 5;
       } else {
         offset++;
@@ -415,7 +421,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.log.debug(`Stream FFmpeg stderr: ${stderr}`);
       if (stderr.includes('NAL')) {
         const nalMatch = stderr.match(/NAL\s*(\d+)/);
-        if (nalMatch) this.log.debug(`Stream NAL type detected: ${nalMatch[1]}`);
+        if (nalMatch) {
+          this.log.debug(`Stream NAL type detected: ${nalMatch[1]}`);
+        }
       }
     });
     cp.on('error', (err) => {
@@ -440,13 +448,20 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         }
       });
       setTimeout(() => {
-        if (!hasOutput) reject(new Error('No frames output after 5s'));
-        else resolve();
+        if (!hasOutput) {
+          reject(new Error('No frames output after 5s'));
+        } else {
+          resolve();
+        }
       }, 5000);
     });
 
     waitForOutput.then(() => {
-      this.log.info(`Started video stream: ${request.video.width}x${request.video.height}, ${request.video.fps} fps, ${request.video.max_bit_rate} kbps`, this.cameraName);
+      this.log.info(
+        `Started video stream: ${request.video.width}x${request.video.height}, ` +
+        `${request.video.fps} fps, ${request.video.max_bit_rate} kbps`,
+        this.cameraName,
+      );
       this.ongoingSessions.set(request.sessionID, activeSession);
       this.pendingSessions.delete(request.sessionID);
       callback();
@@ -529,7 +544,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     ];
     const preBufferInput = this.getPreBufferVideo();
     const args = [
-      '-f', 'mp4',
+      '-f', 'h264',
       '-i', 'pipe:',
       ...videoArgs,
       '-f', 'mp4',

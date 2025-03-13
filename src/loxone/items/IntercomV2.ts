@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { MotionSensor } from '../../homekit/services/MotionSensor'; // Adjust path as needed
+import { MotionSensor } from '../../homekit/services/MotionSensor';
 import { CameraService } from '../../homekit/services/Camera';
 
 /**

@@ -90,12 +90,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         },
         audio: {
           twoWayAudio: false,
-          codecs: [
-            {
-              type: AudioStreamingCodecType.AAC_ELD,
-              samplerate: AudioStreamingSamplerate.KHZ_16,
-            },
-          ],
+          codecs: [],
         },
       },
       recording: {

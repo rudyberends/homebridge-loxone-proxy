@@ -124,13 +124,16 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     ];
 
     try {
-      this.ffmpegProcess = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'ignore'] });
+      this.log.debug(`Starting pre-buffer with args: ${args.join(' ')}`);
+      this.ffmpegProcess = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (err) {
-      this.log.error(`Failed to spawn FFmpeg: ${err}`);
+      this.log.error(`Failed to spawn FFmpeg for pre-buffer: ${err}`);
       throw err;
     }
     this.ffmpegProcess.on('error', (err) => this.log.error(`PreBuffer FFmpeg error: ${err}`, this.cameraName));
+    this.ffmpegProcess.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
     this.ffmpegProcess.on('exit', () => {
+      this.log.debug('PreBuffer FFmpeg exited');
       this.ffmpegProcess = undefined;
       this.preBuffer = [];
     });
@@ -138,6 +141,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const stream = this.ffmpegProcess.stdout!;
     let buffer = Buffer.alloc(0);
     stream.on('data', (chunk: Buffer) => {
+      this.log.debug(`Pre-buffer chunk received: ${chunk.length} bytes`);
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 8) {
         const length = buffer.readUInt32BE(0);
@@ -146,6 +150,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           const type = atom.slice(4, 8).toString();
           const now = Date.now();
           if (type === 'mdat') {
+            this.log.debug(`Pre-buffer mdat atom: ${atom.length} bytes`);
             this.preBuffer.push({ data: atom, timestamp: now, isKeyFrame: this.isKeyFrame(atom) });
             this.preBuffer = this.preBuffer.filter(entry => entry.timestamp > now - this.preBufferDuration);
             if (!this.snapshotCache || this.snapshotCache.timestamp < now - 5000) {
@@ -167,32 +172,58 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private extractSnapshot(atom: Buffer): Buffer {
     const args = ['-i', 'pipe:', '-frames:v', '1', '-f', 'image2', 'pipe:'];
-    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'ignore'] });
+    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    cp.stderr.on('data', (data) => this.log.debug(`Extract snapshot FFmpeg stderr: ${data}`));
     cp.stdin.write(atom);
     cp.stdin.end();
     return cp.stdout.read() || Buffer.alloc(0);
   }
 
   async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
+    this.log.debug(`Snapshot requested: ${request.width} x ${request.height}`);
+
     if (this.snapshotCache && this.snapshotCache.timestamp > Date.now() - 5000) {
+      this.log.debug('Returning cached snapshot');
       return callback(undefined, this.snapshotCache.data);
     }
-    const snapshot = await this.generateSnapshot();
-    this.snapshotCache = { data: snapshot, timestamp: Date.now() };
-    callback(undefined, snapshot);
+
+    try {
+      const snapshot = await this.generateSnapshot();
+      this.snapshotCache = { data: snapshot, timestamp: Date.now() };
+      callback(undefined, snapshot);
+    } catch (err) {
+      this.log.error(`Snapshot generation failed: ${err}`);
+      callback(err instanceof Error ? err : new Error('Snapshot failed'));
+    }
   }
 
   private async generateSnapshot(): Promise<Buffer> {
-    const args = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-i', this.streamUrl,
-      '-frames:v', '1',
-      '-f', 'image2',
-      'pipe:',
-    ];
-    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'ignore'] });
-    const [buffer] = await Promise.all([once(cp.stdout, 'data'), once(cp, 'exit')]);
-    return Buffer.from(buffer as any);
+    return new Promise((resolve, reject) => {
+      const args = [
+        '-re',
+        '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+        '-i', this.streamUrl,
+        '-frames:v', '1',
+        '-f', 'image2',
+        '-',
+      ];
+      const cp = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+
+      const snapshotBuffers: Buffer[] = [];
+      cp.stdout.on('data', (data) => snapshotBuffers.push(data));
+      cp.stderr.on('data', (data) => this.log.info(`Snapshot FFmpeg: ${data}`));
+      cp.on('exit', (code, signal) => {
+        if (signal) {
+          reject(new Error(`Snapshot process killed with signal: ${signal}`));
+        } else if (code === 0) {
+          const snapshot = Buffer.concat(snapshotBuffers);
+          this.log.debug(`Generated snapshot, size: ${snapshot.length} bytes`);
+          resolve(snapshot);
+        } else {
+          reject(new Error(`Snapshot process exited with code: ${code}`));
+        }
+      });
+    });
   }
 
   async prepareStream(
@@ -205,7 +236,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.activeStreams.set(request.sessionID, { cp: null as any, port, videoSRTP, videoSSRC });
     callback(undefined, {
       video: { port, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
-      // No audio section included
     });
   }
 
@@ -232,6 +262,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     }
 
     const args = [
+      '-re', // Added for real-time streaming
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
       '-c:v', 'libx264',
@@ -243,8 +274,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       `srtp://127.0.0.1:${session.port}?rtcpport=${session.port}`,
     ];
 
-    const cp = spawn('ffmpeg', args, { stdio: 'ignore' });
+    this.log.debug(`Starting stream with args: ${args.join(' ')}`);
+    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     session.cp = cp;
+    cp.stderr.on('data', (data) => this.log.debug(`Stream FFmpeg stderr: ${data}`));
     cp.on('error', (err) => {
       this.log.error(`Stream FFmpeg error: ${err}`, this.cameraName);
       callback(err);
@@ -285,6 +318,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     let buffer = Buffer.alloc(0);
 
     try {
+      if (cp.stderr) {
+        cp.stderr.on('data', (data) => this.log.debug(`Recording FFmpeg stderr: ${data}`));
+      }
       for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
         while (buffer.length >= 8) {
@@ -319,7 +355,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
       'pipe:',
     ];
-    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'ignore'] });
+    this.log.debug(`Starting recording with args: ${args.join(' ')}`);
+    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     cp.stdin.write(preBufferInput);
     cp.stdin.end();
     return cp;

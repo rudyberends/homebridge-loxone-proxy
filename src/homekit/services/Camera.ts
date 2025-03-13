@@ -17,10 +17,12 @@ import {
   StartStreamRequest,
   StreamRequestTypes,
   MediaContainerType,
-  H264CodecParameters,
   H264Profile,
   H264Level,
-  AudioRecordingOptions,
+  AudioStreamingCodecType,
+  AudioStreamingSamplerate,
+  AudioRecordingCodecType,
+  AudioRecordingSamplerate,
 } from 'homebridge';
 import { ChildProcess, spawn } from 'child_process';
 import { LoxonePlatform } from '../../LoxonePlatform';
@@ -35,14 +37,6 @@ interface PreBufferEntry {
   isKeyFrame: boolean;
 }
 
-/**
- * A service that manages camera streaming and recording for HomeKit Secure Video (HKSV).
- * Implements both `CameraStreamingDelegate` and `CameraRecordingDelegate` to handle live streaming,
- * snapshots, and event-triggered recordings with pre-buffering. Audio is currently disabled.
- * @class
- * @implements {CameraStreamingDelegate}
- * @implements {CameraRecordingDelegate}
- */
 export class CameraService implements CameraStreamingDelegate, CameraRecordingDelegate {
   private readonly hap: HAP;
   private readonly log: LoxonePlatform['log'];
@@ -55,7 +49,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private preBuffer: PreBufferEntry[] = [];
   private preBufferDuration = 4000;
   private snapshotCache?: { data: Buffer; timestamp: number };
-  private activeStreams: Map<string, { cp: ChildProcess; port: number; videoSRTP: Buffer; videoSSRC: number }> = new Map();
+  private activeStreams: Map<string, { cp: ChildProcess; port: number; address: string; videoSRTP: Buffer; videoSSRC: number }> = new Map();
   private recordingActive = false;
   private recordingConfig?: any;
 
@@ -71,13 +65,16 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.cameraName = accessory.displayName;
 
     // Get authentication from constructor (V1) or use miniserver credentials (V2)
-    this.base64auth = base64auth ||
-      Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
+    this.base64auth = base64auth || Buffer.from(
+      `${this.platform.config.username}:${this.platform.config.password}`,
+      'utf8',
+    ).toString('base64');
 
-    const videoParameters: H264CodecParameters = {
-      profiles: [H264Profile.MAIN],
-      levels: [H264Level.LEVEL4_0],
-    };
+    const resolutions: [number, number, number][] = [
+      [320, 180, 30], [320, 240, 15], [320, 240, 30], [480, 270, 30],
+      [480, 360, 30], [640, 360, 30], [640, 480, 30], [1024, 768, 30],
+      [1280, 720, 30],
+    ];
 
     const options: CameraControllerOptions = {
       cameraStreamCount: 2,
@@ -85,10 +82,21 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       streamingOptions: {
         supportedCryptoSuites: [this.hap.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
         video: {
-          codec: { profiles: [this.hap.H264Profile.MAIN], levels: [this.hap.H264Level.LEVEL4_0] },
-          resolutions: [[1920, 1080, 30], [1280, 720, 30], [640, 360, 15]],
+          codec: {
+            profiles: [this.hap.H264Profile.BASELINE, this.hap.H264Profile.MAIN, this.hap.H264Profile.HIGH],
+            levels: [this.hap.H264Level.LEVEL3_1, this.hap.H264Level.LEVEL3_2, this.hap.H264Level.LEVEL4_0],
+          },
+          resolutions,
         },
-        // Audio is disabled by omitting the audio property for streaming
+        audio: {
+          twoWayAudio: false,
+          codecs: [
+            {
+              type: AudioStreamingCodecType.AAC_ELD,
+              samplerate: AudioStreamingSamplerate.KHZ_16,
+            },
+          ],
+        },
       },
       recording: {
         options: {
@@ -97,11 +105,19 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           video: {
             type: this.hap.VideoCodecType.H264,
             resolutions: [[1920, 1080, 30], [1280, 720, 30]],
-            parameters: videoParameters,
+            parameters: {
+              profiles: [H264Profile.BASELINE, H264Profile.MAIN, H264Profile.HIGH],
+              levels: [H264Level.LEVEL3_1, H264Level.LEVEL3_2, H264Level.LEVEL4_0],
+            },
           },
           audio: {
-            codecs: [{ type: this.hap.AudioRecordingCodecType.AAC_LC, samplerate: 16 }],
-          } as unknown as AudioRecordingOptions,
+            codecs: [
+              {
+                type: AudioRecordingCodecType.AAC_LC,
+                samplerate: AudioRecordingSamplerate.KHZ_16,
+              },
+            ],
+          },
         },
         delegate: this,
       },
@@ -122,7 +138,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-r', '30',
       '-b:v', '2000k',
       '-f', 'tee',
-      '-map', '0:v', // Only map video, no audio
+      '-map', '0:v',
       '[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof]pipe:1',
     ];
 
@@ -174,12 +190,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private extractSnapshot(atom: Buffer): Buffer {
-    const args = ['-i', 'pipe:', '-frames:v', '1', '-f', 'image2', 'pipe:'];
-    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
-    cp.stderr.on('data', (data) => this.log.debug(`Extract snapshot FFmpeg stderr: ${data}`));
-    cp.stdin.write(atom);
-    cp.stdin.end();
-    return cp.stdout.read() || Buffer.alloc(0);
+    return Buffer.alloc(0); // Fallback to generateSnapshot
   }
 
   async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
@@ -231,12 +242,14 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   async prepareStream(
     request: PrepareStreamRequest,
-    callback: (error?: Error, response?: PrepareStreamResponse) => void,
+    callback: (error?: Error, response?: PrepareStreamResponse) => void
   ): Promise<void> {
     const port = await this.reservePort();
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
     const videoSRTP = Buffer.concat([request.video.srtp_key, request.video.srtp_salt]);
-    this.activeStreams.set(request.sessionID, { cp: null as any, port, videoSRTP, videoSSRC });
+    const address = request.targetAddress || '127.0.0.1'; // Use targetAddress if provided
+    this.activeStreams.set(request.sessionID, { cp: null as any, port, address, videoSRTP, videoSSRC });
+    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, SRTP: ${videoSRTP.toString('base64')}, SSRC: ${videoSSRC}`);
     callback(undefined, {
       video: { port, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
     });
@@ -265,25 +278,38 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       return callback(new Error('Session not found'));
     }
 
-    const args = [
-      '-re', // Real-time input
-      '-headers', `Authorization: Basic ${this.base64auth}`,
+    const mtu = request.video.mtu || 1316; // Default MTU from HomeKit spec
+    const ffmpegArgs: string[] = [
+      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+      '-use_wallclock_as_timestamps', '1',
+      '-probesize', '32',
+      '-analyzeduration', '0',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
+      '-max_delay', '0',
+      '-re',
       '-i', this.streamUrl,
-      '-c:v', 'libx264',
+      '-an', '-sn', '-dn',
+      '-codec:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-color_range', 'mpeg',
       '-r', request.video.fps.toString(),
+      '-f', 'rawvideo',
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-crf', '22',
+      '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-b:v', `${request.video.max_bit_rate}k`,
-      '-preset', 'ultrafast', // Faster encoding for real-time
-      '-tune', 'zerolatency', // Minimize latency
-      '-g', '15', // Keyframe every 15 frames (0.5s at 30fps) for HomeKit compatibility
+      '-payload_type', '99',
+      '-ssrc', `${session.videoSSRC}`,
       '-f', 'rtp',
       '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
       '-srtp_out_params', session.videoSRTP.toString('base64'),
-      `srtp://127.0.0.1:${session.port}?rtcpport=${session.port}`,
+      `srtp://${session.address}:${session.port}?rtcpport=${session.port}&pkt_size=${mtu}`,
     ];
 
-    this.log.debug(`Starting stream with args: ${args.join(' ')}`);
-    this.log.debug(`Stream port: ${session.port}, SRTP params: ${session.videoSRTP.toString('base64')}`);
-    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    this.log.debug(`Starting stream with args: ${ffmpegArgs.join(' ')}`);
+    const cp = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
     session.cp = cp;
 
     cp.stderr.on('data', (data) => this.log.debug(`Stream FFmpeg stderr: ${data}`));
@@ -296,7 +322,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.stopStream(request.sessionID);
     });
 
-    // Wait for FFmpeg to start outputting (or a short timeout) before callback
     const waitForOutput = new Promise<void>((resolve) => {
       cp.stderr.once('data', (data) => {
         if (data.toString().includes('frame=')) {
@@ -304,11 +329,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           resolve();
         }
       });
-      setTimeout(resolve, 1000); // Fallback after 1s if no frame data
+      setTimeout(() => {
+        this.log.debug('Stream FFmpeg output wait timeout reached');
+        resolve();
+      }, 2000);
     });
 
     await waitForOutput;
-    callback(); // Signal HomeKit that streaming has started
+    this.log.debug('Stream callback triggered');
+    callback();
   }
 
   private stopStream(sessionId: string): void {
@@ -343,9 +372,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     let buffer = Buffer.alloc(0);
 
     try {
-      if (cp.stderr) {
-        cp.stderr.on('data', (data) => this.log.debug(`Recording FFmpeg stderr: ${data}`));
-      }
+      cp.stderr?.on('data', (data) => this.log.debug(`Recording FFmpeg stderr: ${data}`));
       for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
         while (buffer.length >= 8) {

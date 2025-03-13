@@ -21,15 +21,21 @@ import {
   H264Level,
 } from 'homebridge';
 import { ChildProcess, spawn } from 'child_process';
-import { LoxonePlatform } from '../../LoxonePlatform';
-import { once } from 'events';
+import { createSocket, Socket } from 'node:dgram';
 import { Readable } from 'stream';
-import { AddressInfo, createServer } from 'net';
+import { LoxonePlatform } from '../../LoxonePlatform';
+import { pickPort } from 'pick-port';
 
 interface PreBufferEntry {
   data: Buffer;
   timestamp: number;
   isKeyFrame: boolean;
+}
+
+interface ActiveSession {
+  mainProcess?: ChildProcess;
+  socket?: Socket;
+  timeout?: NodeJS.Timeout;
 }
 
 export class CameraService implements CameraStreamingDelegate, CameraRecordingDelegate {
@@ -45,13 +51,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private preBufferDuration = 4000;
   private snapshotCache?: { data: Buffer; timestamp: number };
 
-  private activeStreams: Map<string, {
-    cp: ChildProcess | null;
-    port: number;
+  private pendingSessions: Map<string, {
     address: string;
+    ipv6: boolean;
+    videoPort: number;
+    videoReturnPort: number;
     videoSRTP: Buffer;
     videoSSRC: number;
   }> = new Map();
+  private ongoingSessions: Map<string, ActiveSession> = new Map();
 
   private recordingActive = false;
   private recordingConfig?: any;
@@ -126,19 +134,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-c:v', 'libx264',
       '-r', '30',
       '-b:v', '2000k',
-      '-g', '30', // Force keyframes every 1 second
+      '-g', '30',
+      '-force_key_frames', 'expr:gte(t,n_forced*1)',
       '-f', 'tee',
       '-map', '0:v',
       '[f=mp4:movflags=frag_keyframe+empty_moov+default_base_moof]pipe:1',
     ];
 
-    try {
-      this.log.debug(`Starting pre-buffer with args: ${args.join(' ')}`);
-      this.ffmpegProcess = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
-    } catch (err) {
-      this.log.error(`Failed to spawn FFmpeg for pre-buffer: ${err}`);
-      throw err;
-    }
+    this.log.debug(`Starting pre-buffer with args: ${args.join(' ')}`);
+    this.ffmpegProcess = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
     this.ffmpegProcess.on('error', (err) => this.log.error(`PreBuffer FFmpeg error: ${err}`, this.cameraName));
     this.ffmpegProcess.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
     this.ffmpegProcess.on('exit', () => {
@@ -152,7 +156,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     stream.on('data', (chunk: Buffer) => {
       this.log.debug(`Pre-buffer chunk received: ${chunk.length} bytes`);
       buffer = Buffer.concat([buffer, chunk]);
-      this.log.debug(`Buffer size: ${buffer.length}, First 8 bytes: ${buffer.slice(0, 8).toString('hex')}`);
       while (buffer.length >= 8) {
         const length = buffer.readUInt32BE(0);
         if (buffer.length >= length) {
@@ -160,7 +163,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           const type = atom.slice(4, 8).toString();
           const now = Date.now();
           if (type === 'mdat') {
-            this.log.debug(`Pre-buffer mdat atom: ${atom.length} bytes`);
+            this.log.debug(`Pre-buffer mdat atom: ${atom.length} bytes, first 16 bytes: ${atom.slice(0, 16).toString('hex')}`);
             this.preBuffer.push({ data: atom, timestamp: now, isKeyFrame: this.isKeyFrame(atom) });
             this.preBuffer = this.preBuffer.filter(entry => entry.timestamp > now - this.preBufferDuration);
             if (!this.snapshotCache || this.snapshotCache.timestamp < now - 5000) {
@@ -181,27 +184,52 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private isKeyFrame(atom: Buffer): boolean {
     const data = atom.slice(8);
-    if (data.length <= 4) {
-      return false;
-    }
+    if (data.length <= 4) return false;
     const nalUnitType = data[4] & 0x1F;
-    const isKey = nalUnitType === 5; // IDR frame
+    const isKey = nalUnitType === 5 || nalUnitType === 7; // Accept IDR or SPS
     this.log.debug(`Checking keyframe: NAL type=${nalUnitType}, isKeyFrame=${isKey}`);
     return isKey;
   }
 
   private async extractSnapshot(): Promise<Buffer> {
-    const latestKeyFrame = this.preBuffer
-      .filter(entry => entry.isKeyFrame)
-      .sort((a, b) => b.timestamp - a.timestamp)[0];
-
-    if (!latestKeyFrame) {
+    const keyFrameIdx = this.preBuffer.findIndex(entry => entry.isKeyFrame);
+    if (keyFrameIdx === -1) {
       this.log.warn('No keyframe found for snapshot');
       return Buffer.alloc(0);
     }
 
+    // Take entries until we find an IDR or hit a max of 10 atoms
+    const entries: PreBufferEntry[] = [];
+    let hasIdr = false;
+    for (let i = keyFrameIdx; i < this.preBuffer.length && entries.length < 10; i++) {
+      entries.push(this.preBuffer[i]);
+      const nalType = this.preBuffer[i].data.slice(8, 13)[4] & 0x1F;
+      if (nalType === 5) {
+        hasIdr = true;
+        break;
+      }
+    }
+
+    const h264Data = Buffer.concat(entries.map(entry => entry.data.slice(8)));
+    this.log.debug(`Extracting snapshot from ${entries.length} atoms, total size: ${h264Data.length} bytes, has IDR: ${hasIdr}`);
+
+    // Log NAL types for debugging
+    let offset = 0;
+    const nalTypes: number[] = [];
+    while (offset < h264Data.length - 4) {
+      if (h264Data[offset] === 0 && h264Data[offset + 1] === 0 && h264Data[offset + 2] === 0 && h264Data[offset + 3] === 1) {
+        const nalType = h264Data[offset + 4] & 0x1F;
+        nalTypes.push(nalType);
+        offset += 5;
+      } else {
+        offset++;
+      }
+    }
+    this.log.debug(`NAL types in snapshot data: ${nalTypes.join(', ')}`);
+
     return new Promise((resolve, reject) => {
       const cp = spawn('ffmpeg', [
+        '-f', 'h264',
         '-i', 'pipe:',
         '-frames:v', '1',
         '-f', 'image2',
@@ -221,7 +249,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           reject(new Error(`Snapshot extraction failed with code ${code}`));
         }
       });
-      cp.stdin.write(latestKeyFrame.data);
+      cp.stdin.write(h264Data);
       cp.stdin.end();
     });
   }
@@ -236,7 +264,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     try {
       const snapshot = await this.extractSnapshot();
       if (snapshot.length === 0) {
-        this.log.warn('Falling back to generateSnapshot');
+        this.log.warn('No valid snapshot from pre-buffer, falling back to generateSnapshot');
         const fallback = await this.generateSnapshot();
         this.snapshotCache = { data: fallback, timestamp: Date.now() };
         callback(undefined, fallback);
@@ -246,7 +274,14 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       }
     } catch (err) {
       this.log.error(`Snapshot failed: ${err}`);
-      callback(err instanceof Error ? err : new Error('Snapshot failed'));
+      try {
+        const emergencyFallback = await this.generateSnapshot();
+        this.snapshotCache = { data: emergencyFallback, timestamp: Date.now() };
+        callback(undefined, emergencyFallback);
+      } catch (fallbackErr) {
+        this.log.error(`Fallback snapshot also failed: ${fallbackErr}`);
+        callback(fallbackErr instanceof Error ? fallbackErr : new Error('Snapshot failed'));
+      }
     }
   }
 
@@ -283,23 +318,33 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     request: PrepareStreamRequest,
     callback: (error?: Error, response?: PrepareStreamResponse) => void,
   ): Promise<void> {
-    const port = await this.reservePort();
+    const ipv6 = request.addressVersion === 'ipv6';
+    const options = { type: 'udp', ip: ipv6 ? '::' : '0.0.0.0', reserveTimeout: 15 } as const;
+    const videoReturnPort = await pickPort(options);
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
     const videoSRTP = Buffer.concat([request.video.srtp_key, request.video.srtp_salt]);
-    const address = request.targetAddress; // Use HomeKit-provided address
-    this.activeStreams.set(request.sessionID, { cp: null, port, address, videoSRTP, videoSSRC });
-    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${address}, Port: ${port}, ` +
-      `Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}, ` +
-      `Key: ${request.video.srtp_key.toString('base64')}, Salt: ${request.video.srtp_salt.toString('base64')}`);
+
+    const sessionInfo = {
+      address: request.targetAddress,
+      ipv6,
+      videoPort: request.video.port,
+      videoReturnPort,
+      videoSRTP,
+      videoSSRC,
+    };
+
+    this.pendingSessions.set(request.sessionID, sessionInfo);
+    this.log.debug(`Prepared stream - Session: ${request.sessionID}, Address: ${sessionInfo.address}, Port: ${videoReturnPort}, ` +
+      `Video SRTP: ${videoSRTP.toString('base64')}, Video SSRC: ${videoSSRC}`);
     callback(undefined, {
-      video: { port, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
+      video: { port: videoReturnPort, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
     });
   }
 
   async handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback): Promise<void> {
     switch (request.type) {
       case StreamRequestTypes.START:
-        await this.startStream(request as StartStreamRequest, callback);
+        this.startStream(request as StartStreamRequest, callback);
         break;
       case StreamRequestTypes.STOP:
         this.stopStream(request.sessionID);
@@ -312,51 +357,70 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     }
   }
 
-  private async startStream(request: StartStreamRequest, callback: StreamRequestCallback): Promise<void> {
-    const session = this.activeStreams.get(request.sessionID);
-    if (!session) {
+  private startStream(request: StartStreamRequest, callback: StreamRequestCallback): void {
+    const sessionInfo = this.pendingSessions.get(request.sessionID);
+    if (!sessionInfo) {
       this.log.error('Session not found for streaming');
       return callback(new Error('Session not found'));
     }
 
-    const mtu = request.video.mtu || 1378;
-    const ffmpegArgs: string[] = [
+    const mtu = 1378; // Matches your logs
+    const ffmpegArgs = [
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
-      '-use_wallclock_as_timestamps', '1',
-      '-probesize', '32',
-      '-analyzeduration', '0',
-      '-fflags', 'nobuffer',
-      '-flags', 'low_delay',
-      '-max_delay', '0',
       '-re',
       '-i', this.streamUrl,
       '-an', '-sn', '-dn',
-      '-c:v', 'libx264',
+      '-codec:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-color_range', 'mpeg',
       '-r', request.video.fps.toString(),
+      '-f', 'rawvideo',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
       '-b:v', `${request.video.max_bit_rate}k`,
-      '-maxrate', `${request.video.max_bit_rate}k`,
-      '-bufsize', `${request.video.max_bit_rate * 2}k`,
       '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-payload_type', '99',
-      '-ssrc', `${session.videoSSRC}`,
+      '-payload_type', request.video.pt.toString(),
+      '-ssrc', sessionInfo.videoSSRC.toString(),
       '-f', 'rtp',
       '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
-      '-srtp_out_params', session.videoSRTP.toString('base64'),
-      `srtp://${session.address}:${session.port}?rtcpport=${session.port}&pkt_size=${mtu}`,
+      '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
+      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
+      '-loglevel', 'level+verbose',
     ];
 
     this.log.debug(`Starting stream with args: ${ffmpegArgs.join(' ')}`);
-    const cp = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-    session.cp = cp;
+    const activeSession: ActiveSession = {};
+    activeSession.socket = createSocket(sessionInfo.ipv6 ? 'udp6' : 'udp4');
+    activeSession.socket.on('error', (err) => {
+      this.log.error(`Socket error: ${err.message}`, this.cameraName);
+      this.stopStream(request.sessionID);
+    });
+    activeSession.socket.on('message', () => {
+      if (activeSession.timeout) {
+        clearTimeout(activeSession.timeout);
+      }
+      activeSession.timeout = setTimeout(() => {
+        this.log.info('Device appears inactive. Stopping stream.', this.cameraName);
+        this.controller.forceStopStreamingSession(request.sessionID);
+        this.stopStream(request.sessionID);
+      }, request.video.rtcp_interval * 5 * 1000);
+    });
+    activeSession.socket.bind(sessionInfo.videoReturnPort);
 
-    cp.stderr.on('data', (data) => this.log.debug(`Stream FFmpeg stderr: ${data}`));
+    const cp = spawn('ffmpeg', ffmpegArgs, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    activeSession.mainProcess = cp;
+
+    cp.stderr.on('data', (data) => {
+      const stderr = data.toString();
+      this.log.debug(`Stream FFmpeg stderr: ${stderr}`);
+      if (stderr.includes('NAL')) {
+        const nalMatch = stderr.match(/NAL\s*(\d+)/);
+        if (nalMatch) this.log.debug(`Stream NAL type detected: ${nalMatch[1]}`);
+      }
+    });
     cp.on('error', (err) => {
       this.log.error(`Stream FFmpeg error: ${err}`, this.cameraName);
-      callback(err as Error);
+      callback(err);
     });
     cp.on('exit', (code) => {
       this.log.debug(`Stream FFmpeg exited with code ${code}`);
@@ -376,29 +440,40 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         }
       });
       setTimeout(() => {
-        if (!hasOutput) {
-          reject(new Error('No frames output after 5s'));
-        } else {
-          resolve();
-        }
+        if (!hasOutput) reject(new Error('No frames output after 5s'));
+        else resolve();
       }, 5000);
     });
 
-    try {
-      await waitForOutput;
-      this.log.debug('Stream callback triggered');
+    waitForOutput.then(() => {
+      this.log.info(`Started video stream: ${request.video.width}x${request.video.height}, ${request.video.fps} fps, ${request.video.max_bit_rate} kbps`, this.cameraName);
+      this.ongoingSessions.set(request.sessionID, activeSession);
+      this.pendingSessions.delete(request.sessionID);
       callback();
-    } catch (err) {
+    }).catch(err => {
       this.log.error(`Stream failed to start: ${err}`);
-      callback(err as Error);
-    }
+      callback(err);
+    });
   }
 
-  private stopStream(sessionId: string): void {
-    const session = this.activeStreams.get(sessionId);
-    if (session && session.cp) {
-      session.cp.kill();
-      this.activeStreams.delete(sessionId);
+  public stopStream(sessionId: string): void {
+    const session = this.ongoingSessions.get(sessionId);
+    if (session) {
+      if (session.timeout) {
+        clearTimeout(session.timeout);
+      }
+      try {
+        session.socket?.close();
+      } catch (err) {
+        this.log.error(`Error closing socket: ${err}`, this.cameraName);
+      }
+      try {
+        session.mainProcess?.kill();
+      } catch (err) {
+        this.log.error(`Error terminating FFmpeg process: ${err}`, this.cameraName);
+      }
+      this.ongoingSessions.delete(sessionId);
+      this.log.info('Stopped video stream.', this.cameraName);
     }
   }
 
@@ -483,24 +558,17 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.log.debug(`Closed stream ${streamId} with reason: ${reason}`, this.cameraName);
   }
 
-  private async reservePort(): Promise<number> {
-    const server = createServer();
-    server.listen(0);
-    await once(server, 'listening');
-    const port = (server.address() as AddressInfo).port;
-    this.log.debug(`Reserved port: ${port}`);
-    server.close();
-    return port;
-  }
-
   private stopAll(): void {
     this.ffmpegProcess?.kill();
-    this.activeStreams.forEach(session => {
-      if (session.cp) {
-        session.cp.kill();
+    this.ongoingSessions.forEach(session => {
+      if (session.mainProcess) {
+        session.mainProcess.kill();
+      }
+      if (session.socket) {
+        session.socket.close();
       }
     });
-    this.activeStreams.clear();
+    this.ongoingSessions.clear();
   }
 
   private stopAllRecordings(): void {

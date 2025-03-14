@@ -454,7 +454,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     });
   }
 
-  // ... (rest of the file remains unchanged)
 
   public stopStream(sessionId: string): void {
     const session = this.ongoingSessions.get(sessionId);
@@ -495,7 +494,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
-    if (!this.recordingActive || !this.recordingConfig) {
+    if (!this.recordingConfig) {
       throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
     }
 

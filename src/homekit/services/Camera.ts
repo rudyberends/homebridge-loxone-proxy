@@ -86,7 +86,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     ];
 
     const options: CameraControllerOptions = {
-      cameraStreamCount: 2,
+      cameraStreamCount: 20,
       delegate: this,
       streamingOptions: {
         supportedCryptoSuites: [this.hap.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
@@ -132,7 +132,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-b:v', '2000k',
       '-g', '15', // GOP size of 15 frames (~0.5s at 30 fps)
       '-keyint_min', '15',
-      '-x264-params', 'keyint=15:min-keyint=15:scenecut=0:no-scenecut=1:open-gop=0:force-cfr=1', // Force IDR every 0.5s
+      '-x264-params', 'keyint=15:min-keyint=15:scenecut=0:no-scenecut=1:open-gop=0:force-cfr=1',
       '-force_key_frames', 'expr:gte(t,n_forced*0.5)',
       '-profile:v', 'main',
       '-level', '4.0',
@@ -144,7 +144,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.log.debug(`Starting pre-buffer with args: ${args.join(' ')}`);
     this.ffmpegProcess = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
     this.ffmpegProcess.on('error', (err) => this.log.error(`PreBuffer FFmpeg error: ${err}`, this.cameraName));
-    //this.ffmpegProcess.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
     this.ffmpegProcess.on('exit', () => {
       this.log.debug('PreBuffer FFmpeg exited');
       this.ffmpegProcess = undefined;
@@ -154,7 +153,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const stream = this.ffmpegProcess.stdout!;
     let buffer = Buffer.alloc(0);
     stream.on('data', (chunk: Buffer) => {
-      //this.log.debug(`Pre-buffer chunk received: ${chunk.length} bytes`);
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 5) {
         let nalStart = -1;
@@ -199,19 +197,17 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       return false;
     }
     const nalUnitType = data[4] & 0x1F;
-    const isKey = nalUnitType === 5 || nalUnitType === 7; // IDR or SPS
-    //this.log.debug(`Checking keyframe: NAL type=${nalUnitType}, isKeyFrame=${isKey}`);
-    return isKey;
+    return nalUnitType === 5 || nalUnitType === 7; // IDR or SPS
   }
 
   private async extractSnapshot(): Promise<Buffer> {
-    const keyFrameIdx = this.preBuffer.findIndex(entry => entry.isKeyFrame); // Use SPS or IDR
+    const keyFrameIdx = this.preBuffer.findIndex(entry => entry.isKeyFrame);
     if (keyFrameIdx === -1) {
       this.log.warn('No keyframe found for snapshot');
       return Buffer.alloc(0);
     }
 
-    const entries = this.preBuffer.slice(keyFrameIdx, keyFrameIdx + 10); // Limit to 10 NALs
+    const entries = this.preBuffer.slice(keyFrameIdx, keyFrameIdx + 10);
     const h264Data = Buffer.concat(entries.map(entry => entry.data));
     this.log.debug(`Extracting snapshot from ${entries.length} NAL units, total size: ${h264Data.length} bytes`);
 
@@ -227,7 +223,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
       const chunks: Buffer[] = [];
       cp.stdout.on('data', (data) => chunks.push(data));
-      //cp.stderr.on('data', (data) => this.log.debug(`Snapshot extract stderr: ${data}`));
       cp.on('exit', (code) => {
         if (code === 0) {
           const snapshot = Buffer.concat(chunks);
@@ -343,7 +338,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     }
   }
 
-
   private startStream(request: StreamingRequest, callback: StreamRequestCallback): void {
     if (request.type !== StreamRequestTypes.START) {
       this.log.error('Invalid request type for startStream');
@@ -362,7 +356,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-re',
       '-i', this.streamUrl,
-      '-an', '-sn', '-dn', // No audio, subtitles, or data
+      '-an', '-sn', '-dn',
       '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-color_range', 'mpeg',
@@ -371,7 +365,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
       '-b:v', `${request.video.max_bit_rate}k`,
-      '-g', '15', // Force IDR every 0.5s
+      '-g', '15',
       '-keyint_min', '15',
       '-x264-params', 'keyint=15:min-keyint=15:scenecut=0',
       '-profile:v', 'main',
@@ -454,7 +448,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     });
   }
 
-
   public stopStream(sessionId: string): void {
     const session = this.ongoingSessions.get(sessionId);
     if (session) {
@@ -489,7 +482,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.log.debug(`Recording config updated: ${JSON.stringify(configuration)}`, this.cameraName);
     if (configuration && !configuration.videoCodec?.bitrate) {
       this.log.warn('Recording config missing bitrate, defaulting to 2000k', this.cameraName);
-      this.recordingConfig.videoCodec = { ...configuration.videoCodec, bitrate: 2000 }; // Fallback
+      this.recordingConfig.videoCodec = { ...configuration.videoCodec, bitrate: 2000 };
     }
   }
 
@@ -498,26 +491,26 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
     }
 
+    this.log.info(`Recording stream ${streamId} requested by HomeKit`);
     this.log.info(`Starting recording stream ${streamId}`, this.cameraName);
 
-    // Start recording with pre-buffer and live stream
     const preBufferData = this.getPreBufferVideo();
-    const bitrate = this.recordingConfig.videoCodec?.bitrate || 2000; // Fallback to 2000k if undefined
+    const bitrate = this.recordingConfig.videoCodec?.bitrate || 2000;
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
       '-c:v', 'libx264',
       '-r', '30',
-      '-b:v', `${bitrate}k`, // Use safe bitrate
-      '-g', '15', // Keyframe every 0.5s
+      '-b:v', `${bitrate}k`,
+      '-g', '15',
       '-keyint_min', '15',
       '-x264-params', 'keyint=15:min-keyint=15:scenecut=0:no-scenecut=1:open-gop=0:force-cfr=1',
       '-profile:v', 'main',
       '-level', '4.0',
-      '-an', // No audio
+      '-an',
       '-f', 'mp4',
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      '-frag_duration', '4000000', // 4s fragments (microseconds)
+      '-frag_duration', '4000000',
       'pipe:',
     ];
 
@@ -530,7 +523,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.recordingProcess = undefined;
     });
 
-    // Inject pre-buffer data
     this.recordingProcess.stdin?.write(preBufferData);
     const stream = this.recordingProcess.stdout as Readable;
     let buffer = Buffer.alloc(0);
@@ -544,7 +536,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
             break;
           }
 
-          const fragmentSize = buffer.readUInt32BE(moofBox - 4); // Size precedes 'moof'
+          const fragmentSize = buffer.readUInt32BE(moofBox - 4);
           if (buffer.length >= moofBox + fragmentSize) {
             const fragment = buffer.slice(0, moofBox + fragmentSize);
             yield { data: fragment, isLast: false };
@@ -554,11 +546,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
           }
         }
       }
-      // Signal end of stream
       yield { data: Buffer.alloc(0), isLast: true };
     } catch (err) {
       this.log.error(`Recording stream failed: ${err}`, this.cameraName);
-      throw err; // Let Homebridge handle the error
+      throw err;
     } finally {
       this.stopAllRecordings();
       this.log.info(`Recording stream ${streamId} ended`, this.cameraName);
@@ -568,10 +559,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private getPreBufferVideo(): Buffer {
     const now = Date.now();
     const filtered = this.preBuffer.filter(entry => entry.timestamp > now - this.preBufferDuration);
-    const startIdx = filtered.findIndex(entry => entry.isKeyFrame && (entry.data[4] & 0x1F) === 5); // Start with IDR
+    const startIdx = filtered.findIndex(entry => entry.isKeyFrame && (entry.data[4] & 0x1F) === 5);
     if (startIdx === -1) {
       this.log.warn('No IDR in pre-buffer for recording');
-      return Buffer.concat(filtered.map(entry => entry.data)); // Fallback to all data
+      return Buffer.concat(filtered.map(entry => entry.data));
     }
     return Buffer.concat(filtered.slice(startIdx).map(entry => entry.data));
   }

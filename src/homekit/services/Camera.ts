@@ -372,7 +372,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-r', request.video.fps.toString(),
       '-f', 'rawvideo',
       '-preset', 'ultrafast',
-      '-force_key_frames',
       '-tune', 'zerolatency',
       '-b:v', `${request.video.max_bit_rate}k`,
       '-g', '15',

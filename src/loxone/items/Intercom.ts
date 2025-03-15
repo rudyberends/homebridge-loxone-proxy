@@ -8,19 +8,21 @@ import { CameraService } from '../../homekit/services/Camera';
 */
 export class Intercom extends LoxoneAccessory {
 
+  protected camera?: CameraService;
+
   configureServices(): void {
 
     this.ItemStates = {
       [this.device.states.bell]: { 'service': 'PrimaryService', 'state': 'bell' },
     };
 
-    this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!);
-
     // Loxone Camera Present??
     this.configureCamera();
 
     // Register pushbuttons on the intercom
     this.registerChildItems();
+
+    this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!, this.camera);
   }
 
   protected async configureCamera(): Promise<void> {
@@ -51,7 +53,7 @@ export class Intercom extends LoxoneAccessory {
   }
 
   protected setupCamera(streamUrl: string, base64auth?: string | undefined): void {
-    new CameraService(this.platform, this.Accessory!, streamUrl, base64auth);
+    this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, base64auth);
   }
 
   private registerChildItems(): void {

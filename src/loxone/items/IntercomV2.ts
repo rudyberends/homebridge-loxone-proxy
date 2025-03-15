@@ -4,7 +4,7 @@ import { CameraService } from '../../homekit/services/Camera';
 
 export class IntercomV2 extends Intercom {
 
-  private camera?: CameraService;
+  protected camera?: CameraService;
 
   async configureCamera(): Promise<void> {
     let isConfigured = false;

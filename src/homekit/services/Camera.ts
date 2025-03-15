@@ -483,7 +483,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   updateRecordingConfiguration(configuration?: any): void {
     this.recordingConfig = configuration;
-    this.log.debug(`[${this.cameraName}] Recording config updated: ${configuration ? 'present' : 'null'}`);
+    this.log.debug(`[${this.cameraName}] Recording config updated: ${configuration ? JSON.stringify(configuration) : 'null'}`);
     if (configuration && !configuration.videoCodec?.bitrate) {
       this.log.warn(`[${this.cameraName}] Recording config missing bitrate, defaulting to 2000k`);
       this.recordingConfig.videoCodec = { ...configuration.videoCodec, bitrate: 2000 };

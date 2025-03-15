@@ -38,16 +38,33 @@ export class Doorbell extends BaseService {
    */
   updateService(message: { value: number }): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for Doorbell: ${message.value}`);
-
     if (message.value === 1) {
-      // Make sure the change is communicated to HomeKit
-      this.service?.getCharacteristic(this.platform.Characteristic.ProgrammableSwitchEvent)
-        ?.updateValue(this.State.ProgrammableSwitchEvent);
+      this.State.ProgrammableSwitchEvent = this.platform.Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS;
+      this.service?.updateCharacteristic(
+        this.platform.Characteristic.ProgrammableSwitchEvent,
+        this.State.ProgrammableSwitchEvent,
+      );
+      this.platform.log.debug(`[${this.device.name}] ProgrammableSwitchEvent updated in HomeKit`);
 
-      // Trigger camera recording if motion is detected
+      const motionService = this.accessory.getService(this.platform.Service.MotionSensor);
+      if (motionService) {
+        try {
+          motionService.updateCharacteristic(this.platform.Characteristic.MotionDetected, true);
+          this.platform.log.debug(`[${this.device.name}] Doorbell triggered MotionSensor for HKSV`);
+        } catch (err) {
+          this.platform.log.error(`[${this.device.name}] MotionSensor update failed: ${err}`);
+        }
+        setTimeout(() => {
+          motionService.updateCharacteristic(this.platform.Characteristic.MotionDetected, false);
+          this.platform.log.debug(`[${this.device.name}] MotionSensor reset`);
+        }, 5000);
+      } else {
+        this.platform.log.warn(`[${this.device.name}] No MotionSensor found to trigger`);
+      }
+
       if (this.camera) {
         this.platform.log.debug(`[${this.device.name}] Intercom Doorbell. Triggering HKSV recording.`);
-        this.camera.updateRecordingActive(true); // Trigger HKSV recording when motion starts
+        this.camera.updateRecordingActive(true);
       }
     }
   }

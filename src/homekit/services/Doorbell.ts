@@ -44,9 +44,12 @@ export class Doorbell extends BaseService {
       this.service?.getCharacteristic(this.platform.Characteristic.ProgrammableSwitchEvent)
         ?.updateValue(this.State.ProgrammableSwitchEvent);
 
+        console.log('Doorbell pressed');
+
       // Trigger camera recording if motion is detected
       if (this.camera) {
         this.platform.log.debug(`[${this.device.name}] Intercom Doorbell. Triggering HKSV recording.`);
+        console.log('!!!HKSV ACTIVE!!!');
         this.camera.updateRecordingActive(true); // Trigger HKSV recording when motion starts
       }
     }

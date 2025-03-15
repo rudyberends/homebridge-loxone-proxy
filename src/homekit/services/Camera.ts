@@ -118,6 +118,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     this.controller = new this.hap.CameraController(options);
     accessory.configureController(this.controller);
+    this.log.debug(`[${this.cameraName}] Camera recording delegate configured`);
 
     this.startPreBufferStream();
     platform.api.on('shutdown' as any, () => this.stopAll());
@@ -130,7 +131,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-c:v', 'libx264',
       '-r', '30',
       '-b:v', '2000k',
-      '-g', '15', // GOP size of 15 frames (~0.5s at 30 fps)
+      '-g', '15',
       '-keyint_min', '15',
       '-x264-params', 'keyint=15:min-keyint=15:scenecut=0:no-scenecut=1:open-gop=0:force-cfr=1',
       '-force_key_frames', 'expr:gte(t,n_forced*0.5)',
@@ -475,24 +476,28 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.stopAllRecordings();
     }
     this.log.debug(`Recording active: ${active}`, this.cameraName);
+    if (active && !this.recordingConfig) {
+      this.log.warn(`[${this.cameraName}] Recording active but no configuration set`);
+    }
   }
 
   updateRecordingConfiguration(configuration?: any): void {
     this.recordingConfig = configuration;
-    this.log.debug(`Recording config updated: ${JSON.stringify(configuration)}`, this.cameraName);
+    this.log.debug(`[${this.cameraName}] Recording config updated: ${configuration ? 'present' : 'null'}`);
     if (configuration && !configuration.videoCodec?.bitrate) {
-      this.log.warn('Recording config missing bitrate, defaulting to 2000k', this.cameraName);
+      this.log.warn(`[${this.cameraName}] Recording config missing bitrate, defaulting to 2000k`);
       this.recordingConfig.videoCodec = { ...configuration.videoCodec, bitrate: 2000 };
     }
   }
 
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
-    if (!this.recordingConfig) {
-      throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
-    }
-
     this.log.info(`Recording stream ${streamId} requested by HomeKit`);
     this.log.info(`Starting recording stream ${streamId}`, this.cameraName);
+
+    if (!this.recordingConfig) {
+      this.log.error(`[${this.cameraName}] No recording config, HKSV not allowed`);
+      throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
+    }
 
     const preBufferData = this.getPreBufferVideo();
     const bitrate = this.recordingConfig.videoCodec?.bitrate || 2000;

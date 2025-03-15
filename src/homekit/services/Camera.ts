@@ -65,7 +65,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private recordingProcess?: ChildProcess;
 
   private recordingActive = false;
-  private recordingConfig?: any;
+  private recordingConfig?: any = { // Workaround: Hardcoded config
+    videoCodec: {
+      type: 'H264',
+      bitrate: 2000,
+      profiles: [H264Profile.MAIN],
+      levels: [H264Level.LEVEL4_0],
+    },
+    mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
+  };
 
   constructor(
     private platform: LoxonePlatform,
@@ -118,7 +126,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     this.controller = new this.hap.CameraController(options);
     accessory.configureController(this.controller);
-    this.log.debug(`[${this.cameraName}] Camera recording delegate configured`);
+    this.log.debug(`[${this.cameraName}] Camera recording delegate configured with temp config`);
 
     this.startPreBufferStream();
     platform.api.on('shutdown' as any, () => this.stopAll());
@@ -478,12 +486,16 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.log.debug(`Recording active: ${active}`, this.cameraName);
     if (active && !this.recordingConfig) {
       this.log.warn(`[${this.cameraName}] Recording active but no configuration set`);
+    } else if (active) {
+      this.log.debug(`[${this.cameraName}] Recording active with config present`);
     }
   }
 
   updateRecordingConfiguration(configuration?: any): void {
-    this.recordingConfig = configuration;
-    this.log.debug(`[${this.cameraName}] Recording config updated: ${configuration ? JSON.stringify(configuration) : 'null'}`);
+    if (configuration) {
+      this.recordingConfig = configuration; // Override hardcoded config if HomeKit provides one
+    }
+    this.log.debug(`[${this.cameraName}] Recording config updated: ${this.recordingConfig ? JSON.stringify(this.recordingConfig) : 'null'}`);
     if (configuration && !configuration.videoCodec?.bitrate) {
       this.log.warn(`[${this.cameraName}] Recording config missing bitrate, defaulting to 2000k`);
       this.recordingConfig.videoCodec = { ...configuration.videoCodec, bitrate: 2000 };

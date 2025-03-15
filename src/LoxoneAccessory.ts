@@ -112,6 +112,7 @@ export class LoxoneAccessory {
 
   // Method to be overridden by subclasses for handling state changes
   protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
+    this.platform.log.debug(`[${this.device.name}] Callback service: ${message.service}`);
     const updateService = new Function('message', `return this.Service.${message.service}.updateService(message);`);
     updateService.call(this, message);
   }

@@ -144,7 +144,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.log.debug(`Starting pre-buffer with args: ${args.join(' ')}`);
     this.ffmpegProcess = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
     this.ffmpegProcess.on('error', (err) => this.log.error(`PreBuffer FFmpeg error: ${err}`, this.cameraName));
-    this.ffmpegProcess.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
+    //this.ffmpegProcess.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
     this.ffmpegProcess.on('exit', () => {
       this.log.debug('PreBuffer FFmpeg exited');
       this.ffmpegProcess = undefined;
@@ -154,7 +154,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const stream = this.ffmpegProcess.stdout!;
     let buffer = Buffer.alloc(0);
     stream.on('data', (chunk: Buffer) => {
-      this.log.debug(`Pre-buffer chunk received: ${chunk.length} bytes`);
+      //this.log.debug(`Pre-buffer chunk received: ${chunk.length} bytes`);
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 5) {
         let nalStart = -1;
@@ -200,7 +200,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     }
     const nalUnitType = data[4] & 0x1F;
     const isKey = nalUnitType === 5 || nalUnitType === 7; // IDR or SPS
-    this.log.debug(`Checking keyframe: NAL type=${nalUnitType}, isKeyFrame=${isKey}`);
+    //this.log.debug(`Checking keyframe: NAL type=${nalUnitType}, isKeyFrame=${isKey}`);
     return isKey;
   }
 
@@ -227,7 +227,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
       const chunks: Buffer[] = [];
       cp.stdout.on('data', (data) => chunks.push(data));
-      cp.stderr.on('data', (data) => this.log.debug(`Snapshot extract stderr: ${data}`));
+      //cp.stderr.on('data', (data) => this.log.debug(`Snapshot extract stderr: ${data}`));
       cp.on('exit', (code) => {
         if (code === 0) {
           const snapshot = Buffer.concat(chunks);

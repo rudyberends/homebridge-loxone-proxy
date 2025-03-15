@@ -1,66 +1,63 @@
 import { BaseService } from './BaseService';
-import { PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
+import { CameraService } from './Camera';
 
 /**
- * Represents a standalone Motion Sensor accessory for HomeKit.
- * Handles motion detection state updates from Loxone and exposes them to HomeKit.
+ * Represents a Motion Sensor accessory.
  */
 export class MotionSensor extends BaseService {
   State = {
     MotionDetected: false,
   };
 
-  constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device?: any) {
+  private camera?: CameraService;
+
+  constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device?: any, camera?: CameraService) {
     super(platform, accessory, device);
+    this.camera = camera;  // Optional camera reference
     this.setupService();
   }
 
-  getCharacteristic(characteristic: typeof this.platform.Characteristic.MotionDetected) {
-    if (!this.service) {
-      throw new Error('Service is not initialized');
-    }
-    return this.service.getCharacteristic(characteristic);
-  }
-
   /**
-   * Sets up the motion sensor service and characteristic handlers.
-   * @private
+   * Sets up the motion sensor service.
    */
   setupService(): void {
     this.service =
       this.accessory.getService(this.platform.Service.MotionSensor) ||
-      this.accessory.addService(this.platform.Service.MotionSensor, this.device?.name || 'Motion Sensor');
+      this.accessory.addService(this.platform.Service.MotionSensor);
 
-    this.service
-      .getCharacteristic(this.platform.Characteristic.MotionDetected)
+    // Create handlers for required characteristics
+    this.service.getCharacteristic(this.platform.Characteristic.MotionDetected)
       .onGet(this.handleMotionDetectedGet.bind(this));
   }
 
-  /**
-   * Updates the motion sensor state based on a Loxone message.
-   * @param message - The message containing the motion state value (0 or 1).
-   */
-  updateService = (message: { value: number }): void => {
+  updateService = (message: { value: number }) => {
+
+    // Only proceed if the message value is 0 or 1 (Ignore NfcCodeTouch values other than doorbell)
     if (message.value !== 0 && message.value !== 1) {
       this.platform.log.debug(`[${this.device.name}] Ignored message value: ${message.value}`);
       return;
     }
 
-    const motionDetected = !!message.value;
-    this.platform.log.debug(`[${this.device.name}] Callback state update for MotionSensor: ${motionDetected}`);
-    this.State.MotionDetected = motionDetected;
+    this.platform.log.debug(`[${this.device.name}] Callback state update for MotionSensor: ${!!message.value}`);
+    this.State.MotionDetected = !!message.value;
 
-    this.service!.updateCharacteristic(this.platform.Characteristic.MotionDetected, this.State.MotionDetected);
+    // Also make sure this change is directly communicated to HomeKit
+    this.service!.getCharacteristic(this.platform.Characteristic.MotionDetected).updateValue(this.State.MotionDetected);
+
+    // Trigger camera recording if motion is detected
+    if (this.State.MotionDetected && this.camera) {
+      this.platform.log.debug(`[${this.device.name}] Intercom MotionSensor. Triggering HKSV recording.`);
+      this.camera.updateRecordingActive(true); // Trigger HKSV recording when motion starts
+    }
   };
 
   /**
-   * Handles requests to get the current value of the "Motion Detected" characteristic.
-   * @returns The current motion detected state.
-   * @private
+   * Handle requests to get the current value of the "Motion Detected" characteristic.
    */
-  private handleMotionDetectedGet(): CharacteristicValue {
-    this.platform.log.debug(`[${this.device.name}] Triggered GET MotionDetected`);
+  handleMotionDetectedGet() {
+    this.platform.log.debug('Triggered GET MotionDetected');
     return this.State.MotionDetected;
   }
 }

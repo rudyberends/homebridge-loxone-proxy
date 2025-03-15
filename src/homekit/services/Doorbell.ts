@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { CameraService } from './Camera';
 
 /**
  * Doorbell Service
@@ -8,6 +9,14 @@ export class Doorbell extends BaseService {
   State = {
     ProgrammableSwitchEvent: 0,
   };
+
+  private camera?: CameraService;
+
+  constructor(platform: any, accessory: any, camera?: CameraService) {
+    super(platform, accessory);
+    this.camera = camera; // Store CameraService instance
+    this.setupService();
+  }
 
   /**
    * Sets up the Doorbell service.

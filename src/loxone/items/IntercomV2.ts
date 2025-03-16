@@ -14,6 +14,11 @@ export class IntercomV2 extends Intercom {
         return;
       }
 
+      if (typeof ip === 'object' && ip !== null && 'value' in ip) {
+        this.platform.log.debug(`[${this.device.name}] IP is an object, extracting value: ${JSON.stringify(ip)}`);
+        ip = (ip as { value: string }).value;
+      }
+
       this.platform.log.debug(`[${this.device.name}] Found Loxone Intercom on IP: ${ip}`);
 
       const base64auth = Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');

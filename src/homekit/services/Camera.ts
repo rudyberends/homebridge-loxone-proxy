@@ -95,44 +95,51 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       [480, 270, 30], [320, 240, 30], [320, 180, 30],
     ];
 
-    const options: CameraControllerOptions = {
-      cameraStreamCount: 2,
-      delegate: this,
-      streamingOptions: {
-        supportedCryptoSuites: [this.hap.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
-        video: {
-          codec: {
-            profiles: [this.hap.H264Profile.MAIN],
-            levels: [this.hap.H264Level.LEVEL4_0],
-          },
-          resolutions,
-        },
-      },
-      recording: {
-        options: {
-          prebufferLength: this.preBufferDuration,
-          mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
-          video: {
-            type: this.hap.VideoCodecType.H264,
-            resolutions: [[1280, 720, 30]],
-            parameters: {
-              profiles: [H264Profile.MAIN],
-              levels: [H264Level.LEVEL4_0],
-            },
-          },
-          audio: { codecs: [{ type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32 }] },
-        },
-        delegate: this,
-        sensors: { motion: this.hksvMotionSensor }, // Link HKSV to virtual sensor
-      } as any, // Type assertion to bypass TS2353
-    };
+    const existingController = accessory.getService(this.hap.Service.CameraRTPStreamManagement);
+    if (!existingController) {
 
-    this.controller = new this.hap.CameraController(options);
-    accessory.configureController(this.controller);
-    this.controller = new this.hap.CameraController(options);
-    accessory.configureController(this.controller);
-    const isRecordingConfigured = !!this.controller.recordingManagement; // Simply check existence
-    this.log.debug('CameraController configured with recording delegate:', isRecordingConfigured ? 'Yes' : 'No');
+      const options: CameraControllerOptions = {
+        cameraStreamCount: 2,
+        delegate: this,
+        streamingOptions: {
+          supportedCryptoSuites: [this.hap.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
+          video: {
+            codec: {
+              profiles: [this.hap.H264Profile.MAIN],
+              levels: [this.hap.H264Level.LEVEL4_0],
+            },
+            resolutions,
+          },
+        },
+        recording: {
+          options: {
+            prebufferLength: this.preBufferDuration,
+            mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
+            video: {
+              type: this.hap.VideoCodecType.H264,
+              resolutions: [[1280, 720, 30]],
+              parameters: {
+                profiles: [H264Profile.MAIN],
+                levels: [H264Level.LEVEL4_0],
+              },
+            },
+            audio: { codecs: [{ type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32 }] },
+          },
+          delegate: this,
+          sensors: { motion: this.hksvMotionSensor }, // Link HKSV to virtual sensor
+        } as any, // Type assertion to bypass TS2353
+      };
+
+      this.controller = new this.hap.CameraController(options);
+      accessory.configureController(this.controller);
+      this.controller = new this.hap.CameraController(options);
+      accessory.configureController(this.controller);
+      const isRecordingConfigured = !!this.controller.recordingManagement; // Simply check existence
+      this.log.debug('CameraController configured with recording delegate:', isRecordingConfigured ? 'Yes' : 'No');
+    } else {
+      this.controller = accessory.getService(this.hap.Service.CameraRTPStreamManagement) as unknown as CameraController;
+      this.log.debug('Reusing existing CameraController', this.cameraName);
+    }
     this.startPreBuffer();
     platform.api.on('shutdown', () => this.stopAll());
   }

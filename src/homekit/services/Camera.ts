@@ -165,8 +165,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private async listenServer(server: Server): Promise<number> {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    const maxAttempts = 5;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const port = 10000 + Math.round(Math.random() * 30000);
       server.listen(port);
       try {
@@ -176,6 +176,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         this.log.warn(`Error listening on port ${port}: ${e}`);
       }
     }
+    throw new Error('Failed to bind server after 5 attempts');
   }
 
   private async *parseFragmentedMP4(readable: Readable): AsyncGenerator<{ header: Buffer; type: string; length: number; data: Buffer }> {
@@ -192,8 +193,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     if (!length) {
       return Buffer.alloc(0);
     }
-    const ret = readable.read(length);
-    if (ret) {
+    const ret = readable.read(length) as Buffer | null;
+    if (ret !== null) {
       return ret;
     }
     return new Promise((resolve, reject) => {
@@ -229,9 +230,46 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private async fetchSnapshot(videoFilter?: string): Promise<Buffer> {
     const startTime = Date.now();
+
+    // Try pre-buffer first if available
+    if (this.preBuffer.length > 0) {
+      const latest = this.preBuffer[this.preBuffer.length - 1];
+      const args = [
+        '-f', 'mp4',
+        '-i', 'pipe:',
+        '-frames:v', '1',
+        '-f', 'image2',
+        ...(videoFilter ? ['-filter:v', videoFilter] : []),
+        'pipe:',
+        '-loglevel', 'error',
+      ];
+
+      this.log.debug(`Snapshot from pre-buffer: ffmpeg ${args.join(' ')}`, this.cameraName);
+      return new Promise<Buffer>((resolve, reject) => { // Explicitly type as Buffer
+        const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+        ffmpeg.stdin.write(Buffer.concat([latest.atom.header, latest.atom.data]));
+        ffmpeg.stdin.end();
+        let snapshotBuffer = Buffer.alloc(0);
+
+        ffmpeg.stdout.on('data', (data) => snapshotBuffer = Buffer.concat([snapshotBuffer, data]));
+        ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`, this.cameraName));
+        ffmpeg.on('error', reject);
+        ffmpeg.on('close', (code) => {
+          if (snapshotBuffer.length > 0) {
+            resolve(snapshotBuffer);
+          } else {
+            reject(new Error('Failed to fetch snapshot from pre-buffer'));
+          }
+        });
+      }).finally(() => {
+        const runtime = (Date.now() - startTime) / 1000;
+        this.log.debug(`Pre-buffer snapshot took ${runtime}s`, this.cameraName);
+      });
+    }
+
+    // Fallback to live stream
     const args = [
-      '-headers',
-      `Authorization: Basic ${this.base64auth}`,
+      '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
       '-frames:v', '1',
       '-f', 'image2',
@@ -326,7 +364,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const ffmpegArgs = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-re', '-i', this.streamUrl,
-      '-an', '-c:v', 'libx264',
+      '-an', '-c:v', 'copy',
       '-pix_fmt', 'yuv420p',
       '-r', request.video.fps.toString(),
       '-b:v', `${request.video.max_bit_rate}k`,
@@ -388,7 +426,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
-      '-c:v', 'libx264',
+      '-c:v', 'copy',
       '-r', '30',
       '-b:v', `${this.recordingConfig.videoCodec.bitrate || 2000}k`,
       '-profile:v', 'main',
@@ -466,6 +504,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   // Method to trigger HKSV sensor
   public triggerHKSVMotion(active: boolean, resetTime = 5000): void {
+    this.log.debug('HKSV Motion Sensor Active', this.cameraName);
     this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, active);
     if (active) {
       setTimeout(() => {

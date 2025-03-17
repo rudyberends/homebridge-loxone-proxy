@@ -135,8 +135,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private async startPreBuffer(): Promise<void> {
     const args = [
-      '-headers',
-      `Authorization: Basic ${this.base64auth}`,
+      '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
       '-c:v', 'copy',
       '-f', 'mp4',
@@ -160,7 +159,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const cp = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     cp.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
     cp.on('exit', () => this.preBuffer = []);
-
     this.preBufferSession = { server, process: cp };
   }
 
@@ -180,12 +178,17 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private async *parseFragmentedMP4(readable: Readable): AsyncGenerator<{ header: Buffer; type: string; length: number; data: Buffer }> {
+    let pending: Buffer[] = [];
     while (true) {
       const header = await this.readLength(readable, 8);
       const length = header.readInt32BE(0) - 8;
       const type = header.slice(4).toString();
       const data = await this.readLength(readable, length);
-      yield { header, type, length, data };
+      pending.push(header, data);
+      if (type === 'mdat') { // Yield on mdat, assuming moov came earlier
+        yield { header: Buffer.concat(pending.slice(0, 1)), type: 'segment', length: Buffer.concat(pending).length, data: Buffer.concat(pending.slice(1)) };
+        pending = [];
+      }
     }
   }
 
@@ -193,8 +196,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     if (!length) {
       return Buffer.alloc(0);
     }
-    const ret = readable.read(length) as Buffer | null;
-    if (ret !== null) {
+    const ret = readable.read(length);
+    if (ret) {
       return ret;
     }
     return new Promise((resolve, reject) => {
@@ -203,16 +206,25 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         if (data) {
           readable.removeListener('readable', onReadable);
           readable.removeListener('end', onEnd);
+          readable.removeListener('error', onError);
           resolve(data);
         }
       };
       const onEnd = () => {
         readable.removeListener('readable', onReadable);
         readable.removeListener('end', onEnd);
+        readable.removeListener('error', onError);
         reject(new Error(`Stream ended during read for ${length} bytes`));
+      };
+      const onError = (err: Error) => {
+        readable.removeListener('readable', onReadable);
+        readable.removeListener('end', onEnd);
+        readable.removeListener('error', onError);
+        reject(err);
       };
       readable.on('readable', onReadable);
       readable.on('end', onEnd);
+      readable.on('error', onError);
     });
   }
 
@@ -231,16 +243,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private async fetchSnapshot(videoFilter?: string): Promise<Buffer> {
     const startTime = Date.now();
 
-    // Try pre-buffer first if available
     if (this.preBuffer.length > 0) {
-      // Find the earliest 'moov' and include subsequent atoms up to latest 'mdat'
-      let moovIndex = this.preBuffer.findIndex(entry => entry.atom.type === 'moov');
-      if (moovIndex === -1) {
-        moovIndex = 0;
-      } // Fallback to start if no moov found
-      const segmentAtoms = this.preBuffer.slice(moovIndex);
-      const segment = Buffer.concat(segmentAtoms.flatMap(entry => [entry.atom.header, entry.atom.data]));
-
+      const latest = this.preBuffer[this.preBuffer.length - 1];
+      const segment = Buffer.concat([latest.atom.header, latest.atom.data]);
       const args = [
         '-f', 'mp4',
         '-i', 'pipe:',
@@ -260,7 +265,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
         ffmpeg.stdout.on('data', (data) => snapshotBuffer = Buffer.concat([snapshotBuffer, data]));
         ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`, this.cameraName));
-        ffmpeg.on('error', reject);
+        ffmpeg.on('error', (err) => reject(err));
         ffmpeg.on('close', (code) => {
           if (snapshotBuffer.length > 0) {
             resolve(snapshotBuffer);

@@ -129,6 +129,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     this.controller = new this.hap.CameraController(options);
     accessory.configureController(this.controller);
+    this.controller = new this.hap.CameraController(options);
+    accessory.configureController(this.controller);
+    const isRecordingConfigured = !!this.controller.recordingManagement; // Simply check existence
+    this.log.debug('CameraController configured with recording delegate:', isRecordingConfigured ? 'Yes' : 'No');
     this.startPreBuffer();
     platform.api.on('shutdown', () => this.stopAll());
   }
@@ -465,6 +469,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
+    this.log.debug(`HKSV recording stream requested for streamId: ${streamId}`, this.cameraName);
     if (!this.recordingConfig) {
       throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
     }

@@ -180,7 +180,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   private async *parseFragmentedMP4(readable: Readable): AsyncGenerator<{ header: Buffer; type: string; length: number; data: Buffer }> {
     let pending: Buffer[] = [];
     let hasMoov = false;
-    let hasMoof = false;
 
     while (true) {
       const header = await this.readLength(readable, 8);
@@ -191,16 +190,13 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
       if (type === 'moov') {
         hasMoov = true;
-      }
-      if (type === 'moof') {
-        hasMoof = true;
-      }
-
-      // Yield a complete fragment when we have moov, moof, and mdat
-      if (type === 'mdat' && hasMoov && hasMoof) {
-        yield { header: Buffer.concat(pending.slice(0, 1)), type: 'segment', length: Buffer.concat(pending).length, data: Buffer.concat(pending.slice(1)) };
-        pending = [];
-        hasMoof = false; // Reset for next fragment, keep moov as it’s global
+      } // Check moov first, outside narrowing
+      if ((type === 'moof' && pending.length > 2) || (type === 'mdat' && hasMoov)) {
+        const fragment = pending.slice(0, -2);
+        if (fragment.length > 0) {
+          yield { header: Buffer.concat(fragment.slice(0, 1)), type: 'segment', length: Buffer.concat(fragment).length, data: Buffer.concat(fragment.slice(1)) };
+        }
+        pending = [header, data];
       }
     }
   }
@@ -257,11 +253,16 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const startTime = Date.now();
 
     if (this.preBuffer.length > 0) {
-      // Log pre-buffer contents for debugging
       this.log.debug('Pre-buffer atom types:', this.preBuffer.map(e => e.atom.type), this.cameraName);
-
       const latest = this.preBuffer[this.preBuffer.length - 1];
       const segment = Buffer.concat([latest.atom.header, latest.atom.data]);
+
+      // Basic validation: check for minimum size and moof presence
+      if (segment.length < 100 || !segment.includes(Buffer.from('moof'))) {
+        this.log.warn('Invalid pre-buffer segment, falling back to live stream', this.cameraName);
+        return this.fetchLiveSnapshot(startTime, videoFilter);
+      }
+
       const args = [
         '-f', 'mp4',
         '-i', 'pipe:',
@@ -289,12 +290,19 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
             reject(new Error('Failed to fetch snapshot from pre-buffer'));
           }
         });
+      }).catch((err) => {
+        this.log.warn('Pre-buffer snapshot failed, falling back to live stream', err, this.cameraName);
+        return this.fetchLiveSnapshot(startTime, videoFilter);
       }).finally(() => {
         const runtime = (Date.now() - startTime) / 1000;
         this.log.debug(`Pre-buffer snapshot took ${runtime}s`, this.cameraName);
       });
     }
 
+    return this.fetchLiveSnapshot(startTime, videoFilter);
+  }
+
+  private async fetchLiveSnapshot(startTime: number, videoFilter?: string): Promise<Buffer> {
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,

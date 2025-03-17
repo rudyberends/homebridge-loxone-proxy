@@ -179,15 +179,28 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private async *parseFragmentedMP4(readable: Readable): AsyncGenerator<{ header: Buffer; type: string; length: number; data: Buffer }> {
     let pending: Buffer[] = [];
+    let hasMoov = false;
+    let hasMoof = false;
+
     while (true) {
       const header = await this.readLength(readable, 8);
       const length = header.readInt32BE(0) - 8;
       const type = header.slice(4).toString();
       const data = await this.readLength(readable, length);
       pending.push(header, data);
-      if (type === 'mdat') { // Yield on mdat, assuming moov came earlier
+
+      if (type === 'moov') {
+        hasMoov = true;
+      }
+      if (type === 'moof') {
+        hasMoof = true;
+      }
+
+      // Yield a complete fragment when we have moov, moof, and mdat
+      if (type === 'mdat' && hasMoov && hasMoof) {
         yield { header: Buffer.concat(pending.slice(0, 1)), type: 'segment', length: Buffer.concat(pending).length, data: Buffer.concat(pending.slice(1)) };
         pending = [];
+        hasMoof = false; // Reset for next fragment, keep moov as it’s global
       }
     }
   }
@@ -244,6 +257,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const startTime = Date.now();
 
     if (this.preBuffer.length > 0) {
+      // Log pre-buffer contents for debugging
+      this.log.debug('Pre-buffer atom types:', this.preBuffer.map(e => e.atom.type), this.cameraName);
+
       const latest = this.preBuffer[this.preBuffer.length - 1];
       const segment = Buffer.concat([latest.atom.header, latest.atom.data]);
       const args = [
@@ -279,7 +295,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       });
     }
 
-    // Fallback to live stream
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,

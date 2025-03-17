@@ -233,7 +233,14 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     // Try pre-buffer first if available
     if (this.preBuffer.length > 0) {
-      const latest = this.preBuffer[this.preBuffer.length - 1];
+      // Find the earliest 'moov' and include subsequent atoms up to latest 'mdat'
+      let moovIndex = this.preBuffer.findIndex(entry => entry.atom.type === 'moov');
+      if (moovIndex === -1) {
+        moovIndex = 0;
+      } // Fallback to start if no moov found
+      const segmentAtoms = this.preBuffer.slice(moovIndex);
+      const segment = Buffer.concat(segmentAtoms.flatMap(entry => [entry.atom.header, entry.atom.data]));
+
       const args = [
         '-f', 'mp4',
         '-i', 'pipe:',
@@ -245,9 +252,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       ];
 
       this.log.debug(`Snapshot from pre-buffer: ffmpeg ${args.join(' ')}`, this.cameraName);
-      return new Promise<Buffer>((resolve, reject) => { // Explicitly type as Buffer
+      return new Promise<Buffer>((resolve, reject) => {
         const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
-        ffmpeg.stdin.write(Buffer.concat([latest.atom.header, latest.atom.data]));
+        ffmpeg.stdin.write(segment);
         ffmpeg.stdin.end();
         let snapshotBuffer = Buffer.alloc(0);
 
@@ -361,21 +368,35 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       return;
     }
 
-    const ffmpegArgs = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-re', '-i', this.streamUrl,
-      '-an', '-c:v', 'copy',
+    const mtu = 1378; // Match your current pkt_size
+    const ffmpegArgs: string[] = [
+      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+      '-use_wallclock_as_timestamps', '1',
+      '-probesize', '32',
+      '-analyzeduration', '0',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
+      '-max_delay', '0',
+      '-re',
+      '-i', this.streamUrl,
+      '-an',
+      '-sn',
+      '-dn',
+      '-codec:v', 'libx264',
       '-pix_fmt', 'yuv420p',
-      '-r', request.video.fps.toString(),
-      '-b:v', `${request.video.max_bit_rate}k`,
-      '-profile:v', 'main',
-      '-level', '4.0',
+      '-color_range', 'mpeg',
+      '-r', request.video.fps.toString(), // Dynamic FPS from HomeKit
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-crf', '22',
+      '-filter:v', `scale='min(${request.video.width},iw)':'min(${request.video.height},ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2`,
+      '-b:v', `${request.video.max_bit_rate}k`, // Keep HomeKit-requested bitrate
       '-payload_type', request.video.pt.toString(),
       '-ssrc', sessionInfo.videoSSRC.toString(),
       '-f', 'rtp',
       '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
       '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
-      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=1378`,
+      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
     ];
 
     const activeSession: ActiveSession = {};

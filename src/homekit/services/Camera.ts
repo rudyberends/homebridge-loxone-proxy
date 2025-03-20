@@ -120,9 +120,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
               parameters: {
                 profiles: [H264Profile.MAIN],
                 levels: [H264Level.LEVEL4_0],
+                bitrate: 2000,
+                iFrameInterval: 4000,
               },
             },
-            audio: { codecs: [{ type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32 }] },
+            audio: { codecs: [{ type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32, bitrate: 64 }] },
             overrideEventTriggerOptions: [
               this.hap.EventTriggerOption.MOTION,
               this.hap.EventTriggerOption.DOORBELL,
@@ -136,6 +138,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.controller = new this.hap.CameraController(options);
       accessory.configureController(this.controller);
       this.log.debug('CameraController configured with recording:', !!this.controller.recordingManagement);
+      // Set initial recording state via delegate
+      this.updateRecordingConfiguration(options.recording!.options as any);
+      this.updateRecordingActive(true);
     } else {
       this.controller = accessory.getService(this.hap.Service.CameraRTPStreamManagement) as unknown as CameraController;
       this.log.debug('Reusing existing CameraController', this.cameraName);
@@ -148,11 +153,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
-      '-f', 'mjpeg', // Explicitly set input format
-      '-c:v', 'libx264', // Transcode MJPEG to H.264
+      '-f', 'mjpeg',
+      '-c:v', 'libx264',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
-      '-r', '30', // Set frame rate
+      '-r', '30',
       '-f', 'mp4',
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
       'tcp://127.0.0.1:',
@@ -206,9 +211,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       const data = await this.readLength(readable, length);
       pending.push(header, data);
 
-      if (type === 'moov') {
-        hasMoov = true;
-      }
+      if (type === 'moov') hasMoov = true;
       if ((type === 'moof' && pending.length > 2) || (type === 'mdat' && hasMoov)) {
         const fragment = pending.slice(0, -2);
         if (fragment.length > 0) {
@@ -220,13 +223,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private async readLength(readable: Readable, length: number): Promise<Buffer> {
-    if (!length) {
-      return Buffer.alloc(0);
-    }
+    if (!length) return Buffer.alloc(0);
     const ret = readable.read(length);
-    if (ret) {
-      return ret;
-    }
+    if (ret) return ret;
     return new Promise((resolve, reject) => {
       const onReadable = () => {
         const data = readable.read(length);
@@ -288,11 +287,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
         ffmpeg.on('error', (err) => reject(err));
         ffmpeg.on('close', (code) => {
-          if (snapshotBuffer.length > 0) {
-            resolve(snapshotBuffer);
-          } else {
-            reject(new Error('Failed to fetch snapshot from pre-buffer'));
-          }
+          if (snapshotBuffer.length > 0) resolve(snapshotBuffer);
+          else reject(new Error('Failed to fetch snapshot from pre-buffer'));
         });
       }).catch(() => this.fetchLiveSnapshot(startTime, videoFilter));
     }
@@ -303,7 +299,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
-      '-f', 'mjpeg', // MJPEG input
+      '-f', 'mjpeg',
       '-frames:v', '1',
       '-f', 'image2',
       ...(videoFilter ? ['-filter:v', videoFilter] : []),
@@ -319,11 +315,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
       ffmpeg.on('error', (error) => reject(new Error(`FFmpeg process creation failed: ${error.message}`)));
       ffmpeg.on('close', (code) => {
-        if (snapshotBuffer.length > 0) {
-          resolve(snapshotBuffer);
-        } else {
-          reject(new Error('Failed to fetch snapshot'));
-        }
+        if (snapshotBuffer.length > 0) resolve(snapshotBuffer);
+        else reject(new Error('Failed to fetch snapshot'));
         setTimeout(() => this.snapshotPromise = undefined, 3000);
         const runtime = (Date.now() - startTime) / 1000;
         this.log.debug(`Snapshot took ${runtime}s`, this.cameraName);
@@ -386,8 +379,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const ffmpegArgs: string[] = [
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-i', this.streamUrl,
-      '-f', 'mjpeg', // MJPEG input
-      '-c:v', 'libx264', // Transcode to H.264
+      '-f', 'mjpeg',
+      '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-r', request.video.fps.toString(),
       '-preset', 'ultrafast',
@@ -426,6 +419,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   updateRecordingActive(active: boolean): void {
     this.recordingActive = active;
+    this.log.debug(`Recording active set to: ${active}`, this.cameraName);
     if (!active && this.recordingSession) {
       this.recordingSession.socket?.end();
       this.recordingSession.cp?.kill();
@@ -435,10 +429,12 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   updateRecordingConfiguration(configuration?: any): void {
     this.recordingConfig = configuration || {
-      videoCodec: { type: 'H264', bitrate: 2000, profiles: [H264Profile.MAIN], levels: [H264Level.LEVEL4_0] },
+      videoCodec: { type: 'H264', bitrate: 2000, profiles: [H264Profile.MAIN], levels: [H264Level.LEVEL4_0], iFrameInterval: 4000 },
       mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
+      audioCodec: { type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32, bitrate: 64 },
     };
     this.recordingActive = true;
+    this.log.debug('Recording configuration updated', this.cameraName);
   }
 
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
@@ -453,8 +449,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const args = [
       '-headers', `Authorization: Basic ${this.base64auth}`,
       '-i', this.streamUrl,
-      '-f', 'mjpeg', // MJPEG input
-      '-c:v', 'libx264', // Transcode to H.264
+      '-f', 'mjpeg',
+      '-c:v', 'libx264',
       '-r', '30',
       '-b:v', `${this.recordingConfig.videoCodec.bitrate || 2000}k`,
       '-profile:v', 'main',
@@ -504,7 +500,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   acknowledgeStream(streamId: number): void {
-    this.log.debug(`Acknowledged recording stream ${streamId}`);
+    this.log.debug(`Acknowledged recording stream ${streamId}`, this.cameraName);
   }
 
   closeRecordingStream(streamId: number, reason?: HDSProtocolSpecificErrorReason): void {
@@ -513,7 +509,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.recordingSession.cp?.kill();
       this.recordingSession = undefined;
     }
-
+    // Type guard to satisfy TypeScript
     if (reason && !this.isNormalReason(reason)) {
       this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, false);
     }
@@ -535,7 +531,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.recordingSession?.socket?.end();
   }
 
-  public triggerHKSVMotion(active: boolean, resetTime = 10000): void {
+  public triggerHKSVMotion(active: boolean, resetTime = 30000): void {
     this.log.debug(`HKSV Motion Sensor ${active ? 'Active' : 'Inactive'}`, this.cameraName);
     this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, active);
     if (active) {

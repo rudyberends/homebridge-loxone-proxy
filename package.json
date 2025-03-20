@@ -13,7 +13,7 @@
     "url": "https://github.com/rudyberends/homebridge-loxone-proxy/issues"
   },
   "engines": {
-    "homebridge": "^1.6.0 || ^2.0.0-beta.0",
+    "homebridge": "^1.7.0 || ^2.0.0-beta.0",
     "node": "^18.20.4 || ^20.15.1"
   },
   "main": "dist/index.js",

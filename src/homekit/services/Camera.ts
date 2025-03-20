@@ -564,7 +564,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   // Method to trigger HKSV sensor
-  public triggerHKSVMotion(active: boolean, resetTime = 5000): void {
+  public triggerHKSVMotion(active: boolean, resetTime = 50000): void {
     this.log.debug('HKSV Motion Sensor Active', this.cameraName);
     this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, active);
     if (active) {

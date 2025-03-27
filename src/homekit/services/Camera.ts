@@ -293,15 +293,17 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const startTime = Date.now();
     const args = [
       '-re', // Real-time input
+      '-fflags', 'nobuffer', // Reduce input buffering
+      '-flags', 'low_delay', // Minimize encoding delay
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-i', this.streamUrl,
-      '-frames:v', '1', // Capture exactly 1 frame
-      '-q:v', '2', // JPEG quality
-      ...(videoFilter ? ['-vf', videoFilter] : []), // Apply scaling only if requested
+      '-frames:v', '1',
+      '-q:v', '2',
+      ...(videoFilter ? ['-vf', videoFilter] : ['-vf', 'scale=640:360']), // Default to faster resolution
       '-f', 'image2',
-      '-update', '1', // Write a single image to pipe
-      'pipe:', // Output to stdout
-      '-loglevel', 'error', // Minimize logging overhead
+      '-update', '1',
+      'pipe:',
+      '-loglevel', 'info', // Temporarily increase for debugging
     ];
 
     return new Promise((resolve, reject) => {

@@ -86,15 +86,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.streamUrl = streamUrl;
     this.base64auth = base64auth;
     this.cameraName = accessory.displayName;
-
+  
     this.hksvMotionSensor = accessory.getService('HKSV Motion Sensor') ||
       accessory.addService(this.hap.Service.MotionSensor, 'HKSV Motion Sensor', 'hksv-motion');
-
+  
     const resolutions: [number, number, number][] = [
       [1280, 720, 30], [640, 480, 30], [640, 360, 30], [480, 360, 30],
       [480, 270, 30], [320, 240, 30], [320, 180, 30],
     ];
-
+  
     const recordingConfig = {
       prebufferLength: this.preBufferDuration,
       mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
@@ -121,7 +121,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         this.hap.EventTriggerOption.DOORBELL,
       ],
     };
-
+  
     const existingController = accessory.getService(this.hap.Service.CameraRTPStreamManagement);
     if (!existingController) {
       const options: CameraControllerOptions = {
@@ -141,19 +141,25 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         recording: {
           options: recordingConfig,
           delegate: this,
-          sensors: { motion: this.hksvMotionSensor },
+          sensors: { motion: this.hksvMotionSensor, doorbell: accessory.getService(this.hap.Service.Doorbell) },
         } as any,
       };
-
+  
       this.controller = new this.hap.CameraController(options);
       accessory.configureController(this.controller);
       this.log.debug('CameraController configured with recording:', !!this.controller.recordingManagement);
+      // Type assertion to bypass missing typings
+      const recordingManagement = this.controller.recordingManagement as any;
+      this.log.debug('Recording sensors:', {
+        motion: !!recordingManagement?.configuration?.sensors?.motion,
+        doorbell: !!recordingManagement?.configuration?.sensors?.doorbell,
+      });
       this.recordingConfig = recordingConfig;
-      this.recordingActive = true; // Enable recording by default
+      this.recordingActive = true;
     } else {
       this.controller = accessory.getService(this.hap.Service.CameraRTPStreamManagement) as unknown as CameraController;
       this.log.debug('Reusing existing CameraController', this.cameraName);
-      this.recordingConfig = recordingConfig; // Set for reuse case
+      this.recordingConfig = recordingConfig;
     }
     this.startPreBuffer();
     platform.api.on('shutdown', () => this.stopAll());
@@ -220,9 +226,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       const data = await this.readLength(readable, length);
       pending.push(header, data);
 
-      if (type === 'moov') {
-        hasMoov = true;
-      }
+      if (type === 'moov') hasMoov = true;
       if ((type === 'moof' && pending.length > 2) || (type === 'mdat' && hasMoov)) {
         const fragment = pending.slice(0, -2);
         if (fragment.length > 0) {
@@ -234,13 +238,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private async readLength(readable: Readable, length: number): Promise<Buffer> {
-    if (!length) {
-      return Buffer.alloc(0);
-    }
+    if (!length) return Buffer.alloc(0);
     const ret = readable.read(length);
-    if (ret) {
-      return ret;
-    }
+    if (ret) return ret;
     return new Promise((resolve, reject) => {
       const onReadable = () => {
         const data = readable.read(length);
@@ -295,45 +295,13 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         if (snapshotBuffer.length > 0) {
           this.log.debug(`Snapshot took ${(Date.now() - startTime) / 1000}s`, this.cameraName);
           resolve(snapshotBuffer);
-        } else {
-          reject(new Error('Failed to fetch snapshot'));
-        }
+        } else reject(new Error('Failed to fetch snapshot'));
       });
     });
   }
 
   private async fetchLiveSnapshot(startTime: number, videoFilter?: string): Promise<Buffer> {
-    const args = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-i', this.streamUrl,
-      '-f', 'mjpeg',
-      '-frames:v', '1',
-      '-f', 'image2',
-      ...(videoFilter ? ['-filter:v', videoFilter] : []),
-      'pipe:',
-      '-loglevel', 'error',
-    ];
-
-    this.snapshotPromise = new Promise((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', args, { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
-      let snapshotBuffer = Buffer.alloc(0);
-
-      ffmpeg.stdout.on('data', (data) => snapshotBuffer = Buffer.concat([snapshotBuffer, data]));
-      ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
-      ffmpeg.on('error', (error) => reject(new Error(`FFmpeg process creation failed: ${error.message}`)));
-      ffmpeg.on('close', (code) => {
-        if (snapshotBuffer.length > 0) {
-          resolve(snapshotBuffer);
-        } else {
-          reject(new Error('Failed to fetch snapshot'));
-        }
-        setTimeout(() => this.snapshotPromise = undefined, 3000);
-        const runtime = (Date.now() - startTime) / 1000;
-        this.log.debug(`Snapshot took ${runtime}s`, this.cameraName);
-      });
-    });
-
-    return this.snapshotPromise;
+    return this.fetchSnapshot(videoFilter); // Same as fetchSnapshot for consistency
   }
 
   async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
@@ -446,14 +414,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     };
     this.recordingActive = true;
     this.log.debug('Recording configuration updated', this.cameraName);
-    // Removed this.controller.recordingManagement?.updateRecordingConfiguration call
   }
 
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
     this.log.info(`HKSV recording stream requested for streamId: ${streamId}`, this.cameraName);
-    if (!this.recordingConfig) {
-      throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
-    }
+    if (!this.recordingConfig) throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
 
     const server = createServer();
     const port = await this.listenServer(server);
@@ -504,9 +469,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     for await (const box of generator) {
       this.log.info(`Yielding recording fragment: ${box.data.length} bytes, isLast: ${!getMotionState()}`, this.cameraName);
       yield { data: Buffer.concat([box.header, box.data]), isLast: !getMotionState() };
-      if (!getMotionState()) {
-        break;
-      }
+      if (!getMotionState()) break;
     }
 
     cp.on('exit', (code) => {
@@ -551,6 +514,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   public triggerHKSVMotion(active: boolean, resetTime = 30000): void {
     this.log.debug(`HKSV Motion Sensor ${active ? 'Active' : 'Inactive'}`, this.cameraName);
     this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, active);
+    this.log.debug('Recording active status:', this.recordingActive);
     if (active) {
       clearTimeout(this.motionTimeout);
       this.motionTimeout = setTimeout(() => {

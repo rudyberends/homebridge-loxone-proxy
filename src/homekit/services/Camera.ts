@@ -124,8 +124,8 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
                 iFrameInterval: 4000,
               },
             },
-            audio: undefined,
-            //audio: { codecs: [{ type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32, bitrate: 64 }] },
+            //audio: undefined,
+            audio: { codecs: [{ type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32, bitrate: 64 }] },
             overrideEventTriggerOptions: [
               this.hap.EventTriggerOption.MOTION,
               this.hap.EventTriggerOption.DOORBELL,

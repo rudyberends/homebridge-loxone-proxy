@@ -161,20 +161,21 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private async startPreBuffer(): Promise<void> {
     const args = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-i', this.streamUrl,
-      '-f', 'mjpeg',
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-tune', 'zerolatency',
-      '-r', '30',
-      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio
-      '-c:a', 'aac',
-      '-b:a', '64k',
-      '-shortest',
-      '-f', 'mp4',
-      '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      'tcp://127.0.0.1:',
+      '-headers', `Authorization: Basic ${this.base64auth}`, // Authentication for video stream
+      '-i', this.streamUrl,                                 // Video input (MJPEG)
+      '-f', 'lavfi',                                       // Lavfi format for silent audio
+      '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio input
+      '-f', 'mjpeg',                                       // Force MJPEG format for video input
+      '-c:v', 'libx264',                                   // Video codec
+      '-preset', 'ultrafast',                              // Encoding preset
+      '-tune', 'zerolatency',                              // Low-latency tuning
+      '-r', '30',                                          // Frame rate
+      '-c:a', 'aac',                                       // Audio codec
+      '-b:a', '64k',                                       // Audio bitrate
+      '-shortest',                                         // Match shortest input duration
+      '-f', 'mp4',                                         // Output format
+      '-movflags', 'frag_keyframe+empty_moov+default_base_moof', // MP4 fragmentation
+      'tcp://127.0.0.1:',                                  // Output to TCP
     ];
 
     const server = createServer(async (socket) => {
@@ -226,7 +227,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       const data = await this.readLength(readable, length);
       pending.push(header, data);
 
-      if (type === 'moov') hasMoov = true;
+      if (type === 'moov') {
+        hasMoov = true;
+      }
       if ((type === 'moof' && pending.length > 2) || (type === 'mdat' && hasMoov)) {
         const fragment = pending.slice(0, -2);
         if (fragment.length > 0) {
@@ -238,9 +241,13 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   }
 
   private async readLength(readable: Readable, length: number): Promise<Buffer> {
-    if (!length) return Buffer.alloc(0);
+    if (!length) {
+      return Buffer.alloc(0);
+    }
     const ret = readable.read(length);
-    if (ret) return ret;
+    if (ret) {
+      return ret;
+    }
     return new Promise((resolve, reject) => {
       const onReadable = () => {
         const data = readable.read(length);
@@ -302,8 +309,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
         ffmpeg.on('error', (err) => reject(err));
         ffmpeg.on('close', (code) => {
-          if (snapshotBuffer.length > 0) resolve(snapshotBuffer);
-          else reject(new Error('Failed to fetch snapshot from pre-buffer'));
+          if (snapshotBuffer.length > 0) {
+            resolve(snapshotBuffer);
+          } else {
+            reject(new Error('Failed to fetch snapshot from pre-buffer'));
+          }
         });
       }).catch(() => this.fetchLiveSnapshot(startTime, videoFilter));
     }
@@ -330,8 +340,11 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
       ffmpeg.on('error', (error) => reject(new Error(`FFmpeg process creation failed: ${error.message}`)));
       ffmpeg.on('close', (code) => {
-        if (snapshotBuffer.length > 0) resolve(snapshotBuffer);
-        else reject(new Error('Failed to fetch snapshot'));
+        if (snapshotBuffer.length > 0) {
+          resolve(snapshotBuffer);
+        } else {
+          reject(new Error('Failed to fetch snapshot'));
+        }
         setTimeout(() => this.snapshotPromise = undefined, 3000);
         const runtime = (Date.now() - startTime) / 1000;
         this.log.debug(`Snapshot took ${runtime}s`, this.cameraName);
@@ -464,21 +477,22 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const port = await this.listenServer(server);
 
     const args = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-i', this.streamUrl,
-      '-f', 'mjpeg',
-      '-c:v', 'libx264',
-      '-r', '30',
-      '-b:v', `${this.recordingConfig.videoCodec.bitrate || 2000}k`,
-      '-profile:v', 'main',
-      '-level', '4.0',
-      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio
-      '-c:a', 'aac',
-      '-b:a', '64k',
-      '-shortest',
-      '-f', 'mp4',
-      '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      `tcp://127.0.0.1:${port}`,
+      '-headers', `Authorization: Basic ${this.base64auth}`, // Authentication
+      '-i', this.streamUrl,                                 // Video input
+      '-f', 'lavfi',                                       // Lavfi format
+      '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio
+      '-f', 'mjpeg',                                       // Force MJPEG for video
+      '-c:v', 'libx264',                                   // Video codec
+      '-r', '30',                                          // Frame rate
+      '-b:v', `${this.recordingConfig.videoCodec.bitrate || 2000}k`, // Bitrate
+      '-profile:v', 'main',                                // H.264 profile
+      '-level', '4.0',                                     // H.264 level
+      '-c:a', 'aac',                                       // Audio codec
+      '-b:a', '64k',                                       // Audio bitrate
+      '-shortest',                                         // Match shortest input
+      '-f', 'mp4',                                         // Output format
+      '-movflags', 'frag_keyframe+empty_moov+default_base_moof', // MP4 fragmentation
+      `tcp://127.0.0.1:${port}`,                            // Output to TCP
     ];
 
     const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });

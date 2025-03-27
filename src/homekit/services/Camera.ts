@@ -95,6 +95,33 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       [480, 270, 30], [320, 240, 30], [320, 180, 30],
     ];
 
+    const recordingConfig = {
+      prebufferLength: this.preBufferDuration,
+      mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
+      video: {
+        type: this.hap.VideoCodecType.H264,
+        resolutions: [[1280, 720, 30]],
+        parameters: {
+          profiles: [H264Profile.MAIN],
+          levels: [H264Level.LEVEL4_0],
+          bitrate: 2000,
+          iFrameInterval: 4000,
+        },
+      },
+      audio: {
+        codecs: [{
+          type: AudioRecordingCodecType.AAC_LC,
+          samplerate: this.hap.AudioRecordingSamplerate.KHZ_32,
+          bitrate: 64,
+          audioChannels: 1,
+        }],
+      },
+      overrideEventTriggerOptions: [
+        this.hap.EventTriggerOption.MOTION,
+        this.hap.EventTriggerOption.DOORBELL,
+      ],
+    };
+
     const existingController = accessory.getService(this.hap.Service.CameraRTPStreamManagement);
     if (!existingController) {
       const options: CameraControllerOptions = {
@@ -109,28 +136,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
             },
             resolutions,
           },
+          audio: { codecs: [] }, // No audio for live streaming
         },
         recording: {
-          options: {
-            prebufferLength: this.preBufferDuration,
-            mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
-            video: {
-              type: this.hap.VideoCodecType.H264,
-              resolutions: [[1280, 720, 30]],
-              parameters: {
-                profiles: [H264Profile.MAIN],
-                levels: [H264Level.LEVEL4_0],
-                bitrate: 2000,
-                iFrameInterval: 4000,
-              },
-            },
-            //audio: undefined,
-            audio: { codecs: [{ type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32, bitrate: 64 }] },
-            overrideEventTriggerOptions: [
-              this.hap.EventTriggerOption.MOTION,
-              this.hap.EventTriggerOption.DOORBELL,
-            ],
-          },
+          options: recordingConfig,
           delegate: this,
           sensors: { motion: this.hksvMotionSensor },
         } as any,
@@ -139,12 +148,12 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.controller = new this.hap.CameraController(options);
       accessory.configureController(this.controller);
       this.log.debug('CameraController configured with recording:', !!this.controller.recordingManagement);
-      // Set initial recording state via delegate
-      this.updateRecordingConfiguration(options.recording!.options as any);
-      this.updateRecordingActive(true);
+      this.recordingConfig = recordingConfig;
+      this.recordingActive = true; // Enable recording by default
     } else {
       this.controller = accessory.getService(this.hap.Service.CameraRTPStreamManagement) as unknown as CameraController;
       this.log.debug('Reusing existing CameraController', this.cameraName);
+      this.recordingConfig = recordingConfig; // Set for reuse case
     }
     this.startPreBuffer();
     platform.api.on('shutdown', () => this.stopAll());
@@ -159,6 +168,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
       '-r', '30',
+      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio
+      '-c:a', 'aac',
+      '-b:a', '64k',
+      '-shortest',
       '-f', 'mp4',
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
       'tcp://127.0.0.1:',
@@ -171,6 +184,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         const now = Date.now();
         this.preBuffer.push({ atom, time: now });
         this.preBuffer = this.preBuffer.filter(entry => entry.time > now - this.preBufferDuration);
+        this.log.debug(`PreBuffer updated: ${this.preBuffer.length} entries`);
       }
     });
 
@@ -179,9 +193,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     const cp = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     cp.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
-    cp.on('exit', () => {
+    cp.on('exit', (code) => {
       this.preBuffer = [];
-      this.log.debug('Pre-buffer process exited', this.cameraName);
+      this.log.debug(`Pre-buffer process exited with code ${code}`, this.cameraName);
     });
     this.preBufferSession = { server, process: cp };
   }
@@ -430,12 +444,14 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   updateRecordingConfiguration(configuration?: any): void {
     this.recordingConfig = configuration || {
-      videoCodec: { type: 'H264', bitrate: 2000, profiles: [H264Profile.MAIN], levels: [H264Level.LEVEL4_0], iFrameInterval: 4000 },
+      prebufferLength: this.preBufferDuration,
       mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
-      audioCodec: { type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32, bitrate: 64 },
+      videoCodec: { type: 'H264', bitrate: 2000, profiles: [H264Profile.MAIN], levels: [H264Level.LEVEL4_0], iFrameInterval: 4000 },
+      audioCodec: { type: AudioRecordingCodecType.AAC_LC, samplerate: this.hap.AudioRecordingSamplerate.KHZ_32, bitrate: 64, audioChannels: 1 },
     };
     this.recordingActive = true;
     this.log.debug('Recording configuration updated', this.cameraName);
+    // Removed this.controller.recordingManagement?.updateRecordingConfiguration call
   }
 
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
@@ -456,7 +472,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-b:v', `${this.recordingConfig.videoCodec.bitrate || 2000}k`,
       '-profile:v', 'main',
       '-level', '4.0',
-      '-an',
+      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio
+      '-c:a', 'aac',
+      '-b:a', '64k',
+      '-shortest',
       '-f', 'mp4',
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
       `tcp://127.0.0.1:${port}`,
@@ -464,6 +483,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     cp.stderr?.on('data', (data) => this.log.debug(`Recording FFmpeg stderr: ${data}`));
+    cp.stdout?.on('data', (data) => this.log.debug(`Recording FFmpeg stdout: ${data.length} bytes`));
 
     const generator = this.parseFragmentedMP4(cp.stdout as Readable);
     this.recordingSession = { socket: null as any, cp, generator };
@@ -472,6 +492,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       server.on('connection', (socket: NetSocket) => {
         server.close();
         this.recordingSession!.socket = socket;
+        this.log.debug('Recording session connected', this.cameraName);
         resolve(undefined);
       });
     });
@@ -488,6 +509,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       pending.push(box.header, box.data);
       if (box.type === 'moov' || box.type === 'mdat') {
         const fragment = Buffer.concat(pending);
+        this.log.info(`Yielding recording fragment: ${fragment.length} bytes, isLast: ${!getMotionState()}`, this.cameraName);
         yield { data: fragment, isLast: !getMotionState() };
         pending = [];
         if (!getMotionState()) {
@@ -497,7 +519,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       }
     }
 
-    cp.on('exit', () => this.recordingSession = undefined);
+    cp.on('exit', (code) => {
+      this.recordingSession = undefined;
+      this.log.debug(`Recording FFmpeg process exited with code ${code}`, this.cameraName);
+    });
   }
 
   acknowledgeStream(streamId: number): void {
@@ -510,9 +535,9 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.recordingSession.cp?.kill();
       this.recordingSession = undefined;
     }
-    // Type guard to satisfy TypeScript
     if (reason && !this.isNormalReason(reason)) {
       this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, false);
+      this.log.warn(`Recording closed with reason: ${reason}`, this.cameraName);
     }
   }
 

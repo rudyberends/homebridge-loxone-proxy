@@ -161,7 +161,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.log.debug('Reusing existing CameraController', this.cameraName);
       this.recordingConfig = recordingConfig;
     }
-    this.startPreBuffer();
+    //this.startPreBuffer();
     platform.api.on('shutdown', () => this.stopAll());
   }
 

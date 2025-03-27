@@ -452,9 +452,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const port = await this.listenServer(server);
 
     const args = [
-      '-i', 'pipe:', // Pre-buffer H.264
+      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-i', this.streamUrl,
       '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
-      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '64k',
+      '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '64k',
       '-map', '0:v:0', '-map', '1:a:0',
       '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
       `tcp://127.0.0.1:${port}`,
@@ -462,40 +463,18 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
     const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     cp.stderr?.on('data', (data) => this.log.debug(`Recording FFmpeg stderr: ${data}`));
-    cp.stdout?.on('data', (data) => this.log.debug(`Recording FFmpeg stdout: ${data.length} bytes`));
 
     const generator = this.parseFragmentedMP4(cp.stdout as Readable);
     this.recordingSession = { socket: null as any, cp, generator };
 
-    await new Promise((resolve) => {
-      server.on('connection', (socket: NetSocket) => {
-        server.close();
-        this.recordingSession!.socket = socket;
-        resolve(undefined);
-      });
-    });
-
-    // Feed pre-buffer
-    for (const entry of this.preBuffer) {
-      cp.stdin.write(entry.atom.data);
-    }
-
-    // Live stream
-    const liveArgs = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
-      '-i', this.streamUrl,
-      '-f', 'mjpeg',
-      '-c:v', 'libx264', '-r', '30', '-b:v', '2000k',
-      '-bsf:v', 'h264_mp4toannexb',
-      '-f', 'rawvideo', 'pipe:',
-    ];
-    const liveCp = spawn('ffmpeg', liveArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    liveCp.stdout?.pipe(cp.stdin);
-    liveCp.stderr?.on('data', (data) => this.log.debug(`Live FFmpeg stderr: ${data}`));
+    await new Promise((resolve) => server.on('connection', (socket: NetSocket) => {
+      server.close();
+      this.recordingSession!.socket = socket;
+      resolve(undefined);
+    }));
 
     const getMotionState = () => this.hksvMotionSensor.getCharacteristic(this.hap.Characteristic.MotionDetected).value;
     for await (const box of generator) {
-      this.log.info(`Yielding recording fragment: ${box.data.length} bytes, isLast: ${!getMotionState()}`, this.cameraName);
       yield { data: Buffer.concat([box.header, box.data]), isLast: !getMotionState() };
       if (!getMotionState()) {
         break;
@@ -503,7 +482,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     }
 
     cp.on('exit', (code) => {
-      liveCp.kill();
       this.recordingSession = undefined;
       this.log.debug(`Recording FFmpeg exited with code ${code}`, this.cameraName);
     });

@@ -12,13 +12,10 @@ export class LoxoneAccessory {
   Service: Record<string, unknown> = {};
   ItemStates: Record<string, { service: string; state: string }> = {};
 
-  constructor(
-    readonly platform: LoxonePlatform,
-    readonly device: Control,
-  ) {
+  constructor(readonly platform: LoxonePlatform, readonly device: Control) {
     // Prevent exceeding the HomeKit accessory limit
     if (this.platform.AccessoryCount >= 149) {
-      this.platform.log.info(`[${device.type}Item] Max HomeKit Accessories limit reached. Item not mapped`);
+      this.platform.log.info(`[${device.type}Item] Max HomeKit Accessories limit reached. Item not mapped: ${this.device.name}`);
       return;
     }
 
@@ -56,16 +53,31 @@ export class LoxoneAccessory {
     this.platform.AccessoryCount++;
   }
 
+  private sanitizeName(name: string): string {
+    return name
+      .replace(/[^a-zA-Z0-9\s']/g, '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+
   // Create or retrieve an existing accessory by UUID
   private getOrCreateAccessory(uuid: string): PlatformAccessory {
     let accessory = this.platform.accessories.find((acc) => acc.UUID === uuid);
+    const sanitizedName = this.sanitizeName(this.device.name);
 
     if (!accessory) {
-      accessory = new this.platform.api.platformAccessory(this.device.name, uuid);
+      accessory = new this.platform.api.platformAccessory(sanitizedName, uuid);
       this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
-      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory:`, this.device.name);
+      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory: ${sanitizedName} (original: ${this.device.name})`);
     } else {
-      this.platform.log.debug(`[${this.device.type}Item] Restoring accessory from cache:`, accessory.displayName);
+      // Update name if it differs
+      if (accessory.displayName !== sanitizedName) {
+        accessory.displayName = sanitizedName;
+        this.platform.api.updatePlatformAccessories([accessory]);
+      }
+      this.platform.log.debug(`[${this.device.type}Item] Restoring accessory from cache: ${accessory.displayName} ` +
+        `(original: ${this.device.name})`);
     }
 
     // Update accessory information
@@ -75,9 +87,8 @@ export class LoxoneAccessory {
         .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
         .setCharacteristic(this.platform.Characteristic.Model, this.device.room)
         .setCharacteristic(this.platform.Characteristic.SerialNumber, this.device.uuidAction)
-        .setCharacteristic(this.platform.Characteristic.Name, this.device.name);
+        .setCharacteristic(this.platform.Characteristic.Name, sanitizedName);
     }
-
     return accessory;
   }
 
@@ -88,7 +99,7 @@ export class LoxoneAccessory {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected handleLoxoneCommand(value : string): void {
+  protected handleLoxoneCommand(value: string): void {
     this.platform.log.info(`[${this.device.name}][handleLoxoneCommand] Function Not Implemented`);
   }
 

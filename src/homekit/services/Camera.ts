@@ -161,32 +161,25 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private async startPreBuffer(): Promise<void> {
     const args = [
-      '-headers', `Authorization: Basic ${this.base64auth}`, // Authentication for video stream
-      '-i', this.streamUrl,                                 // Video input (MJPEG)
-      '-f', 'lavfi',                                       // Lavfi format for silent audio
-      '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio input
-      '-f', 'mjpeg',                                       // Force MJPEG format for video input
-      '-c:v', 'libx264',                                   // Video codec
-      '-preset', 'ultrafast',                              // Encoding preset
-      '-tune', 'zerolatency',                              // Low-latency tuning
-      '-r', '30',                                          // Frame rate
-      '-c:a', 'aac',                                       // Audio codec
-      '-b:a', '64k',                                       // Audio bitrate
-      '-shortest',                                         // Match shortest input duration
-      '-f', 'mp4',                                         // Output format
-      '-movflags', 'frag_keyframe+empty_moov+default_base_moof', // MP4 fragmentation
-      'tcp://127.0.0.1:',                                  // Output to TCP
+      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-i', this.streamUrl,
+      '-f', 'mjpeg',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-r', '30',
+      '-bsf:v', 'h264_mp4toannexb', // Convert to Annex B
+      '-f', 'rawvideo', // Output raw H.264
+      'tcp://127.0.0.1:',
     ];
 
     const server = createServer(async (socket) => {
       server.close();
-      const parser = this.parseFragmentedMP4(socket);
-      for await (const atom of parser) {
+      let buffer = Buffer.alloc(0);
+      socket.on('data', (data) => {
+        buffer = Buffer.concat([buffer, data]);
         const now = Date.now();
-        this.preBuffer.push({ atom, time: now });
+        this.preBuffer.push({ atom: { header: Buffer.alloc(0), type: 'raw', length: data.length, data }, time: now });
         this.preBuffer = this.preBuffer.filter(entry => entry.time > now - this.preBufferDuration);
         this.log.debug(`PreBuffer updated: ${this.preBuffer.length} entries`);
-      }
+      });
     });
 
     const port = await this.listenServer(server);
@@ -280,44 +273,33 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private async fetchSnapshot(videoFilter?: string): Promise<Buffer> {
     const startTime = Date.now();
-    if (this.preBuffer.length > 0) {
-      const latest = this.preBuffer[this.preBuffer.length - 1];
-      const segment = Buffer.concat([latest.atom.header, latest.atom.data]);
+    const args = [
+      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-i', this.streamUrl,
+      '-f', 'mjpeg',
+      '-frames:v', '1',
+      '-q:v', '2',
+      '-f', 'image2',
+      ...(videoFilter ? ['-vf', videoFilter] : []),
+      'pipe:',
+      '-loglevel', 'error',
+    ];
 
-      if (segment.length < 100 || !segment.includes(Buffer.from('moof'))) {
-        this.log.warn('Invalid pre-buffer segment, falling back to live stream', this.cameraName);
-        return this.fetchLiveSnapshot(startTime, videoFilter);
-      }
-
-      const args = [
-        '-f', 'mp4',
-        '-i', 'pipe:',
-        '-frames:v', '1',
-        '-f', 'image2',
-        ...(videoFilter ? ['-filter:v', videoFilter] : []),
-        'pipe:',
-        '-loglevel', 'error',
-      ];
-
-      return new Promise<Buffer>((resolve, reject) => {
-        const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
-        ffmpeg.stdin.write(segment);
-        ffmpeg.stdin.end();
-        let snapshotBuffer = Buffer.alloc(0);
-
-        ffmpeg.stdout.on('data', (data) => snapshotBuffer = Buffer.concat([snapshotBuffer, data]));
-        ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
-        ffmpeg.on('error', (err) => reject(err));
-        ffmpeg.on('close', (code) => {
-          if (snapshotBuffer.length > 0) {
-            resolve(snapshotBuffer);
-          } else {
-            reject(new Error('Failed to fetch snapshot from pre-buffer'));
-          }
-        });
-      }).catch(() => this.fetchLiveSnapshot(startTime, videoFilter));
-    }
-    return this.fetchLiveSnapshot(startTime, videoFilter);
+    return new Promise((resolve, reject) => {
+      const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+      let snapshotBuffer = Buffer.alloc(0);
+      ffmpeg.stdout.on('data', (data) => snapshotBuffer = Buffer.concat([snapshotBuffer, data]));
+      ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
+      ffmpeg.on('error', (err) => reject(err));
+      ffmpeg.on('close', (code) => {
+        if (snapshotBuffer.length > 0) {
+          this.log.debug(`Snapshot took ${(Date.now() - startTime) / 1000}s`, this.cameraName);
+          resolve(snapshotBuffer);
+        } else {
+          reject(new Error('Failed to fetch snapshot'));
+        }
+      });
+    });
   }
 
   private async fetchLiveSnapshot(startTime: number, videoFilter?: string): Promise<Buffer> {
@@ -477,22 +459,12 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const port = await this.listenServer(server);
 
     const args = [
-      '-headers', `Authorization: Basic ${this.base64auth}`, // Authentication
-      '-i', this.streamUrl,                                 // Video input
-      '-f', 'lavfi',                                       // Lavfi format
-      '-i', 'anullsrc=channel_layout=mono:sample_rate=32000', // Silent audio
-      '-f', 'mjpeg',                                       // Force MJPEG for video
-      '-c:v', 'libx264',                                   // Video codec
-      '-r', '30',                                          // Frame rate
-      '-b:v', `${this.recordingConfig.videoCodec.bitrate || 2000}k`, // Bitrate
-      '-profile:v', 'main',                                // H.264 profile
-      '-level', '4.0',                                     // H.264 level
-      '-c:a', 'aac',                                       // Audio codec
-      '-b:a', '64k',                                       // Audio bitrate
-      '-shortest',                                         // Match shortest input
-      '-f', 'mp4',                                         // Output format
-      '-movflags', 'frag_keyframe+empty_moov+default_base_moof', // MP4 fragmentation
-      `tcp://127.0.0.1:${port}`,                            // Output to TCP
+      '-i', 'pipe:', // Pre-buffer H.264
+      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '64k',
+      '-map', '0:v:0', '-map', '1:a:0',
+      '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+      `tcp://127.0.0.1:${port}`,
     ];
 
     const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -506,36 +478,41 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       server.on('connection', (socket: NetSocket) => {
         server.close();
         this.recordingSession!.socket = socket;
-        this.log.debug('Recording session connected', this.cameraName);
         resolve(undefined);
       });
     });
 
-    let pending: Buffer[] = [];
-    const getMotionState = () =>
-      this.hksvMotionSensor.getCharacteristic(this.hap.Characteristic.MotionDetected).value;
-
+    // Feed pre-buffer
     for (const entry of this.preBuffer) {
-      pending.push(entry.atom.header, entry.atom.data);
+      cp.stdin.write(entry.atom.data);
     }
 
+    // Live stream
+    const liveArgs = [
+      '-headers', `Authorization: Basic ${this.base64auth}`,
+      '-i', this.streamUrl,
+      '-f', 'mjpeg',
+      '-c:v', 'libx264', '-r', '30', '-b:v', '2000k',
+      '-bsf:v', 'h264_mp4toannexb',
+      '-f', 'rawvideo', 'pipe:',
+    ];
+    const liveCp = spawn('ffmpeg', liveArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    liveCp.stdout?.pipe(cp.stdin);
+    liveCp.stderr?.on('data', (data) => this.log.debug(`Live FFmpeg stderr: ${data}`));
+
+    const getMotionState = () => this.hksvMotionSensor.getCharacteristic(this.hap.Characteristic.MotionDetected).value;
     for await (const box of generator) {
-      pending.push(box.header, box.data);
-      if (box.type === 'moov' || box.type === 'mdat') {
-        const fragment = Buffer.concat(pending);
-        this.log.info(`Yielding recording fragment: ${fragment.length} bytes, isLast: ${!getMotionState()}`, this.cameraName);
-        yield { data: fragment, isLast: !getMotionState() };
-        pending = [];
-        if (!getMotionState()) {
-          this.log.debug('Ending recording due to motion stopped', this.cameraName);
-          break;
-        }
+      this.log.info(`Yielding recording fragment: ${box.data.length} bytes, isLast: ${!getMotionState()}`, this.cameraName);
+      yield { data: Buffer.concat([box.header, box.data]), isLast: !getMotionState() };
+      if (!getMotionState()) {
+        break;
       }
     }
 
     cp.on('exit', (code) => {
+      liveCp.kill();
       this.recordingSession = undefined;
-      this.log.debug(`Recording FFmpeg process exited with code ${code}`, this.cameraName);
+      this.log.debug(`Recording FFmpeg exited with code ${code}`, this.cameraName);
     });
   }
 

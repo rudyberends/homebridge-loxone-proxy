@@ -296,25 +296,27 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-re', // Real-time input
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-i', this.streamUrl,
-      '-frames:v', '1',
-      '-q:v', '2',
-      ...(videoFilter ? ['-vf', videoFilter] : []), // Scaling only if requested
+      '-frames:v', '1', // Capture exactly 1 frame
+      '-q:v', '2', // JPEG quality
+      ...(videoFilter ? ['-vf', videoFilter] : []), // Apply scaling only if requested
       '-f', 'image2',
-      'pipe:',
-      '-loglevel', 'info', // More verbose for debugging
+      '-update', '1', // Write a single image to pipe
+      'pipe:', // Output to stdout
+      '-loglevel', 'error', // Minimize logging overhead
     ];
 
     return new Promise((resolve, reject) => {
       const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
       let snapshotBuffer = Buffer.alloc(0);
       ffmpeg.stdout.on('data', (data) => snapshotBuffer = Buffer.concat([snapshotBuffer, data]));
-      ffmpeg.stderr.on('data', (data) => this.log.info(`Snapshot FFmpeg stderr: ${data}`));
+      ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
       ffmpeg.on('error', (err) => reject(err));
       ffmpeg.on('close', (code) => {
         if (snapshotBuffer.length > 0) {
           this.log.debug(`Snapshot took ${(Date.now() - startTime) / 1000}s`, this.cameraName);
           resolve(snapshotBuffer);
         } else {
+          this.log.error(`Failed to fetch snapshot, code: ${code}`);
           reject(new Error(`Failed to fetch snapshot, code: ${code}`));
         }
       });

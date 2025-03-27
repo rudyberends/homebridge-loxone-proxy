@@ -136,7 +136,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
             },
             resolutions,
           },
-          audio: { codecs: [] }, // No audio for live streaming
         },
         recording: {
           options: recordingConfig,

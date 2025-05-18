@@ -86,7 +86,7 @@ and then setting the alias "MH0" in the plugin will result in all InfoOnlyAnalog
 
 Items that require an alias are listed in the "mapped items" table.
 
-NOTE: When the "description" field is set in Loxone Config, then this field is exposed to the plugin instead of the "name" field. For the mapping to work, the description field needst to be empty, or it needs to contain the correct convention. 
+**NOTE:** When the "description" field is set in Loxone Config, then this field is exposed to the plugin instead of the "name" field. For the mapping to work, the description field needst to be empty, or it needs to contain the correct convention. 
 
 # Limitations
 Apple does not allow more than 150 items per bridge. This plugin will not map more than 150 items, but if you have other plugins activated, you might still hit this limit. To prevent this you can run this plugin as a child bridge. Another way to solve it is to use a dedicated loxone user for the plugin and only expose the items that you want to use in HomeKit.

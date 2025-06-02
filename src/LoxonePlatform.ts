@@ -117,10 +117,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   removeUnmappedAccessories(): void {
     setTimeout(() => {
       this.accessories.forEach((accessory: PlatformAccessory) => {
-        if (!accessory.context.mapped) {
-          this.log.debug('Remove accessory: ', accessory.displayName);
-          this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
-        }
+        this.log.debug('Remove accessory: ', accessory.displayName);
+        this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
       });
     }, 5000); // Delay this function for 5 seconds. Wait for all Accessories to map.
   }
@@ -131,7 +129,6 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    */
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.debug('Loading accessory from cache:', accessory.displayName);
-    accessory.context.mapped = false; // To enable the removal of cached accessories removed from Loxone
     this.accessories.push(accessory);
   }
 }

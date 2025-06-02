@@ -21,9 +21,9 @@ export class Radio extends LoxoneAccessory {
     this.device.details!.outputs![0] = this.device.details.allOff; // allOff Switch
 
     for (const radioSwitchKey in this.device.details.outputs) {
-      const radioSwitch = this.device.details.outputs[radioSwitchKey];
+      const sanitizedRadioName = this.sanitizeLoxoneItemName(this.device.details.outputs[radioSwitchKey]);
       const radioItem = { ...this.device };
-      radioItem.name = radioSwitch;
+      radioItem.name = sanitizedRadioName;
       radioItem.type = 'Switch';
       radioItem.cat = radioSwitchKey; // Store ID in CAT field
       radioItem.details = {};

@@ -53,7 +53,7 @@ export class LoxoneAccessory {
     this.platform.AccessoryCount++;
   }
 
-  private sanitizeName(name: string): string {
+  public sanitizeLoxoneItemName(name: string): string {
     return name
       .replace(/[^a-zA-Z0-9\s']/g, '')
       .trim()
@@ -64,7 +64,7 @@ export class LoxoneAccessory {
   // Create or retrieve an existing accessory by UUID
   private getOrCreateAccessory(uuid: string): PlatformAccessory {
     let accessory = this.platform.accessories.find((acc) => acc.UUID === uuid);
-    const sanitizedName = this.sanitizeName(this.device.name);
+    const sanitizedName = this.sanitizeLoxoneItemName(this.device.name);
 
     if (!accessory) {
       accessory = new this.platform.api.platformAccessory(sanitizedName, uuid);

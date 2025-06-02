@@ -36,9 +36,10 @@ export class LightControllerV2 extends LoxoneAccessory {
   registerMoodSwitches(): void {
     const moods = JSON.parse(this.platform.LoxoneHandler.getLastCachedValue(this.device.states.moodList));
     moods.filter(mood => mood.id !== 778).forEach(mood => {
+      const sanitizedMoodName = this.sanitizeLoxoneItemName(mood.name);
       const moodSwitchItem = {
         ...this.device,
-        name: `${mood.name}`,
+        name: sanitizedMoodName,
         cat: mood.id,
         details: {},
         subControls: {},

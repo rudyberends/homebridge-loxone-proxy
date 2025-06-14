@@ -60,6 +60,17 @@ export class LoxoneAccessory {
       .replace(/\s+/g, ' ');
   }
 
+  private generateUniqueName(baseName: string): string {
+    let uniqueName = baseName;
+    let suffix = 1;
+    while (this.platform.registeredNames.has(uniqueName)) {
+      suffix++;
+      uniqueName = `${baseName} ${suffix}`;
+    }
+    this.platform.registeredNames.add(uniqueName);
+    return uniqueName;
+  }
+
 
   // Create or retrieve an existing accessory by UUID
   private getOrCreateAccessory(uuid: string): PlatformAccessory {
@@ -67,17 +78,14 @@ export class LoxoneAccessory {
     const sanitizedName = this.sanitizeLoxoneItemName(this.device.name);
 
     if (!accessory) {
-      accessory = new this.platform.api.platformAccessory(sanitizedName, uuid);
+      const uniqueName = this.generateUniqueName(sanitizedName);
+      accessory = new this.platform.api.platformAccessory(uniqueName, uuid);
       this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
-      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory: ${sanitizedName} (original: ${this.device.name})`);
+      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory: ${uniqueName} (original: ${this.device.name})`);
     } else {
-      // Update name if it differs
-      if (accessory.displayName !== sanitizedName) {
-        accessory.displayName = sanitizedName;
-        this.platform.api.updatePlatformAccessories([accessory]);
-      }
       this.platform.log.debug(`[${this.device.type}Item] Restoring accessory from cache: ${accessory.displayName} ` +
         `(original: ${this.device.name})`);
+      this.platform.registeredNames.add(accessory.displayName);
     }
 
     // Update accessory information
@@ -87,7 +95,7 @@ export class LoxoneAccessory {
         .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
         .setCharacteristic(this.platform.Characteristic.Model, this.device.room)
         .setCharacteristic(this.platform.Characteristic.SerialNumber, this.device.uuidAction)
-        .setCharacteristic(this.platform.Characteristic.Name, sanitizedName);
+        .setCharacteristic(this.platform.Characteristic.Name, accessory.displayName);
     }
     return accessory;
   }

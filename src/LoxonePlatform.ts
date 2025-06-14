@@ -9,6 +9,7 @@ import LoxoneHandler from './loxone/LoxoneHandler';
 export class LoxonePlatform implements DynamicPlatformPlugin {
   public LoxoneHandler;
   public AccessoryCount = 1;
+  public registeredNames: Set<string> = new Set();
   public msInfo: MSInfo = {} as MSInfo;
   public LoxoneItems: Controls = {} as Controls;
   public readonly Service: typeof Service = this.api.hap.Service;
@@ -119,7 +120,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
       this.accessories.forEach((accessory: PlatformAccessory) => {
         this.log.debug('Remove accessory: ', accessory.displayName);
         this.api.unregisterPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
+        this.registeredNames.delete(accessory.displayName);
       });
+      this.accessories.length = 0;
     }, 5000); // Delay this function for 5 seconds. Wait for all Accessories to map.
   }
 
@@ -130,5 +133,6 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.debug('Loading accessory from cache:', accessory.displayName);
     this.accessories.push(accessory);
+    this.registeredNames.add(accessory.displayName);
   }
 }

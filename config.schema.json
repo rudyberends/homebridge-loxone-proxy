@@ -87,6 +87,10 @@
         "type": "object",
         "title": "Switch aliases",
         "properties": {
+          "Outlet": {
+            "title": "Outlet (Will map all SwitchItems starting with this alias to a HomeKit Outlet)",
+            "type": "string"
+          },
           "Lock": {
             "title": "Lock (Will map all SwitchItems starting with this alias to a HomeKit DoorLock)",
             "type": "string"
@@ -187,6 +191,7 @@
       "title": "SwitchItem Mappings",
       "description": "Map Switch items using an Alias",
       "items": [
+        "switchAlias.Outlet",
         "switchAlias.Lock",
         "switchAlias.ReverseLockSwitch"
       ]

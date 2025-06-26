@@ -157,6 +157,7 @@ export interface ControlDetails {
     outputs?: any;
     animation?: string;
     deviceType?: number;
+    serviceType?: 'lock' | 'outlet' | 'switch';
     deviceUuid?: string;
     jLockable?: boolean;
     windows?: WindowDetails[];

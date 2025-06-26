@@ -39,35 +39,29 @@ export class Switch extends LoxoneAccessory {
     const catIcon = device.catIcon?.toLowerCase() || '';
     const defaultIcon = device.defaultIcon?.toLowerCase() || '';
 
-    const getIcon = (key: 'Lock' | 'Outlet') =>
-      config.switchIcon?.[key]?.toLowerCase();
-
-    const getAlias = (key: 'Lock' | 'Outlet') =>
-      config.switchAlias?.[key]?.toLowerCase();
-
-    const matchesIcon = (icon?: string): boolean =>
-      !!icon && (catIcon.includes(icon) || defaultIcon.includes(icon));
+    const matchesIcon = (icon: string): boolean =>
+      catIcon.includes(icon) || defaultIcon.includes(icon);
 
     const matchesAlias = (alias?: string): boolean =>
-      !!alias && new RegExp(`\\b${alias}\\b`).test(name);
+      !!alias && new RegExp(`\\b${alias.toLowerCase()}\\b`).test(name);
 
-    // Check for lock
-    const lockIcon = getIcon('Lock');
-    const lockAlias = getAlias('Lock');
+    const isLock =
+    matchesIcon('lock') ||
+    matchesAlias(config.switchAlias?.Lock);
 
-    if (matchesIcon(lockIcon) || matchesAlias(lockAlias)) {
+    if (isLock) {
       return 'lock';
     }
 
-    // Check for outlet
-    const outletIcon = getIcon('Outlet');
-    const outletAlias = getAlias('Outlet');
+    const isOutlet =
+    matchesIcon('outlet') ||
+    matchesAlias(config.switchAlias?.Outlet);
 
-    if (matchesIcon(outletIcon) || matchesAlias(outletAlias)) {
+    if (isOutlet) {
       return 'outlet';
     }
 
-    // Fallback
+    // 🔁 Fallback
     return 'switch';
   }
 

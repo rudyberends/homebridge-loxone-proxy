@@ -22,8 +22,8 @@ The following list displays all supported itemtypes supported by this plugin.
 | `Dimmer, EIBDimmer` | Lightbulb | Auto | Individual Dimmers, or items parsed from LightControllerV2.
 |`Gate` | GarageDoorOpener | Auto
 |`Humidity` | HumiditySensor | Auto | InfoOnlyAnalog Item. Tries to map based on its format. Can be overridden with a mapping.
-|`Intercom` | Doorbell, Camera | Auto | Includes basic motion detection for HKSV
-|`IntercomV2` | Doorbell, MotionSensor, Camera | Auto | "Use in userinterface" has to be enabled on the MotionSensor for it to be detected. Built‑in motion detection for HKSV
+|`Intercom` | Doorbell, Camera | Auto | Full HKSV support with prebuffered recording
+|`IntercomV2` | Doorbell, MotionSensor, Camera | Auto | "Use in userinterface" has to be enabled on the MotionSensor for it to be detected. Full HKSV support with prebuffered recording
 |`IRoomControllerV2` | Thermostat | Auto
 |`Jalousie` | Window Covering | Auto
 |`Leak` | LeakSensor | Manual | InfoOnlyDigital Item. Requires a mapping.

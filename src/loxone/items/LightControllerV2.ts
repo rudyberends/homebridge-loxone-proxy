@@ -20,7 +20,8 @@ export class LightControllerV2 extends LoxoneAccessory {
   isSupported(): boolean {
     this.registerChildItems();
 
-    this.device.name = `${this.device.room} Moods`;
+    // Override the base name used for the main Mood group
+    this.device.name = this.platform.generateUniqueName(this.device.room, 'Moods');
     return this.platform.config.options.MoodSwitches === 'enabled';
   }
 
@@ -32,20 +33,22 @@ export class LightControllerV2 extends LoxoneAccessory {
     this.registerMoodSwitches();
   }
 
-  // Create Mood Switches if enabled in config
+  /**
+   * Registers virtual switches for moods.
+   */
   registerMoodSwitches(): void {
     const moods = JSON.parse(
       this.platform.LoxoneHandler.getLastCachedValue(this.device.states.moodList),
     );
 
     moods
-      .filter(mood => mood.id !== 778)
+      .filter(mood => mood.id !== 778) // ignore default "off" mood
       .forEach(mood => {
-        const sanitizedMoodName = this.sanitizeLoxoneItemName(mood.name);
+        const uniqueMoodName = this.platform.generateUniqueName(this.device.room, mood.name);
 
         const moodSwitchItem = {
           ...this.device,
-          name: sanitizedMoodName,
+          name: uniqueMoodName,
           cat: mood.id,
           details: {},
           subControls: {},
@@ -53,16 +56,18 @@ export class LightControllerV2 extends LoxoneAccessory {
 
         const serviceType = Switch.determineSwitchType(moodSwitchItem, this.platform.config);
 
-        this.platform.log.info(`[Mood: ${sanitizedMoodName}] resolved to service type: ${serviceType}`);
+        this.platform.log.info(`[Mood: ${uniqueMoodName}] resolved to service type: ${serviceType}`);
 
         this.Service[mood.name] =
-        serviceType === 'outlet'
-          ? new Outlet(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this))
-          : new SwitchService(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this));
+          serviceType === 'outlet'
+            ? new Outlet(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this))
+            : new SwitchService(this.platform, this.Accessory!, moodSwitchItem, this.handleLoxoneCommand.bind(this));
       });
   }
 
-  // Create individual LightItems
+  /**
+   * Instantiates child sub-controls as accessories (ColorPickers, Dimmers, etc.)
+   */
   registerChildItems(): void {
     for (const childUuid in this.device.subControls) {
       const lightItem = this.device.subControls[childUuid];
@@ -74,13 +79,14 @@ export class LightControllerV2 extends LoxoneAccessory {
       lightItem.room = this.device.room;
       lightItem.cat = this.device.cat;
 
-      const ControlClass = typeClassMap[lightItem.type];
+      // Ensure name uniqueness before creating child accessory
+      lightItem.name = this.platform.generateUniqueName(lightItem.room, lightItem.name ?? lightItem.type);
 
+      const ControlClass = typeClassMap[lightItem.type];
       if (ControlClass) {
         if (lightItem.type === 'Switch') {
-          const serviceType = Switch.determineSwitchType(lightItem, this.platform.config);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (lightItem.details as any).serviceType = serviceType;
+          (lightItem.details as any).serviceType = Switch.determineSwitchType(lightItem, this.platform.config);
         }
 
         new ControlClass(this.platform, lightItem);
@@ -88,6 +94,9 @@ export class LightControllerV2 extends LoxoneAccessory {
     }
   }
 
+  /**
+   * Updates mood switch states when active mood changes
+   */
   protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
     const currentIDpreg = message.value as string;
     const currentID = parseInt(currentIDpreg.replace(/[[\]']+/g, ''));
@@ -105,6 +114,9 @@ export class LightControllerV2 extends LoxoneAccessory {
     }
   }
 
+  /**
+   * Sends mood change command to Loxone Miniserver
+   */
   protected handleLoxoneCommand(value: string): void {
     this.platform.log.debug(`[${this.device.name}] MoodSwitch update from Homekit ->`, value);
     const command = `changeTo/${value}`;

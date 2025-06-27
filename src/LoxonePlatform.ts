@@ -24,6 +24,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
   public readonly accessories: PlatformAccessory[] = []; // restored cached accessories
   private mappedAccessories = new Set<string>(); // tracking of mapped UUIDs
+  private displayNameCount: Record<string, number> = {}; // for name uniqueness
 
   constructor(
     public readonly log: Logger,
@@ -35,6 +36,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     });
   }
 
+  /**
+   * Initializes the Loxone system and starts accessory mapping
+   */
   async LoxoneInit(): Promise<void> {
     this.LoxoneHandler = new LoxoneHandler(this);
     await this.waitForLoxoneConfig();
@@ -42,6 +46,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
   }
 
+  /**
+   * Waits until the structure file is received from Loxone
+   */
   waitForLoxoneConfig(): Promise<void> {
     return new Promise<void>((resolve) => {
       const waitInterval = setInterval(() => {
@@ -53,6 +60,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     });
   }
 
+  /**
+   * Parses the structure file and begins item mapping
+   */
   parseLoxoneConfig(config: StructureFile): void {
     this.msInfo = config.msInfo;
     const LoxoneRooms: Record<string, Room> = { ...config.rooms };
@@ -71,6 +81,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     });
   }
 
+  /**
+   * Maps all Loxone items to their HomeKit accessories
+   */
   async mapLoxoneItems(items: Control[]): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const itemCache: { [key: string]: any } = {};
@@ -83,22 +96,22 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
       try {
         const itemType = item.type;
 
-        const isRoomExluded =
+        const isRoomExcluded =
           (RoomFilterType.toLowerCase() === 'exclusion' && RoomFilterList.includes(item.room.toLowerCase())) ||
           (RoomFilterType.toLowerCase() === 'inclusion' && !RoomFilterList.includes(item.room.toLowerCase()));
 
-        if (isRoomExluded) {
-          this.log.debug(`[mapLoxoneItem][RoomExlusion] Skipping Excluded Room: ${item.name} in room ${item.room}`);
+        if (isRoomExcluded) {
+          this.log.debug(`[mapLoxoneItem][RoomExclusion] Skipping Excluded Room: ${item.name} in room ${item.room}`);
         } else if (ExcludedItemTypes.includes(itemType)) {
-          this.log.debug(`[mapLoxoneItem][ItemTypeExlusion] Skipping Excluded ItemType: ${item.name} with type ${item.type}`);
+          this.log.debug(`[mapLoxoneItem][ItemTypeExclusion] Skipping Excluded ItemType: ${item.name} with type ${item.type}`);
         } else {
           if (!itemCache[itemType]) {
             const itemFile = await import(`./loxone/items/${itemType}`);
             itemCache[itemType] = itemFile;
           }
 
-          const uuid = this.api.hap.uuid.generate(item.uuidAction); // <-- consistent UUID
-          this.mappedAccessories.add(uuid); // <-- ✅ mark as still in use
+          const uuid = this.api.hap.uuid.generate(item.uuidAction);
+          this.mappedAccessories.add(uuid);
 
           const itemFile = itemCache[itemType];
           const constructorName = Object.keys(itemFile)[0];
@@ -111,7 +124,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * Removes cached accessories that are no longer mapped.
+   * Removes Homebridge-cached accessories that were not re-mapped during this session.
    */
   removeUnmappedAccessories(): void {
     const pluginName = 'homebridge-loxone-proxy';
@@ -126,11 +139,43 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
       }
     });
 
-    this.mappedAccessories.clear(); // reset for next run
+    this.mappedAccessories.clear(); // Reset after cleanup
   }
 
+  /**
+   * Called at Homebridge startup to restore cached accessories
+   */
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.debug('Loading accessory from cache:', accessory.displayName);
     this.accessories.push(accessory);
+  }
+
+  /**
+   * Sanitizes names by stripping invalid characters and excess spaces
+   */
+  public sanitizeName(name: string): string {
+    return name
+      .replace(/[^a-zA-Z0-9\s']/g, '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Ensures the generated name is unique per room/item combo (adds _1, _2 if needed)
+   */
+  public generateUniqueName(room: string, base: string): string {
+    const sanitizedRoom = this.sanitizeName(room || 'Unknown');
+    const sanitizedBase = this.sanitizeName(base || 'Unnamed');
+    const fullBase = `${sanitizedRoom} ${sanitizedBase}`;
+    let finalName = fullBase;
+
+    if (this.displayNameCount[fullBase] !== undefined) {
+      this.displayNameCount[fullBase]++;
+      finalName = `${fullBase}_${this.displayNameCount[fullBase]}`;
+    } else {
+      this.displayNameCount[fullBase] = 0;
+    }
+
+    return finalName;
   }
 }

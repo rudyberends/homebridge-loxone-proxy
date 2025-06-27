@@ -68,10 +68,12 @@ export class LoxoneAccessory {
   }
 
   // Override this in subclasses to add specific HomeKit services
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected configureServices(accessory: PlatformAccessory): void {
     // To be implemented by child classes
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected handleLoxoneCommand(value: string): void {
     this.platform.log.info(`[${this.device.name}][handleLoxoneCommand] Function Not Implemented`);
   }

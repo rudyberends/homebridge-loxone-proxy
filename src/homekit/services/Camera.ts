@@ -28,6 +28,8 @@ import { Readable } from 'stream';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { pickPort } from 'pick-port';
 import { Server, createServer, Socket as NetSocket } from 'net';
+import { request as httpRequest, RequestOptions, ClientRequest } from 'http';
+import { request as httpsRequest } from 'https';
 
 interface PreBufferEntry {
   atom: { header: Buffer; type: string; length: number; data: Buffer };
@@ -55,6 +57,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
   public readonly controller: CameraController;
   private hksvMotionSensor!: HapService;
   private motionTimeout?: NodeJS.Timeout;
+  private motionDetectionRequest?: ClientRequest;
+  private motionBuffer: Buffer = Buffer.alloc(0);
+  private motionBoundary?: Buffer;
+  private lastMotionSize?: number;
+  private lastMotionTrigger = 0;
+  private motionDetectionActive = false;
+  private readonly motionMinThreshold = 0.04;
+  private readonly motionMaxThreshold = 0.30;
+  private readonly motionCooldown = 8000;
 
   private preBuffer: PreBufferEntry[] = [];
   private preBufferDuration = 4000; // 4s prebuffer
@@ -518,6 +529,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.ongoingSessions.clear();
     this.recordingSession?.cp.kill();
     this.recordingSession?.socket?.end();
+    this.stopMotionDetection();
   }
 
   public triggerHKSVMotion(active: boolean, resetTime = 30000): void {
@@ -531,5 +543,87 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         this.log.debug(`HKSV Motion Sensor reset after ${resetTime}ms`, this.cameraName);
       }, resetTime);
     }
+  }
+
+  public startMotionDetection(): void {
+    if (this.motionDetectionActive) {
+      return;
+    }
+    this.motionDetectionActive = true;
+    this.initMotionRequest();
+  }
+
+  public stopMotionDetection(): void {
+    this.motionDetectionActive = false;
+    this.motionDetectionRequest?.destroy();
+    this.motionDetectionRequest = undefined;
+    this.motionBuffer = Buffer.alloc(0);
+    this.motionBoundary = undefined;
+  }
+
+  private initMotionRequest(): void {
+    const url = new URL(this.streamUrl);
+    const requestOptions: RequestOptions = {
+      method: 'GET',
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname + url.search,
+      headers: {},
+    };
+    if (this.base64auth) {
+      requestOptions.headers!['Authorization'] = `Basic ${this.base64auth}`;
+    }
+    const requestFn = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    this.motionDetectionRequest = requestFn(requestOptions, res => {
+      const contentType = (res.headers['content-type'] as string) || '';
+      const boundaryMatch = contentType.match(/boundary=([^;]+)/i);
+      const boundary = boundaryMatch ? boundaryMatch[1] : 'myboundary';
+      this.motionBoundary = Buffer.from(`--${boundary.replace(/^--/, '')}`);
+      res.on('data', chunk => this.processMotionChunk(chunk));
+      res.on('close', () => this.restartMotionRequest());
+    });
+    this.motionDetectionRequest.on('error', () => this.restartMotionRequest());
+    this.motionDetectionRequest.end();
+  }
+
+  private restartMotionRequest(): void {
+    this.motionDetectionRequest?.destroy();
+    this.motionDetectionRequest = undefined;
+    if (this.motionDetectionActive) {
+      setTimeout(() => this.initMotionRequest(), 1000);
+    }
+  }
+
+  private processMotionChunk(chunk: Buffer): void {
+    this.motionBuffer = Buffer.concat([this.motionBuffer, chunk]);
+    while (this.motionBoundary) {
+      const idx = this.motionBuffer.indexOf(this.motionBoundary);
+      if (idx === -1) {
+        break;
+      }
+      const frame = this.motionBuffer.slice(0, idx);
+      this.motionBuffer = this.motionBuffer.slice(idx + this.motionBoundary.length);
+      const headerEnd = frame.indexOf('\r\n\r\n');
+      if (headerEnd === -1) {
+        continue;
+      }
+      const image = frame.slice(headerEnd + 4);
+      const size = image.length;
+      this.handleMotionFrame(size);
+    }
+  }
+
+  private handleMotionFrame(size: number): void {
+    if (this.lastMotionSize !== undefined) {
+      const diff = Math.abs(size - this.lastMotionSize) / this.lastMotionSize;
+      if (diff > this.motionMinThreshold && diff < this.motionMaxThreshold) {
+        const now = Date.now();
+        if (now - this.lastMotionTrigger > this.motionCooldown) {
+          this.lastMotionTrigger = now;
+          this.triggerHKSVMotion(true);
+        }
+      }
+    }
+    this.lastMotionSize = size;
   }
 }

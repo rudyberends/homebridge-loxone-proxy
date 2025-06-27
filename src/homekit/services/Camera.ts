@@ -177,6 +177,15 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
 
   private async startPreBuffer(): Promise<void> {
     const args = [
+      ...(this.base64auth ? ['-headers', `Authorization: Basic ${this.base64auth}\r\n`] : []),
+      '-use_wallclock_as_timestamps', '1',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
+      '-probesize', '32',
+      '-analyzeduration', '0',
+      '-i', this.streamUrl,
+      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '64k',
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-i', this.streamUrl,
       '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
@@ -431,12 +440,23 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     this.recordingConfig = configuration || {
       prebufferLength: this.preBufferDuration,
       mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
-      videoCodec: { type: 'H264', bitrate: 2000, profiles: [H264Profile.MAIN], levels: [H264Level.LEVEL4_0], iFrameInterval: 4000 },
-      audioCodec: {
-        type: AudioRecordingCodecType.AAC_LC,
-        samplerate: this.hap.AudioRecordingSamplerate.KHZ_32,
-        bitrate: 64,
-        audioChannels: 1,
+      video: {
+        type: this.hap.VideoCodecType.H264,
+        resolutions: [[1280, 720, 30]],
+        parameters: {
+          profiles: [H264Profile.MAIN],
+          levels: [H264Level.LEVEL4_0],
+          bitrate: 2000,
+          iFrameInterval: 4000,
+        },
+      },
+      audio: {
+        codecs: [{
+          type: AudioRecordingCodecType.AAC_LC,
+          samplerate: this.hap.AudioRecordingSamplerate.KHZ_32,
+          bitrate: 64,
+          audioChannels: 1,
+        }],
       },
     };
     this.recordingActive = true;
@@ -453,13 +473,18 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     const port = await this.listenServer(server);
 
     const args = [
-      '-headers', `Authorization: Basic ${this.base64auth}`,
+      ...(this.base64auth ? ['-headers', `Authorization: Basic ${this.base64auth}\r\n`] : []),
+      '-use_wallclock_as_timestamps', '1',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
+      '-probesize', '32',
+      '-analyzeduration', '0',
       '-i', this.streamUrl,
       '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
-      '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '64k',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '64k',
       '-map', '0:v:0', '-map', '1:a:0',
-      '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      `tcp://127.0.0.1:${port}`,
+      '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+      '-f', 'mp4', `tcp://127.0.0.1:${port}`,
     ];
 
     const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });

@@ -119,7 +119,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
     this.accessories.forEach((accessory: PlatformAccessory) => {
       if (!this.mappedAccessories.has(accessory.UUID)) {
-        this.log.debug('[RemoveAccessory] Removing unused accessory:', accessory.displayName);
+        this.log.info('[RemoveAccessory] Removing unused accessory:', accessory.displayName);
         this.api.unregisterPlatformAccessories(pluginName, platformName, [accessory]);
       } else {
         this.log.debug('[RemoveAccessory] Keeping mapped accessory:', accessory.displayName);

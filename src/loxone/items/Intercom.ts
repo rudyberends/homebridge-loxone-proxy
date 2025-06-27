@@ -54,6 +54,7 @@ export class Intercom extends LoxoneAccessory {
 
   protected setupCamera(streamUrl: string, base64auth?: string | undefined): void {
     this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, base64auth);
+    this.camera.startMotionDetection();
   }
 
   private registerChildItems(): void {

@@ -186,6 +186,10 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       '-i', this.streamUrl,
       '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
       '-c:v', 'copy', '-c:a', 'aac', '-b:a', '64k',
+      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+      '-i', this.streamUrl,
+      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
+      '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '64k',
       '-map', '0:v:0', '-map', '1:a:0',
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
       '-f', 'mp4', '-'

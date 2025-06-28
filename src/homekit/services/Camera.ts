@@ -170,6 +170,7 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
       this.controller = accessory.getService(this.hap.Service.CameraRTPStreamManagement) as unknown as CameraController;
       this.log.debug('Reusing existing CameraController', this.cameraName);
       this.recordingConfig = recordingConfig;
+      this.recordingActive = true;
     }
     this.startPreBuffer().catch(err => this.log.warn(`Prebuffer failed: ${err}`));
     platform.api.on('shutdown', () => this.stopAll());
@@ -297,21 +298,33 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
     return resInfo;
   }
 
+  async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
+    const resolution = this.determineResolution(request);
+    this.log.debug('Requested snapshot resolution:', resolution); // ✅ LOG SNAPSHOT DETAILS
+    try {
+      const snapshot = await this.fetchSnapshot(resolution.videoFilter);
+      callback(undefined, snapshot);
+    } catch (err) {
+      this.log.error(`Snapshot error: ${err}`, this.cameraName);
+      callback(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
   private async fetchSnapshot(videoFilter?: string): Promise<Buffer> {
     const startTime = Date.now();
     const args = [
-      '-re', // Real-time input
-      '-fflags', 'nobuffer', // Reduce input buffering
-      '-flags', 'low_delay', // Minimize encoding delay
+      '-re',
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-i', this.streamUrl,
       '-frames:v', '1',
       '-q:v', '2',
-      ...(videoFilter ? ['-vf', videoFilter] : ['-vf', 'scale=640:360']), // Default to faster resolution
+      ...(videoFilter ? ['-vf', videoFilter] : ['-vf', 'scale=640:360']),
       '-f', 'image2',
       '-update', '1',
       'pipe:',
-      '-loglevel', 'info', // Temporarily increase for debugging
+      '-loglevel', 'verbose',
     ];
 
     return new Promise((resolve, reject) => {
@@ -330,17 +343,6 @@ export class CameraService implements CameraStreamingDelegate, CameraRecordingDe
         }
       });
     });
-  }
-
-  async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
-    const resolution = this.determineResolution(request);
-    try {
-      const snapshot = await this.fetchSnapshot(resolution.videoFilter);
-      callback(undefined, snapshot);
-    } catch (err) {
-      this.log.error(`Snapshot error: ${err}`, this.cameraName);
-      callback(err instanceof Error ? err : new Error(String(err)));
-    }
   }
 
   async prepareStream(request: PrepareStreamRequest, callback: (error?: Error, response?: PrepareStreamResponse) => void): Promise<void> {

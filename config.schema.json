@@ -46,7 +46,7 @@
           }
         }
       },
-     "Advanced": {
+      "Advanced": {
         "type": "object",
         "title": "Advanced",
         "properties": {
@@ -59,7 +59,7 @@
             ]
           }
         }
-      }, 
+      },
       "Exclusions": {
         "type": "string",
         "title": "Excluded ItemTypes"
@@ -136,6 +136,11 @@
             "type": "string"
           }
         }
+      },
+      "enableHKSV": {
+        "type": "boolean",
+        "title": "Enable HomeKit Secure Video (HKSV)",
+        "default": false
       }
     }
   },
@@ -147,10 +152,7 @@
         {
           "type": "flex",
           "flex-flow": "row wrap",
-          "items": [
-            "host",
-            "port"
-          ]
+          "items": ["host", "port"]
         },
         {
           "type": "flex",
@@ -166,9 +168,7 @@
         {
           "type": "flex",
           "flex-flow": "row wrap",
-          "items": [
-            "TLS"
-          ]
+          "items": ["TLS"]
         }
       ]
     },
@@ -218,7 +218,17 @@
         "InfoOnlyDigitalAlias.Leak"
       ]
     },
+  
     {
+      "type": "fieldset",
+      "expandable": true,
+      "title": "HomeKit Secure Video (HKSV)",
+      "description": "Enable or disable HKSV recording features. Requires iCloud+ and a compatible HomeKit Hub.",
+      "items": [
+        "enableHKSV"
+      ]
+    },
+      {
       "type": "fieldset",
       "expandable": true,
       "title": "Advanced",

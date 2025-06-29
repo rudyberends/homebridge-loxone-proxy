@@ -54,7 +54,8 @@ export class Intercom extends LoxoneAccessory {
   }
 
   protected setupCamera(streamUrl: string, base64auth: string): void {
-    this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, base64auth);
+    const enableHKSV = this.platform.config.enableHKSV ?? false;
+    this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, base64auth, enableHKSV);
 
     // Built-in Motion Sensor Based on MJPEG Frame Size Variations
     this.Service['CameraMotion'] = new CameraMotionSensor(

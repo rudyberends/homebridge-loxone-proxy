@@ -230,7 +230,6 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     request: SnapshotRequest,
     callback: SnapshotRequestCallback,
   ) {
-
     this.platform.log.debug(`Snapshot requested: ${request.width} x ${request.height}`, this.ip);
 
     // Spawn an ffmpeg process to capture a snapshot from the camera
@@ -239,9 +238,11 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-i', `${this.streamUrl}`,
       '-frames:v', '1',
+      '-update', '1',                      // Ensures only one frame is written
       '-loglevel', 'info',
       '-f', 'image2',
-      '-',
+      '-vcodec', 'mjpeg',                 // Explicit JPEG output
+      '-',                                // Output to stdout
     ],
     { env: process.env });
 
@@ -250,21 +251,29 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     // Collect the snapshot data from ffmpeg's stdout
     ffmpeg.stdout.on('data', data => snapshotBuffers.push(data));
 
+    // Log ffmpeg's stderr for diagnostics
     ffmpeg.stderr.on('data', data => {
       this.platform.log.info('SNAPSHOT: ' + String(data));
     });
 
+    // Handle process exit
     ffmpeg.on('exit', (code, signal) => {
       if (signal) {
         this.platform.log.debug('Snapshot process was killed with signal: ' + signal);
-        callback(new Error('killed with signal ' + signal));
+        callback(new Error('Snapshot process was killed with signal: ' + signal));
       } else if (code === 0) {
         this.platform.log.debug(`Successfully captured snapshot at ${request.width}x${request.height}`);
         callback(undefined, Buffer.concat(snapshotBuffers));
       } else {
-        this.platform.log.debug('Snapshot process exited with code ' + code);
+        this.platform.log.error('Snapshot process exited with code ' + code, this.ip);
         callback(new Error('Snapshot process exited with code ' + code));
       }
+    });
+
+    // Handle unexpected errors
+    ffmpeg.on('error', (error) => {
+      this.platform.log.error('Error while capturing snapshot: ' + error.message, this.ip);
+      callback(error);
     });
   }
 

@@ -9,7 +9,7 @@ import { CameraService } from './Camera';
  */
 export class CameraMotionSensor extends BaseService {
   // Snapshot polling interval in milliseconds
-  private readonly intervalMs = 5000;
+  private readonly intervalMs = 1000;
 
   // Relative size change thresholds to detect motion
   private readonly minThreshold = 0.04;

@@ -61,7 +61,7 @@ import { RecordingDelegate } from './RecordingDelegate';
 
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
-  public readonly recordingDelegate: CameraRecordingDelegate;
+  public readonly recordingDelegate: CameraRecordingDelegate | undefined;
   private readonly streamUrl;
   private readonly ip;
   private readonly base64auth;
@@ -92,7 +92,16 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       this.ip = match[1];
     }
 
-    this.recordingDelegate = new RecordingDelegate(this.platform, this.streamUrl, this.base64auth);
+    const enableHKSV = this.platform.config.enableHKSV ?? false;
+
+    if (enableHKSV) {
+      this.recordingDelegate = new RecordingDelegate(this.platform, this.streamUrl, this.base64auth);
+      this.platform.log.info('HKSV is Activated for this configuration.');
+    } else {
+      this.recordingDelegate = undefined;
+      this.platform.log.info('HKSV is Disabled for this configuration.');
+    }
+
 
     const resolutions: Resolution[] = [
       [320, 180, 30],
@@ -168,10 +177,14 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       cameraStreamCount: 5,
       delegate: this,
       streamingOptions: streamingOptions,
-      recording: {
-        options: recordingOptions,
-        delegate: this.recordingDelegate,
-      },
+      ...(this.recordingDelegate
+        ? {
+          recording: {
+            options: recordingOptions,
+            delegate: this.recordingDelegate,
+          },
+        }
+        : {}),
     };
 
     this.controller = new this.hap.CameraController(options);

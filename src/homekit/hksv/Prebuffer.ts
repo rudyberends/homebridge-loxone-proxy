@@ -2,72 +2,54 @@ import { ChildProcess, spawn, StdioNull, StdioPipe } from 'child_process';
 import EventEmitter from 'events';
 import { createServer, Server } from 'net';
 import { listenServer, MP4Atom, parseFragmentedMP4 } from './RecordingDelegate';
+import type { Logger } from 'homebridge';
 
 interface PrebufferFmp4 {
-    atom: MP4Atom;
-    time: number;
+  atom: MP4Atom;
+  time: number;
 }
 
 export interface Mp4Session {
-    server: Server;
-    process: ChildProcess;
+  server: Server;
+  process: ChildProcess;
 }
 
 const defaultPrebufferDuration = 15000;
 
-let prebufferSession: Mp4Session;
-
-/**
- * Class representing a pre-buffer for video streaming.
- */
 export class PreBuffer {
   prebufferFmp4: PrebufferFmp4[] = [];
   events = new EventEmitter();
   released = false;
-  ftyp;
-  moov;
+  ftyp?: MP4Atom;
+  moov?: MP4Atom;
   idrInterval = 0;
   prevIdr = 0;
 
-  private ffmpegInput: string;
-  private readonly cameraName;
+  private readonly ffmpegInput: string;
+  private readonly cameraName: string;
   private readonly ffmpegPath: string;
+  private readonly log: Logger;
+  private prebufferSession?: Mp4Session;
 
-  /**
-   * Creates an instance of `PreBuffer`.
-   * @param ffmpegInput - The input command for FFmpeg.
-   * @param cameraName - The name of the camera.
-   * @param videoProcessor - The video processing command (e.g., 'ffmpeg').
-   */
-  constructor(ffmpegInput: string, cameraName: string, videoProcessor: string) {
+  constructor(ffmpegInput: string, cameraName: string, videoProcessor: string, log: Logger) {
     this.ffmpegInput = ffmpegInput;
     this.cameraName = cameraName;
     this.ffmpegPath = videoProcessor;
+    this.log = log;
   }
 
-  /**
-   * Starts the pre-buffer process.
-   * @returns A promise that resolves to the pre-buffer session object.
-   */
   async startPreBuffer(): Promise<Mp4Session> {
-    if (prebufferSession) {
-      return prebufferSession;
+    if (this.prebufferSession) {
+      return this.prebufferSession;
     }
 
-    /*
-    const acodec = [
-      '-acodec',
-      'copy',
-    ];
-    */
-
     const vcodec = [
-      '-vcodec',
-      'copy',
+      '-vcodec', 'copy',
     ];
 
     const fmp4OutputServer: Server = createServer(async (socket) => {
       fmp4OutputServer.close();
+
       const parser = parseFragmentedMP4(socket);
       for await (const atom of parser) {
         const now = Date.now();
@@ -83,10 +65,7 @@ export class PreBuffer {
             this.prevIdr = now;
           }
 
-          this.prebufferFmp4.push({
-            atom,
-            time: now,
-          });
+          this.prebufferFmp4.push({ atom, time: now });
         }
 
         while (this.prebufferFmp4.length && this.prebufferFmp4[0].time < now - defaultPrebufferDuration) {
@@ -96,7 +75,8 @@ export class PreBuffer {
         this.events.emit('atom', atom);
       }
     });
-    const fmp4Port = await listenServer(fmp4OutputServer);
+
+    const fmp4Port = await listenServer(fmp4OutputServer, this.log);
 
     const ffmpegOutput = [
       '-f', 'mp4',
@@ -105,25 +85,21 @@ export class PreBuffer {
       `tcp://127.0.0.1:${fmp4Port}`,
     ];
 
-    const args: string[] = [];
-    args.push(...this.ffmpegInput.split(' '));
-    args.push(...ffmpegOutput);
+    const args: string[] = [
+      ...this.ffmpegInput.split(' '),
+      ...ffmpegOutput,
+    ];
 
     const debug = false;
-
     const stdioValue: StdioPipe | StdioNull = debug ? 'pipe' : 'ignore';
+
     const cp = spawn(this.ffmpegPath, args, { env: process.env, stdio: stdioValue });
 
-    prebufferSession = { server: fmp4OutputServer, process: cp };
+    this.prebufferSession = { server: fmp4OutputServer, process: cp };
 
-    return prebufferSession;
+    return this.prebufferSession;
   }
 
-  /**
-   * Retrieves the video data from the pre-buffer.
-   * @param requestedPrebuffer - The duration of pre-buffering to retrieve in milliseconds.
-   * @returns A promise that resolves to an array of FFmpeg input commands for retrieving the pre-buffered video.
-   */
   async getVideo(requestedPrebuffer: number): Promise<string[]> {
     const server = new Server(socket => {
       server.close();
@@ -132,21 +108,15 @@ export class PreBuffer {
         socket.write(Buffer.concat([atom.header, atom.data]));
       };
 
-      if (this.ftyp) {
-        writeAtom(this.ftyp);
-      }
-      if (this.moov) {
-        writeAtom(this.moov);
-      }
+      if (this.ftyp) writeAtom(this.ftyp);
+      if (this.moov) writeAtom(this.moov);
+
       const now = Date.now();
       let needMoof = true;
       for (const prebuffer of this.prebufferFmp4) {
-        if (prebuffer.time < now - requestedPrebuffer) {
-          continue;
-        }
-        if (needMoof && prebuffer.atom.type !== 'moof') {
-          continue;
-        }
+        if (prebuffer.time < now - requestedPrebuffer) continue;
+        if (needMoof && prebuffer.atom.type !== 'moof') continue;
+
         needMoof = false;
         writeAtom(prebuffer.atom);
       }
@@ -168,7 +138,7 @@ export class PreBuffer {
 
     setTimeout(() => server.close(), 30000);
 
-    const port = await listenServer(server);
+    const port = await listenServer(server, this.log);
 
     const ffmpegInput: string[] = [
       '-f', 'mp4',

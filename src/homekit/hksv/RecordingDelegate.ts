@@ -144,6 +144,7 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     this.streamAbortControllers.set(streamId, abortController);
 
     try {
+      await this.startPreBuffer();
       const fragmentGenerator = this.handleFragmentsRequests(this.currentRecordingConfiguration, streamId);
       let fragmentCount = 0;
       let totalBytes = 0;

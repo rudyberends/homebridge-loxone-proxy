@@ -42,7 +42,7 @@ export async function listenServer(server: Server, log: Logger): Promise<number>
       const address = server.address() as AddressInfo;
       isListening = true;
       return address.port;
-    } catch (e: any) {
+    } catch (e: unknown) {
       log.error('Error while listening to the server:', e);
     }
   }

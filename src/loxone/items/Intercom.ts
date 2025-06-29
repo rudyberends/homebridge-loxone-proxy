@@ -2,6 +2,7 @@ import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { Doorbell } from '../../homekit/services/Doorbell';
 import { Switch } from '../../homekit/services/Switch';
 import { CameraService } from '../../homekit/services/Camera';
+import { CameraMotionSensor } from '../../homekit/services/CameraMotionSensor';
 
 /**
  * Loxone Intercom (V1) Item
@@ -22,7 +23,7 @@ export class Intercom extends LoxoneAccessory {
     // Register pushbuttons on the intercom
     this.registerChildItems();
 
-    this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!, this.camera);
+    this.Service.PrimaryService = new Doorbell(this.platform, this.Accessory!);
   }
 
   protected async configureCamera(): Promise<void> {
@@ -54,6 +55,13 @@ export class Intercom extends LoxoneAccessory {
 
   protected setupCamera(streamUrl: string, base64auth: string): void {
     this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, base64auth);
+
+    // Built-in Motion Sensor Based on MJPEG Frame Size Variations
+    this.Service['CameraMotion'] = new CameraMotionSensor(
+      this.platform,
+      this.Accessory!,
+      this.camera,
+    );
   }
 
   private registerChildItems(): void {

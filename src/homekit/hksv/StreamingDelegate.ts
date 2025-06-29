@@ -59,15 +59,6 @@ import { RecordingDelegate } from './RecordingDelegate';
       socket?: Socket;
   };
 
-/*
-  interface SampleRateEntry {
-      type: AudioRecordingCodecType;
-      bitrateMode: number;
-      samplerate: AudioRecordingSamplerate[];
-      audioChannels: number;
-  }
-  */
-
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
   public readonly recordingDelegate: CameraRecordingDelegate;
@@ -77,6 +68,10 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
 
   private pendingSessions: { [index: string]: SessionInfo } = {};
   private ongoingSessions: { [index: string]: ActiveSession } = {};
+
+  private cachedSnapshot: Buffer | null = null;
+  private cachedAt = 0;
+  private readonly cacheTtlMs = 5000;
 
   //private readonly camera;
   private readonly hap: HAP;
@@ -224,6 +219,29 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
 
   forceStopStream(sessionId: string) {
     this.controller.forceStopStreamingSession(sessionId);
+  }
+
+  /** Public snapshot method with internal caching */
+  public async getSnapshot(): Promise<Buffer | null> {
+    const now = Date.now();
+
+    if (this.cachedSnapshot && now - this.cachedAt < this.cacheTtlMs) {
+      this.platform.log.debug(`[${this.ip}] Snapshot cache hit`);
+      return this.cachedSnapshot;
+    }
+
+    return new Promise((resolve) => {
+      this.handleSnapshotRequest({ width: 640, height: 360 }, (err, buffer) => {
+        if (err || !buffer) {
+          this.platform.log.warn(`[${this.ip}] Snapshot request failed`);
+          return resolve(null);
+        }
+
+        this.cachedSnapshot = buffer;
+        this.cachedAt = Date.now();
+        resolve(buffer);
+      });
+    });
   }
 
   async handleSnapshotRequest(

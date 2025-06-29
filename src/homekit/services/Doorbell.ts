@@ -12,9 +12,8 @@ export class Doorbell extends BaseService {
 
   private camera?: CameraService;
 
-  constructor(platform: any, accessory: any, camera?: CameraService) {
+  constructor(platform: any, accessory: any) {
     super(platform, accessory);
-    this.camera = camera;
     this.setupService();
   }
 
@@ -35,11 +34,6 @@ export class Doorbell extends BaseService {
         this.State.ProgrammableSwitchEvent,
       );
       this.platform.log.debug(`[${this.device.name}] ProgrammableSwitchEvent updated in HomeKit`);
-
-      // Trigger HKSV virtual sensor instead of direct motion or recording
-      if (this.camera) {
-        //this.camera.triggerHKSVMotion(true);
-      }
     }
   }
 

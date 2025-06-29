@@ -37,11 +37,6 @@ export class MotionSensor extends BaseService {
     this.platform.log.debug(`[${this.device.name}] Callback state update for MotionSensor: ${!!message.value}`);
     this.State.MotionDetected = !!message.value;
     this.service!.getCharacteristic(this.platform.Characteristic.MotionDetected).updateValue(this.State.MotionDetected);
-
-    // Trigger HKSV virtual sensor
-    if (this.camera && this.State.MotionDetected) {
-      //this.camera.triggerHKSVMotion(true);
-    }
   };
 
   handleMotionDetectedGet() {

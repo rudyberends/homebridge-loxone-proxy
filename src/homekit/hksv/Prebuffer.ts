@@ -23,8 +23,8 @@ export class PreBuffer {
   prebufferFmp4: PrebufferFmp4[] = [];
   events = new EventEmitter();
   released = false;
-  ftyp?: MP4Atom;
-  moov?: MP4Atom;
+  ftyp;
+  moov;
   idrInterval = 0;
   prevIdr = 0;
   prebufferSession?: Mp4Session;
@@ -57,15 +57,7 @@ export class PreBuffer {
       return this.prebufferSession;
     }
 
-    const vcodec = [
-      '-f', 'mjpeg',
-      '-vcodec', 'libx264',
-      '-preset', 'ultrafast',
-      '-tune', 'zerolatency',
-      '-pix_fmt', 'yuv420p',
-      '-r', '10',
-      '-an',
-    ];
+    const vcodec = ['-vcodec', 'copy'];
 
     const fmp4OutputServer: Server = createServer(async (socket) => {
       fmp4OutputServer.close();

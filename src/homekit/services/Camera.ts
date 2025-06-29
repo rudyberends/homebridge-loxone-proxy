@@ -1,7 +1,6 @@
 import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { streamingDelegate } from '../hksv/StreamingDelegate';
-import { RecordingDelegate } from '../hksv/RecordingDelegate';
 
 /**
  * CameraService wrapt de streamingDelegate en biedt HomeKit-camera-integratie
@@ -20,26 +19,21 @@ export class CameraService {
     accessory: PlatformAccessory,
     ip: string,
     base64auth: string,
-    enableHKSV: boolean,
   ) {
     this.platform = platform;
     this.accessory = accessory;
     this.ip = ip;
     this.base64auth = base64auth;
 
-    this.setupService(enableHKSV);
+    this.setupService();
   }
 
   /**
    * Initialiseer streamingDelegate en koppel aan Homebridge CameraController
    */
-  private setupService(enableHKSV: boolean): void {
+  private setupService(): void {
 
-    const recordingDelegate = enableHKSV
-      ? new RecordingDelegate(this.platform, this.ip, this.base64auth)
-      : undefined;
-
-    this.streamingDelegate = new streamingDelegate(this.platform, this.ip, this.base64auth, recordingDelegate, enableHKSV);
+    this.streamingDelegate = new streamingDelegate(this.platform, this.ip, this.base64auth);
     this.accessory.configureController(this.streamingDelegate.controller);
   }
 

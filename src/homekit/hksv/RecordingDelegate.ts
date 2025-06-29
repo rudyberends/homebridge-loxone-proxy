@@ -32,7 +32,6 @@ export interface FFMpegFragmentedMP4Session {
 }
 
 export const PREBUFFER_LENGTH = 4000;
-export const FRAGMENTS_LENGTH = 4000;
 
 export async function listenServer(server: Server, log: Logger): Promise<number> {
   let isListening = false;
@@ -107,6 +106,10 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     this.cameraName = ip;
     this.videoProcessor = 'ffmpeg';
 
+    const ffmpegInput = `-f mjpeg -re -i ${ip}/mjpg/video.mjpg`;
+    this.preBuffer = new PreBuffer(ffmpegInput, this.cameraName, this.videoProcessor, this.log);
+    void this.startPreBuffer();
+
     platform.api.on(APIEvent.SHUTDOWN, () => {
       if (this.preBufferSession) {
         this.preBufferSession.process?.kill();
@@ -133,6 +136,16 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     return Promise.resolve();
   }
 
+  async startPreBuffer(): Promise<void> {
+    this.log.info(`start prebuffer ${this.cameraName}`);
+    if (!this.preBuffer) {
+      return;
+    }
+    if (!this.preBufferSession) {
+      this.preBufferSession = await this.preBuffer.startPreBuffer();
+    }
+  }
+
   async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
     this.log.info(`Recording stream request received for stream ID: ${streamId}`, this.cameraName);
     if (!this.currentRecordingConfiguration) {
@@ -144,91 +157,44 @@ export class RecordingDelegate implements CameraRecordingDelegate {
 
     try {
       const fragmentGenerator = this.handleFragmentsRequests(this.currentRecordingConfiguration, streamId);
-      let fragmentCount = 0;
-      let totalBytes = 0;
       for await (const fragmentBuffer of fragmentGenerator) {
         if (abortController.signal.aborted) {
-          this.log.debug(`Recording stream ${streamId} aborted, stopping generator`, this.cameraName);
           break;
         }
-        fragmentCount++;
-        totalBytes += fragmentBuffer.length;
-        // eslint-disable-next-line max-len
-        this.log.debug(`HKSV: Yielding fragment #${fragmentCount}, size: ${fragmentBuffer.length}, total: ${totalBytes} bytes`, this.cameraName);
         yield { data: fragmentBuffer, isLast: false };
       }
-      // eslint-disable-next-line max-len
-      this.log.info(`HKSV: Recording stream ${streamId} completed. Total fragments: ${fragmentCount}, total bytes: ${totalBytes}`, this.cameraName);
     } catch (error) {
       this.log.error(`Recording stream error: ${error}`, this.cameraName);
       yield { data: Buffer.alloc(0), isLast: true };
     } finally {
       this.streamAbortControllers.delete(streamId);
-      this.log.debug(`Recording stream ${streamId} generator finished`, this.cameraName);
     }
   }
 
   closeRecordingStream(streamId: number, reason: HDSProtocolSpecificErrorReason | undefined): void {
     this.log.info(`Recording stream closed for stream ID: ${streamId}, reason: ${reason}`, this.cameraName);
-    switch (reason) {
-      case 0:
-        this.log.info('✅ HKSV: Recording ended normally (reason 0)', this.cameraName);
-        break;
-      case 1:
-        this.log.warn('⚠️ HKSV: Recording ended due to generic error (reason 1)', this.cameraName);
-        break;
-      case 2:
-        this.log.warn('⚠️ HKSV: Recording ended due to network issues (reason 2)', this.cameraName);
-        break;
-      case 3:
-        this.log.warn('⚠️ HKSV: Recording ended due to insufficient resources (reason 3)', this.cameraName);
-        break;
-      case 4:
-        this.log.warn('⚠️ HKSV: Recording ended due to HomeKit busy (reason 4)', this.cameraName);
-        break;
-      case 5:
-        this.log.warn('⚠️ HKSV: Recording ended due to insufficient buffer space (reason 5)', this.cameraName);
-        break;
-      case 6:
-        this.log.warn('❌ HKSV: Recording ended due to STREAM FORMAT INCOMPATIBILITY (reason 6) - Check H.264 parameters!', this.cameraName);
-        break;
-      case 7:
-        this.log.warn('⚠️ HKSV: Recording ended due to maximum recording time exceeded (reason 7)', this.cameraName);
-        break;
-      case 8:
-        this.log.warn('⚠️ HKSV: Recording ended due to HomeKit storage full (reason 8)', this.cameraName);
-        break;
-      default:
-        this.log.warn(`❓ HKSV: Unknown reason ${reason}`, this.cameraName);
-    }
-
     const abortController = this.streamAbortControllers.get(streamId);
     if (abortController) {
       abortController.abort();
       this.streamAbortControllers.delete(streamId);
     }
-
     const process = this.activeFFmpegProcesses.get(streamId);
     if (process && !process.killed) {
-      this.log.debug(`Terminating FFmpeg process for stream ${streamId}`, this.cameraName);
       process.kill('SIGTERM');
       this.activeFFmpegProcesses.delete(streamId);
     }
   }
 
-  async startPreBuffer(): Promise<void> {
-    this.log.info(`start prebuffer ${this.cameraName}`);
-    if (!this.preBuffer) {
-      this.preBuffer = new PreBuffer(this.cameraName, this.cameraName, this.videoProcessor, this.log);
-      if (!this.preBufferSession) {
-        this.preBufferSession = await this.preBuffer.startPreBuffer();
-      }
-    }
-  }
-
   async *handleFragmentsRequests(configuration: CameraRecordingConfiguration, streamId: number): AsyncGenerator<Buffer> {
-    let moofBuffer: Buffer | null = null;
-    let fragmentCount = 0;
+    if (!this.preBuffer) {
+      throw new Error('No prebuffer configured');
+    }
+
+    const profile = configuration.videoCodec.parameters.profile === H264Profile.HIGH ? 'high'
+      : configuration.videoCodec.parameters.profile === H264Profile.MAIN ? 'main' : 'baseline';
+
+    const level = configuration.videoCodec.parameters.level === H264Level.LEVEL4_0 ? '4.0'
+      : configuration.videoCodec.parameters.level === H264Level.LEVEL3_2 ? '3.2' : '3.1';
 
     const audioArgs: string[] = [
       '-acodec', 'aac',
@@ -239,12 +205,6 @@ export class RecordingDelegate implements CameraRecordingDelegate {
       '-b:a', `${configuration.audioCodec.bitrate}k`,
       '-ac', `${configuration.audioCodec.audioChannels}`,
     ];
-
-    const profile = configuration.videoCodec.parameters.profile === H264Profile.HIGH ? 'high'
-      : configuration.videoCodec.parameters.profile === H264Profile.MAIN ? 'main' : 'baseline';
-
-    const level = configuration.videoCodec.parameters.level === H264Level.LEVEL4_0 ? '4.0'
-      : configuration.videoCodec.parameters.level === H264Level.LEVEL3_2 ? '3.2' : '3.1';
 
     const videoArgs: string[] = [
       '-an', '-sn', '-dn',
@@ -263,52 +223,35 @@ export class RecordingDelegate implements CameraRecordingDelegate {
       '-force_key_frames', 'expr:gte(t,n_forced*1)',
     ];
 
-    if (configuration.audioCodec) {
-      const idx = videoArgs.indexOf('-an');
-      if (idx !== -1) {
-        videoArgs.splice(idx, 1, ...audioArgs);
-      }
+    const idx = videoArgs.indexOf('-an');
+    if (configuration.audioCodec && idx !== -1) {
+      videoArgs.splice(idx, 1, ...audioArgs);
     }
 
-    const ffmpegInput: string[] = [];
-    if (this.preBuffer) {
-      const input = await this.preBuffer.getVideo(configuration.mediaContainerConfiguration.fragmentLength ?? PREBUFFER_LENGTH);
-      ffmpegInput.push(...input);
-    } else {
-      throw new Error('No video source configured');
-    }
-
-    const session = await this.startFFMPegFragmetedMP4Session(this.videoProcessor, ffmpegInput, videoArgs);
+    const ffmpegInput = await this.preBuffer.getVideo(PREBUFFER_LENGTH);
+    const session = await this.startFFMPegFragmentedMP4Session(this.videoProcessor, ffmpegInput, videoArgs);
     const { cp, generator } = session;
     this.activeFFmpegProcesses.set(streamId, cp);
 
-    let pending: Buffer[] = [];
+    let moofBuffer: Buffer | null = null;
     let isFirstFragment = true;
+    const pending: Buffer[] = [];
 
     try {
       for await (const box of generator) {
         const { header, type, data } = box;
         pending.push(header, data);
-        if (isFirstFragment) {
-          if (type === 'moov') {
-            const fragment = Buffer.concat(pending);
-            pending = [];
-            isFirstFragment = false;
-            yield fragment;
-          }
-        } else {
-          if (type === 'moof') {
-            moofBuffer = Buffer.concat([header, data]);
-          } else if (type === 'mdat' && moofBuffer) {
-            const fragment = Buffer.concat([moofBuffer, header, data]);
-            fragmentCount++;
-            yield fragment;
-            moofBuffer = null;
-          }
+        if (isFirstFragment && type === 'moov') {
+          yield Buffer.concat(pending);
+          pending.length = 0;
+          isFirstFragment = false;
+        } else if (!isFirstFragment && type === 'moof') {
+          moofBuffer = Buffer.concat([header, data]);
+        } else if (!isFirstFragment && type === 'mdat' && moofBuffer) {
+          yield Buffer.concat([moofBuffer, header, data]);
+          moofBuffer = null;
         }
       }
-    } catch (e) {
-      this.log.debug(`Recording completed: ${e}`, this.cameraName);
     } finally {
       if (cp && !cp.killed) {
         cp.kill('SIGTERM');
@@ -318,20 +261,23 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     }
   }
 
-  private async startFFMPegFragmetedMP4Session(
+  private async startFFMPegFragmentedMP4Session(
     ffmpegPath: string,
     ffmpegInput: string[],
-    videoOutputArgs: string[]
+    videoOutputArgs: string[],
   ): Promise<FFMpegFragmentedMP4Session> {
-    const args: string[] = ['-hide_banner', ...ffmpegInput,
+    const args: string[] = [
+      '-hide_banner',
+      ...ffmpegInput,
       '-f', 'mp4',
       ...videoOutputArgs,
       '-movflags', 'frag_keyframe+empty_moov+default_base_moof+omit_tfhd_offset',
-      'pipe:1'];
+      'pipe:1',
+    ];
 
     const cp = spawn(ffmpegPath, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
 
-    async function* generator() {
+    async function* generator(): AsyncGenerator<MP4Atom> {
       while (true) {
         const header = await readLength(cp.stdout!, 8);
         const length = header.readInt32BE(0) - 8;

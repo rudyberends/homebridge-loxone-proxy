@@ -1,7 +1,6 @@
 import { BaseService } from './BaseService';
 import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
-import { CameraService } from './Camera';
 
 /**
  * Represents a Motion Sensor accessory.
@@ -11,12 +10,9 @@ export class MotionSensor extends BaseService {
     MotionDetected: false,
   };
 
-  private camera?: CameraService;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device?: any, camera?: CameraService) {
+  constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device?: any) {
     super(platform, accessory, device);
-    this.camera = camera;
     this.setupService();
   }
 

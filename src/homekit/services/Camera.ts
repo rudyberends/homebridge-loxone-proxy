@@ -1,4 +1,4 @@
-import { PlatformAccessory, Service } from 'homebridge';
+import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { streamingDelegate } from '../hksv/StreamingDelegate';
 
@@ -11,7 +11,6 @@ export class CameraService {
   private readonly accessory: PlatformAccessory;
   private readonly ip: string;
   private readonly base64auth: string;
-  private motionService?: Service;
 
   private streamingDelegate!: streamingDelegate;
 
@@ -20,13 +19,11 @@ export class CameraService {
     accessory: PlatformAccessory,
     ip: string,
     base64auth: string,
-    motionService?: Service,
   ) {
     this.platform = platform;
     this.accessory = accessory;
     this.ip = ip;
     this.base64auth = base64auth;
-    this.motionService = motionService;
 
     this.setupService();
   }
@@ -36,7 +33,7 @@ export class CameraService {
    */
   private setupService(): void {
 
-    this.streamingDelegate = new streamingDelegate(this.platform, this.ip, this.base64auth, this.motionService);
+    this.streamingDelegate = new streamingDelegate(this.platform, this.ip, this.base64auth);
     this.accessory.configureController(this.streamingDelegate.controller);
   }
 

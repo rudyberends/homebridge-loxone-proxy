@@ -23,7 +23,6 @@ import {
   PrepareStreamResponse,
   StartStreamRequest,
   CameraRecordingDelegate,
-  Service,
 } from 'homebridge';
 
 import {
@@ -66,7 +65,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   private readonly streamUrl;
   private readonly ip;
   private readonly base64auth;
-  
+
 
   private pendingSessions: { [index: string]: SessionInfo } = {};
   private ongoingSessions: { [index: string]: ActiveSession } = {};
@@ -81,7 +80,6 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       private readonly platform: LoxonePlatform,
       streamUrl: string,
       base64auth: string,
-      motionService?: Service,
   ) {
     //this.camera = camera;
     this.hap = this.platform.api.hap;
@@ -186,9 +184,6 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
             options: recordingOptions,
             delegate: this.recordingDelegate,
           },
-          ...(motionService
-        ? { linkedServices: [motionService] }
-        : {}),
         }
         : {}),
     };

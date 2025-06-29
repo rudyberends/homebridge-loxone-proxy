@@ -44,7 +44,10 @@ export class PreBuffer {
     }
 
     const vcodec = [
-      '-vcodec', 'copy',
+      '-vcodec', 'libx264',
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-pix_fmt', 'yuv420p',
     ];
 
     const fmp4OutputServer: Server = createServer(async (socket) => {
@@ -108,14 +111,22 @@ export class PreBuffer {
         socket.write(Buffer.concat([atom.header, atom.data]));
       };
 
-      if (this.ftyp) writeAtom(this.ftyp);
-      if (this.moov) writeAtom(this.moov);
+      if (this.ftyp) {
+        writeAtom(this.ftyp);
+      }
+      if (this.moov) {
+        writeAtom(this.moov);
+      }
 
       const now = Date.now();
       let needMoof = true;
       for (const prebuffer of this.prebufferFmp4) {
-        if (prebuffer.time < now - requestedPrebuffer) continue;
-        if (needMoof && prebuffer.atom.type !== 'moof') continue;
+        if (prebuffer.time < now - requestedPrebuffer) {
+          continue;
+        }
+        if (needMoof && prebuffer.atom.type !== 'moof') {
+          continue;
+        }
 
         needMoof = false;
         writeAtom(prebuffer.atom);

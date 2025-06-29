@@ -99,14 +99,22 @@ export class PreBuffer {
     const stdioValue: StdioPipe | StdioNull = debug ? 'pipe' : 'ignore';
     const cp = spawn(this.ffmpegPath, args, { env: process.env, stdio: stdioValue });
 
+    if (cp.stderr) {
+      cp.stderr.on('data', data => {
+        const msg = data.toString();
+        if (msg.includes('moov')) {
+          this.log.info(`[PreBuffer] FFmpeg: ${msg.trim()}`);
+        }
+      });
+    }
+
     this.prebufferSession = { server: fmp4OutputServer, process: cp };
     return this.prebufferSession;
   }
 
   async getVideo(requestedPrebuffer: number): Promise<string[]> {
-
-    // Wacht maximaal 3 seconden op moov
-    const waitUntil = Date.now() + 3000;
+    // Wacht maximaal 7 seconden op moov
+    const waitUntil = Date.now() + 7000;
     while (!this.moov && Date.now() < waitUntil) {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
@@ -114,6 +122,7 @@ export class PreBuffer {
       this.log.error(`[PreBuffer] Timeout: moov atom not available for camera ${this.cameraName}`);
       throw new Error('moov atom not yet available');
     }
+
     const server = new Server(socket => {
       server.close();
 

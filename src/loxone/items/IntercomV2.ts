@@ -43,7 +43,8 @@ export class IntercomV2 extends Intercom {
       for (const stateName in matchingDevice.states) {
         const stateUUID = matchingDevice.states[stateName];
         this.ItemStates[stateUUID] = { service: serviceName, state: stateName };
-        this.Service[serviceName] = new MotionSensor(this.platform, this.Accessory!, matchingDevice);
+        // Temporarily disabled for testing
+        //this.Service[serviceName] = new MotionSensor(this.platform, this.Accessory!, matchingDevice);
       }
     } else {
       this.platform.log.debug(`[${this.device.name}] Unable to find Loxone IntercomV2 MotionSensor`);

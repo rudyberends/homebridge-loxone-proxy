@@ -97,7 +97,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       this.ip = match[1];
     }
 
-    this.recordingDelegate = new RecordingDelegate(this.platform, this.streamUrl);
+    this.recordingDelegate = new RecordingDelegate(this.platform, this.streamUrl, this.base64auth);
 
     const resolutions: Resolution[] = [
       [320, 180, 30],

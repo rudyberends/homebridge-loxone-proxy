@@ -104,6 +104,16 @@ export class PreBuffer {
   }
 
   async getVideo(requestedPrebuffer: number): Promise<string[]> {
+
+    // Wacht maximaal 3 seconden op moov
+    const waitUntil = Date.now() + 3000;
+    while (!this.moov && Date.now() < waitUntil) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    if (!this.moov) {
+      this.log.error(`[PreBuffer] Timeout: moov atom not available for camera ${this.cameraName}`);
+      throw new Error('moov atom not yet available');
+    }
     const server = new Server(socket => {
       server.close();
 
@@ -111,14 +121,22 @@ export class PreBuffer {
         socket.write(Buffer.concat([atom.header, atom.data]));
       };
 
-      if (this.ftyp) writeAtom(this.ftyp);
-      if (this.moov) writeAtom(this.moov);
+      if (this.ftyp) {
+        writeAtom(this.ftyp);
+      }
+      if (this.moov) {
+        writeAtom(this.moov);
+      }
 
       const now = Date.now();
       let needMoof = true;
       for (const prebuffer of this.prebufferFmp4) {
-        if (prebuffer.time < now - requestedPrebuffer) continue;
-        if (needMoof && prebuffer.atom.type !== 'moof') continue;
+        if (prebuffer.time < now - requestedPrebuffer) {
+          continue;
+        }
+        if (needMoof && prebuffer.atom.type !== 'moof') {
+          continue;
+        }
         needMoof = false;
         writeAtom(prebuffer.atom);
       }

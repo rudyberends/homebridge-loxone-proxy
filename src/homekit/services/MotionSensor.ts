@@ -13,6 +13,7 @@ export class MotionSensor extends BaseService {
 
   private camera?: CameraService;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(platform: LoxonePlatform, accessory: PlatformAccessory, device?: any, camera?: CameraService) {
     super(platform, accessory, device);
     this.camera = camera;
@@ -39,7 +40,7 @@ export class MotionSensor extends BaseService {
 
     // Trigger HKSV virtual sensor
     if (this.camera && this.State.MotionDetected) {
-      this.camera.triggerHKSVMotion(true);
+      //this.camera.triggerHKSVMotion(true);
     }
   };
 

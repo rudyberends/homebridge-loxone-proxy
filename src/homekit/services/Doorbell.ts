@@ -38,7 +38,7 @@ export class Doorbell extends BaseService {
 
       // Trigger HKSV virtual sensor instead of direct motion or recording
       if (this.camera) {
-        this.camera.triggerHKSVMotion(true);
+        //this.camera.triggerHKSVMotion(true);
       }
     }
   }

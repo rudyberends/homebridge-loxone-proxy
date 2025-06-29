@@ -1,647 +1,80 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import {
-  PlatformAccessory,
-  CameraController,
-  CameraControllerOptions,
-  CameraStreamingDelegate,
-  CameraRecordingDelegate,
-  HAP,
-  HDSProtocolSpecificErrorReason,
-  PrepareStreamRequest,
-  PrepareStreamResponse,
-  RecordingPacket,
-  SnapshotRequest,
-  SnapshotRequestCallback,
-  StreamingRequest,
-  StreamRequestCallback,
-  StreamRequestTypes,
-  MediaContainerType,
-  H264Profile,
-  H264Level,
-  StartStreamRequest,
-  AudioRecordingCodecType,
-  Service as HapService,
-} from 'homebridge';
-import { ChildProcess, spawn } from 'child_process';
-import { createSocket, Socket } from 'node:dgram';
-import { Readable } from 'stream';
+import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
-import { pickPort } from 'pick-port';
-import { Server, createServer, Socket as NetSocket } from 'net';
-import { request as httpRequest, RequestOptions, ClientRequest } from 'http';
-import { request as httpsRequest } from 'https';
+import { streamingDelegate } from '../hksv/StreamingDelegate';
+//import { RecordingDelegate } from '../hksv/RecordingDelegate';
 
-interface PreBufferEntry {
-  atom: { header: Buffer; type: string; length: number; data: Buffer };
-  time: number;
-}
+export class CameraService {
+  readonly platform: LoxonePlatform;
+  readonly accessory: PlatformAccessory;
+  readonly ip: string;
+  readonly base64auth: string;
 
-interface ActiveSession {
-  mainProcess?: ChildProcess;
-  socket?: Socket;
-  timeout?: NodeJS.Timeout;
-}
-
-interface RecordingSession {
-  socket: NetSocket;
-  cp: ChildProcess;
-  generator: AsyncGenerator<any>;
-}
-
-export class CameraService implements CameraStreamingDelegate, CameraRecordingDelegate {
-  private readonly hap: HAP;
-  private readonly log: LoxonePlatform['log'];
-  private readonly streamUrl: string;
-  private readonly base64auth?: string;
-  private readonly cameraName: string;
-  public readonly controller: CameraController;
-  private hksvMotionSensor!: HapService;
-  private motionTimeout?: NodeJS.Timeout;
-  private motionDetectionRequest?: ClientRequest;
-  private motionBuffer: Buffer = Buffer.alloc(0);
-  private motionBoundary?: Buffer;
-  private lastMotionSize?: number;
-  private lastMotionTrigger = 0;
-  private motionDetectionActive = false;
-  private readonly motionMinThreshold = 0.04;
-  private readonly motionMaxThreshold = 0.30;
-  private readonly motionCooldown = 8000;
-
-  private preBuffer: PreBufferEntry[] = [];
-  private preBufferDuration = 4000; // 4s prebuffer
-  private preBufferSession?: { server?: Server; process: ChildProcess };
-  private snapshotPromise?: Promise<Buffer>;
-
-  private pendingSessions: Map<string, {
-    address: string;
-    ipv6: boolean;
-    videoPort: number;
-    videoReturnPort: number;
-    videoSRTP: Buffer;
-    videoSSRC: number;
-  }> = new Map();
-
-  private ongoingSessions: Map<string, ActiveSession> = new Map();
-  private recordingSession?: RecordingSession;
-  private recordingActive = false;
-  private recordingConfig?: any;
+  //private readonly recordingDelegate: RecordingDelegate;
 
   constructor(
-    private platform: LoxonePlatform,
+    platform: LoxonePlatform,
     accessory: PlatformAccessory,
-    streamUrl: string,
-    base64auth?: string,
+    ip: string,
+    base64auth: string,
   ) {
-    this.hap = platform.api.hap;
-    this.log = platform.log;
-    this.streamUrl = streamUrl;
+    this.platform = platform;
+    this.accessory = accessory;
+    this.ip = ip;
     this.base64auth = base64auth;
-    this.cameraName = accessory.displayName;
 
-    this.hksvMotionSensor = accessory.getService('HKSV Motion Sensor') ||
-      accessory.addService(this.hap.Service.MotionSensor, 'HKSV Motion Sensor', 'hksv-motion');
+    // Determine if HKSV is enabled (todo: config option)
+    const hksvEnabled = true;
 
-    const resolutions: [number, number, number][] = [
-      [1280, 720, 30], [640, 480, 30], [640, 360, 30], [480, 360, 30],
-      [480, 270, 30], [320, 240, 30], [320, 180, 30],
-    ];
+    // Initialize recording delegate
+    //this.recordingDelegate = new RecordingDelegate(this.platform, accessory.displayName, hksvEnabled);
 
-    const recordingConfig = {
-      prebufferLength: this.preBufferDuration,
-      mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
-      video: {
-        type: this.hap.VideoCodecType.H264,
-        resolutions: [[1280, 720, 30]],
-        parameters: {
-          profiles: [H264Profile.MAIN],
-          levels: [H264Level.LEVEL4_0],
-          bitrate: 2000,
-          iFrameInterval: 4000,
-        },
-      },
-      audio: {
-        codecs: [{
-          type: AudioRecordingCodecType.AAC_LC,
-          samplerate: this.hap.AudioRecordingSamplerate.KHZ_32,
-          bitrate: 64,
-          audioChannels: 1,
-        }],
-      },
-      overrideEventTriggerOptions: [
-        this.hap.EventTriggerOption.MOTION,
-        this.hap.EventTriggerOption.DOORBELL,
-      ],
-    };
+    // Setup camera service
+    this.setupService();
 
-    const existingController = accessory.getService(this.hap.Service.CameraRTPStreamManagement);
-    if (!existingController) {
-      const options: CameraControllerOptions = {
-        cameraStreamCount: 2,
-        delegate: this,
-        streamingOptions: {
-          supportedCryptoSuites: [this.hap.SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
-          video: {
-            codec: {
-              profiles: [this.hap.H264Profile.MAIN],
-              levels: [this.hap.H264Level.LEVEL4_0],
-            },
-            resolutions,
-          },
-        },
-        recording: {
-          options: recordingConfig,
-          delegate: this,
-          sensors: { motion: this.hksvMotionSensor, doorbell: accessory.getService(this.hap.Service.Doorbell) },
-        } as any,
-      };
-
-      this.controller = new this.hap.CameraController(options);
-      accessory.configureController(this.controller);
-      this.log.debug('CameraController configured with recording:', !!this.controller.recordingManagement);
-      // Type assertion to bypass missing typings
-      const recordingManagement = this.controller.recordingManagement as any;
-      this.log.debug('Recording sensors:', {
-        motion: !!recordingManagement?.configuration?.sensors?.motion,
-        doorbell: !!recordingManagement?.configuration?.sensors?.doorbell,
+    // Start HKSV stream if enabled
+    if (hksvEnabled) {
+      this.startHKSVStream().catch(err => {
+        this.platform.log.error(`Failed to start HKSV stream: ${err}`);
       });
-      this.recordingConfig = recordingConfig;
-      this.recordingActive = true;
-    } else {
-      this.controller = accessory.getService(this.hap.Service.CameraRTPStreamManagement) as unknown as CameraController;
-      this.log.debug('Reusing existing CameraController', this.cameraName);
-      this.recordingConfig = recordingConfig;
-      this.recordingActive = true;
-    }
-    this.startPreBuffer().catch(err => this.log.warn(`Prebuffer failed: ${err}`));
-    platform.api.on('shutdown', () => this.stopAll());
-  }
-
-  private async startPreBuffer(): Promise<void> {
-    const args = [
-      '-use_wallclock_as_timestamps', '1',
-      '-fflags', 'nobuffer',
-      '-flags', 'low_delay',
-      '-probesize', '32',
-      '-analyzeduration', '0',
-      ...(this.base64auth ? ['-headers', `Authorization: Basic ${this.base64auth}\r\n`] : []),
-      '-i', this.streamUrl,
-      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
-      '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-b:a', '64k',
-      '-map', '0:v:0',
-      '-map', '1:a:0',
-      '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      '-f', 'mp4', '-',
-    ];
-
-    const cp = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    cp.stderr?.on('data', (data) => this.log.debug(`PreBuffer FFmpeg stderr: ${data}`));
-    const generator = this.parseFragmentedMP4(cp.stdout as Readable);
-    this.preBufferSession = { process: cp };
-
-    (async () => {
-      for await (const atom of generator) {
-        const now = Date.now();
-        this.preBuffer.push({ atom, time: now });
-        this.preBuffer = this.preBuffer.filter(entry => entry.time > now - this.preBufferDuration);
-        if (this.preBuffer.length > 150) {
-          this.preBuffer.shift();
-        }
-      }
-    })();
-    cp.on('exit', (code) => {
-      this.preBuffer = [];
-      this.log.debug(`Pre-buffer process exited with code ${code}`, this.cameraName);
-    });
-  }
-
-  private async listenServer(server: Server): Promise<number> {
-    const maxAttempts = 5;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const port = 10000 + Math.round(Math.random() * 30000);
-      server.listen(port);
-      try {
-        await new Promise((resolve) => server.once('listening', resolve));
-        return port;
-      } catch (e) {
-        this.log.warn(`Error listening on port ${port}: ${e}`);
-      }
-    }
-    throw new Error('Failed to bind server after 5 attempts');
-  }
-
-  private async *parseFragmentedMP4(readable: Readable): AsyncGenerator<{ header: Buffer; type: string; length: number; data: Buffer }> {
-    let pending: Buffer[] = [];
-    let hasMoov = false;
-
-    while (true) {
-      const header = await this.readLength(readable, 8);
-      const length = header.readInt32BE(0) - 8;
-      const type = header.slice(4).toString();
-      const data = await this.readLength(readable, length);
-      pending.push(header, data);
-
-      if (type === 'moov') {
-        hasMoov = true;
-      }
-      if ((type === 'moof' && pending.length > 2) || (type === 'mdat' && hasMoov)) {
-        const fragment = pending.slice(0, -2);
-        if (fragment.length > 0) {
-          yield {
-            header: Buffer.concat(fragment.slice(0, 1)),
-            type: 'segment',
-            length: Buffer.concat(fragment).length,
-            data: Buffer.concat(fragment.slice(1)),
-          };
-        }
-        pending = [header, data];
-      }
     }
   }
 
-  private async readLength(readable: Readable, length: number): Promise<Buffer> {
-    if (!length) {
-      return Buffer.alloc(0);
-    }
-    const ret = readable.read(length);
-    if (ret) {
-      return ret;
-    }
-    return new Promise((resolve, reject) => {
-      const onReadable = () => {
-        const data = readable.read(length);
-        if (data) {
-          readable.removeListener('readable', onReadable);
-          readable.removeListener('end', onEnd);
-          readable.removeListener('error', onError);
-          resolve(data);
-        }
-      };
-      const onEnd = () => reject(new Error(`Stream ended during read for ${length} bytes`));
-      const onError = (err: Error) => reject(err);
-      readable.on('readable', onReadable);
-      readable.on('end', onEnd);
-      readable.on('error', onError);
-    });
+  /**
+   * Sets up the Camera service.
+   */
+  setupService(): void {
+
+    const delegate = new streamingDelegate(this.platform, this.ip!, this.base64auth);
+    this.accessory.configureController(delegate.controller);
+
+    // Configure recording delegate
+    //this.accessory.configureController(this.recordingDelegate.controller);
   }
 
-  private determineResolution(request: SnapshotRequest): { width: number; height: number; videoFilter?: string } {
-    const resInfo: { width: number; height: number; videoFilter?: string } = { width: request.width, height: request.height };
-    const filters: string[] = [];
-    if (resInfo.width > 0 || resInfo.height > 0) {
-      const scaleFilter = `scale=${resInfo.width > 0 ? `'min(${resInfo.width},iw)'` : 'iw'}:` +
-        `${resInfo.height > 0 ? `'min(${resInfo.height},ih)'` : 'ih'}:force_original_aspect_ratio=decrease`;
-      filters.push(scaleFilter, 'scale=trunc(iw/2)*2:trunc(ih/2)*2');
-    }
-    resInfo.videoFilter = filters.length > 0 ? filters.join(',') : undefined;
-    return resInfo;
-  }
-
-  async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): Promise<void> {
-    const resolution = this.determineResolution(request);
-    this.log.debug('Requested snapshot resolution:', resolution); // ✅ LOG SNAPSHOT DETAILS
+  async startHKSVStream(): Promise<void> {
     try {
-      const snapshot = await this.fetchSnapshot(resolution.videoFilter);
-      callback(undefined, snapshot);
-    } catch (err) {
-      this.log.error(`Snapshot error: ${err}`, this.cameraName);
-      callback(err instanceof Error ? err : new Error(String(err)));
+      //await this.recordingDelegate.startHKSVStream();
+      this.platform.log.debug(`Started HKSV stream for ${this.accessory.displayName}`);
+    } catch (error) {
+      this.platform.log.error(`Failed to start HKSV stream for ${this.accessory.displayName}: ${error}`);
     }
   }
 
-  private async fetchSnapshot(videoFilter?: string): Promise<Buffer> {
-    const startTime = Date.now();
-    const args = [
-      '-re',
-      '-fflags', 'nobuffer',
-      '-flags', 'low_delay',
-      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
-      '-i', this.streamUrl,
-      '-frames:v', '1',
-      '-q:v', '2',
-      ...(videoFilter ? ['-vf', videoFilter] : ['-vf', 'scale=640:360']),
-      '-f', 'image2',
-      '-update', '1',
-      'pipe:',
-      '-loglevel', 'verbose',
-    ];
-
-    return new Promise((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
-      let snapshotBuffer = Buffer.alloc(0);
-      ffmpeg.stdout.on('data', (data) => snapshotBuffer = Buffer.concat([snapshotBuffer, data]));
-      ffmpeg.stderr.on('data', (data) => this.log.debug(`Snapshot FFmpeg stderr: ${data}`));
-      ffmpeg.on('error', (err) => reject(err));
-      ffmpeg.on('close', (code) => {
-        if (snapshotBuffer.length > 0) {
-          this.log.debug(`Snapshot took ${(Date.now() - startTime) / 1000}s`, this.cameraName);
-          resolve(snapshotBuffer);
-        } else {
-          this.log.error(`Failed to fetch snapshot, code: ${code}`);
-          reject(new Error(`Failed to fetch snapshot, code: ${code}`));
-        }
-      });
-    });
-  }
-
-  async prepareStream(request: PrepareStreamRequest, callback: (error?: Error, response?: PrepareStreamResponse) => void): Promise<void> {
-    const ipv6 = request.addressVersion === 'ipv6';
-    const videoReturnPort = await pickPort({ type: 'udp', ip: ipv6 ? '::' : '0.0.0.0', reserveTimeout: 15 });
-    const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
-    const videoSRTP = Buffer.concat([request.video.srtp_key, request.video.srtp_salt]);
-
-    this.pendingSessions.set(request.sessionID, {
-      address: request.targetAddress,
-      ipv6,
-      videoPort: request.video.port,
-      videoReturnPort,
-      videoSRTP,
-      videoSSRC,
-    });
-
-    callback(undefined, {
-      video: { port: videoReturnPort, ssrc: videoSSRC, srtp_key: request.video.srtp_key, srtp_salt: request.video.srtp_salt },
-    });
-  }
-
-  async handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback): Promise<void> {
-    if (request.type === StreamRequestTypes.START) {
-      this.startStream(request as StartStreamRequest, callback);
-    } else if (request.type === StreamRequestTypes.STOP) {
-      this.stopStream(request.sessionID);
-      callback();
-    } else {
-      callback();
+  async stopHKSVStream(): Promise<void> {
+    try {
+      //await this.recordingDelegate.stopHKSVStream();
+      this.platform.log.debug(`Stopped HKSV stream for ${this.accessory.displayName}`);
+    } catch (error) {
+      this.platform.log.error(`Failed to stop HKSV stream for ${this.accessory.displayName}: ${error}`);
     }
   }
 
-  private startStream(request: StartStreamRequest, callback: StreamRequestCallback): void {
-    const sessionInfo = this.pendingSessions.get(request.sessionID);
-    if (!sessionInfo) {
-      callback(new Error('Session not found'));
-      return;
+  async handleMotionDetection(): Promise<void> {
+    try {
+      //await this.recordingDelegate.handleMotionDetection(event);
+      this.platform.log.debug(`Motion detected on ${this.accessory.displayName}`);
+    } catch (error) {
+      this.platform.log.error(`Failed to handle motion detection for ${this.accessory.displayName}: ${error}`);
     }
-
-    const mtu = 1378;
-    const ffmpegArgs: string[] = [
-      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
-      '-i', this.streamUrl,
-      '-f', 'mjpeg',
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-r', request.video.fps.toString(),
-      '-preset', 'ultrafast',
-      '-tune', 'zerolatency',
-      '-crf', '22',
-      '-filter:v',
-      `scale='min(${request.video.width},iw)':'min(${request.video.height},ih)':force_original_aspect_ratio=decrease,` +
-      'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-b:v', `${request.video.max_bit_rate}k`,
-      '-payload_type', request.video.pt.toString(),
-      '-ssrc', sessionInfo.videoSSRC.toString(),
-      '-f', 'rtp',
-      '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
-      '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
-      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
-    ];
-
-    const activeSession: ActiveSession = {};
-    activeSession.socket = createSocket(sessionInfo.ipv6 ? 'udp6' : 'udp4');
-    activeSession.socket.bind(sessionInfo.videoReturnPort);
-    activeSession.mainProcess = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-
-    activeSession.mainProcess.stderr?.on('data', (data) => this.log.debug(`Stream FFmpeg stderr: ${data}`));
-    activeSession.mainProcess.on('exit', () => this.stopStream(request.sessionID));
-    this.ongoingSessions.set(request.sessionID, activeSession);
-    this.pendingSessions.delete(request.sessionID);
-    callback();
-  }
-
-  public stopStream(sessionId: string): void {
-    const session = this.ongoingSessions.get(sessionId);
-    if (session) {
-      session.socket?.close();
-      session.mainProcess?.kill();
-      this.ongoingSessions.delete(sessionId);
-    }
-  }
-
-  updateRecordingActive(active: boolean): void {
-    this.recordingActive = active;
-    this.log.debug(`Recording active set to: ${active}`, this.cameraName);
-    if (!active && this.recordingSession) {
-      this.recordingSession.socket?.end();
-      this.recordingSession.cp?.kill();
-      this.recordingSession = undefined;
-    }
-  }
-
-  updateRecordingConfiguration(configuration?: any): void {
-    this.recordingConfig = configuration || {
-      prebufferLength: this.preBufferDuration,
-      mediaContainerConfiguration: [{ type: MediaContainerType.FRAGMENTED_MP4, fragmentLength: 4000 }],
-      video: {
-        type: this.hap.VideoCodecType.H264,
-        resolutions: [[1280, 720, 30]],
-        parameters: {
-          profiles: [H264Profile.MAIN],
-          levels: [H264Level.LEVEL4_0],
-          bitrate: 2000,
-          iFrameInterval: 4000,
-        },
-      },
-      audio: {
-        codecs: [{
-          type: AudioRecordingCodecType.AAC_LC,
-          samplerate: this.hap.AudioRecordingSamplerate.KHZ_32,
-          bitrate: 64,
-          audioChannels: 1,
-        }],
-      },
-    };
-    this.recordingActive = true;
-    this.log.debug('Recording configuration updated', this.cameraName);
-  }
-
-  async *handleRecordingStreamRequest(streamId: number): AsyncGenerator<RecordingPacket> {
-    this.log.info(`HKSV recording stream requested for streamId: ${streamId}`, this.cameraName);
-    if (!this.recordingConfig) {
-      throw new this.hap.HDSProtocolError(HDSProtocolSpecificErrorReason.NOT_ALLOWED);
-    }
-
-    const server = createServer();
-    const port = await this.listenServer(server);
-
-    const args = [
-      ...(this.base64auth ? ['-headers', `Authorization: Basic ${this.base64auth}\r\n`] : []),
-      '-use_wallclock_as_timestamps', '1',
-      '-fflags', 'nobuffer',
-      '-flags', 'low_delay',
-      '-probesize', '32',
-      '-analyzeduration', '0',
-      '-i', this.streamUrl,
-      '-f', 'lavfi', '-i', 'anullsrc=channel_layout=mono:sample_rate=32000',
-      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '64k',
-      '-map', '0:v:0', '-map', '1:a:0',
-      '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      '-f', 'mp4', `tcp://127.0.0.1:${port}`,
-    ];
-
-    const cp = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
-    cp.stderr?.on('data', (data) => this.log.debug(`Recording FFmpeg stderr: ${data}`));
-
-    const generator = this.parseFragmentedMP4(cp.stdout as Readable);
-    this.recordingSession = { socket: null as any, cp, generator };
-
-    await new Promise((resolve) => server.on('connection', (socket: NetSocket) => {
-      server.close();
-      this.recordingSession!.socket = socket;
-      resolve(undefined);
-    }));
-
-    const getMotionState = () => this.hksvMotionSensor.getCharacteristic(this.hap.Characteristic.MotionDetected).value;
-    for (const entry of this.preBuffer) {
-      yield { data: Buffer.concat([entry.atom.header, entry.atom.data]), isLast: false };
-    }
-    for await (const box of generator) {
-      yield { data: Buffer.concat([box.header, box.data]), isLast: !getMotionState() };
-      if (!getMotionState()) {
-        break;
-      }
-    }
-
-    cp.on('exit', (code) => {
-      this.recordingSession = undefined;
-      this.log.debug(`Recording FFmpeg exited with code ${code}`, this.cameraName);
-    });
-  }
-
-  acknowledgeStream(streamId: number): void {
-    this.log.debug(`Acknowledged recording stream ${streamId}`, this.cameraName);
-  }
-
-  closeRecordingStream(streamId: number, reason?: HDSProtocolSpecificErrorReason): void {
-    if (this.recordingSession) {
-      this.recordingSession.socket?.end();
-      this.recordingSession.cp?.kill();
-      this.recordingSession = undefined;
-    }
-    if (reason && !this.isNormalReason(reason)) {
-      this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, false);
-      this.log.warn(`Recording closed with reason: ${reason}`, this.cameraName);
-    }
-  }
-
-  private isNormalReason(reason: HDSProtocolSpecificErrorReason): reason is HDSProtocolSpecificErrorReason.NORMAL {
-    return reason === this.hap.HDSProtocolSpecificErrorReason.NORMAL;
-  }
-
-  private stopAll(): void {
-    this.preBufferSession?.process.kill();
-    this.preBufferSession?.server?.close();
-    this.ongoingSessions.forEach(session => {
-      session.mainProcess?.kill();
-      session.socket?.close();
-    });
-    this.ongoingSessions.clear();
-    this.recordingSession?.cp.kill();
-    this.recordingSession?.socket?.end();
-    this.stopMotionDetection();
-  }
-
-  public triggerHKSVMotion(active: boolean, resetTime = 30000): void {
-    this.log.debug(`HKSV Motion Sensor ${active ? 'Active' : 'Inactive'}`, this.cameraName);
-    this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, active);
-    this.log.debug('Recording active status:', this.recordingActive);
-    if (active) {
-      clearTimeout(this.motionTimeout);
-      this.motionTimeout = setTimeout(() => {
-        this.hksvMotionSensor.updateCharacteristic(this.hap.Characteristic.MotionDetected, false);
-        this.log.debug(`HKSV Motion Sensor reset after ${resetTime}ms`, this.cameraName);
-      }, resetTime);
-    }
-  }
-
-  public startMotionDetection(): void {
-    if (this.motionDetectionActive) {
-      return;
-    }
-    this.motionDetectionActive = true;
-    this.initMotionRequest();
-  }
-
-  public stopMotionDetection(): void {
-    this.motionDetectionActive = false;
-    this.motionDetectionRequest?.destroy();
-    this.motionDetectionRequest = undefined;
-    this.motionBuffer = Buffer.alloc(0);
-    this.motionBoundary = undefined;
-  }
-
-  private initMotionRequest(): void {
-    const url = new URL(this.streamUrl);
-    const requestOptions: RequestOptions = {
-      method: 'GET',
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname + url.search,
-      headers: {},
-    };
-    if (this.base64auth) {
-      requestOptions.headers!['Authorization'] = `Basic ${this.base64auth}`;
-    }
-    const requestFn = url.protocol === 'https:' ? httpsRequest : httpRequest;
-    this.motionDetectionRequest = requestFn(requestOptions, res => {
-      const contentType = (res.headers['content-type'] as string) || '';
-      const boundaryMatch = contentType.match(/boundary=([^;]+)/i);
-      const boundary = boundaryMatch ? boundaryMatch[1] : 'myboundary';
-      this.motionBoundary = Buffer.from(`--${boundary.replace(/^--/, '')}`);
-      res.on('data', chunk => this.processMotionChunk(chunk));
-      res.on('close', () => this.restartMotionRequest());
-    });
-    this.motionDetectionRequest.on('error', () => this.restartMotionRequest());
-    this.motionDetectionRequest.end();
-  }
-
-  private restartMotionRequest(): void {
-    this.motionDetectionRequest?.destroy();
-    this.motionDetectionRequest = undefined;
-    if (this.motionDetectionActive) {
-      setTimeout(() => this.initMotionRequest(), 1000);
-    }
-  }
-
-  private processMotionChunk(chunk: Buffer): void {
-    this.motionBuffer = Buffer.concat([this.motionBuffer, chunk]);
-    while (this.motionBoundary) {
-      const idx = this.motionBuffer.indexOf(this.motionBoundary);
-      if (idx === -1) {
-        break;
-      }
-      const frame = this.motionBuffer.slice(0, idx);
-      this.motionBuffer = this.motionBuffer.slice(idx + this.motionBoundary.length);
-      const headerEnd = frame.indexOf('\r\n\r\n');
-      if (headerEnd === -1) {
-        continue;
-      }
-      const image = frame.slice(headerEnd + 4);
-      const size = image.length;
-      this.handleMotionFrame(size);
-    }
-  }
-
-  private handleMotionFrame(size: number): void {
-    if (this.lastMotionSize !== undefined) {
-      const diff = Math.abs(size - this.lastMotionSize) / this.lastMotionSize;
-      if (diff > this.motionMinThreshold && diff < this.motionMaxThreshold) {
-        const now = Date.now();
-        if (now - this.lastMotionTrigger > this.motionCooldown) {
-          this.lastMotionTrigger = now;
-          this.triggerHKSVMotion(true);
-        }
-      }
-    }
-    this.lastMotionSize = size;
   }
 }

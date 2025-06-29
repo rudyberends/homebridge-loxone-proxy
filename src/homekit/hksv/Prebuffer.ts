@@ -44,15 +44,17 @@ export class PreBuffer {
     }
 
     const vcodec = [
+      '-f', 'mjpeg',
       '-vcodec', 'libx264',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
       '-pix_fmt', 'yuv420p',
+      '-r', '10',
+      '-an',
     ];
 
     const fmp4OutputServer: Server = createServer(async (socket) => {
       fmp4OutputServer.close();
-
       const parser = parseFragmentedMP4(socket);
       for await (const atom of parser) {
         const now = Date.now();
@@ -95,11 +97,9 @@ export class PreBuffer {
 
     const debug = false;
     const stdioValue: StdioPipe | StdioNull = debug ? 'pipe' : 'ignore';
-
     const cp = spawn(this.ffmpegPath, args, { env: process.env, stdio: stdioValue });
 
     this.prebufferSession = { server: fmp4OutputServer, process: cp };
-
     return this.prebufferSession;
   }
 
@@ -111,23 +111,14 @@ export class PreBuffer {
         socket.write(Buffer.concat([atom.header, atom.data]));
       };
 
-      if (this.ftyp) {
-        writeAtom(this.ftyp);
-      }
-      if (this.moov) {
-        writeAtom(this.moov);
-      }
+      if (this.ftyp) writeAtom(this.ftyp);
+      if (this.moov) writeAtom(this.moov);
 
       const now = Date.now();
       let needMoof = true;
       for (const prebuffer of this.prebufferFmp4) {
-        if (prebuffer.time < now - requestedPrebuffer) {
-          continue;
-        }
-        if (needMoof && prebuffer.atom.type !== 'moof') {
-          continue;
-        }
-
+        if (prebuffer.time < now - requestedPrebuffer) continue;
+        if (needMoof && prebuffer.atom.type !== 'moof') continue;
         needMoof = false;
         writeAtom(prebuffer.atom);
       }

@@ -4,7 +4,7 @@ import { Fanv2 } from '../../homekit/services/Fanv2';
 /**
  * Loxone Ventilation Item
 */
-export class Ventiltion extends LoxoneAccessory {
+export class Ventilation extends LoxoneAccessory {
 
   configureServices(): void {
 

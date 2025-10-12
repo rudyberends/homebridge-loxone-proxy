@@ -87,7 +87,7 @@ export class Valve {
       .removeAllListeners('set')
       .on('set', (value, callback) => {
         const duration = typeof value === 'number' ? Math.max(0, Math.floor(value)) : 0;
-        this.valveService.setCharacteristic(this.platform.Characteristic.SetDuration, duration);
+        this.valveService.updateCharacteristic(this.platform.Characteristic.SetDuration, duration);
         this.meta.duration = duration;
         this.sendCommand(`setDuration/${this.meta.id}=${duration}`);
         callback(null);

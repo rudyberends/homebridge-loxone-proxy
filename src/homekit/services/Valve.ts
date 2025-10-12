@@ -59,7 +59,6 @@ export class Valve {
       duration: zone.duration,
       startTime: null,
     };
-
     this.setupListeners();
   }
 

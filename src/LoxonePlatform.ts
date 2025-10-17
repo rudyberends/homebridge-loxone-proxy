@@ -167,7 +167,10 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   public generateUniqueName(room: string, base: string): string {
     const sanitizedRoom = this.sanitizeName(room || 'Unknown');
     const sanitizedBase = this.sanitizeName(base || 'Unnamed');
-    const fullBase = `${sanitizedRoom} ${sanitizedBase}`;
+
+    // Check if the base name already starts with the room name
+    const alreadyPrefixed = sanitizedBase.toLowerCase().startsWith(sanitizedRoom.toLowerCase());
+    const fullBase = alreadyPrefixed ? sanitizedBase : `${sanitizedRoom} ${sanitizedBase}`;
     let finalName = fullBase;
 
     if (this.displayNameCount[fullBase] !== undefined) {

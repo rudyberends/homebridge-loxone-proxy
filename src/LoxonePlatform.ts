@@ -152,23 +152,33 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * Sanitizes names by stripping invalid characters and excess spaces
-   */
+ * Sanitizes names for HomeKit compatibility.
+ * - Keeps UTF-8 characters (é, ü, ñ, etc.)
+ * - Removes non-printable characters
+ * - Normalizes spaces
+ * - Trims to 64 chars (HomeKit safe)
+ */
   public sanitizeName(name: string): string {
     return name
-      .replace(/[^a-zA-Z0-9\s']/g, '')
+    // remove emoji / non-printable characters
+      .replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '')
+    // collapse multiple spaces
+      .replace(/\s+/g, ' ')
       .trim()
-      .replace(/\s+/g, ' ');
+    // enforce HomeKit display length
+      .substring(0, 64);
   }
 
   /**
-   * Ensures the generated name is unique per room/item combo (adds _1, _2 if needed)
-   */
+ * Generates unique, HomeKit-safe accessory names.
+ * - Adds _1, _2, … if duplicates exist
+ * - Prevents duplicate room prefix
+ */
   public generateUniqueName(room: string, base: string): string {
     const sanitizedRoom = this.sanitizeName(room || 'Unknown');
     const sanitizedBase = this.sanitizeName(base || 'Unnamed');
 
-    // Check if the base name already starts with the room name
+    // avoid double room prefix
     const alreadyPrefixed = sanitizedBase.toLowerCase().startsWith(sanitizedRoom.toLowerCase());
     const fullBase = alreadyPrefixed ? sanitizedBase : `${sanitizedRoom} ${sanitizedBase}`;
     let finalName = fullBase;

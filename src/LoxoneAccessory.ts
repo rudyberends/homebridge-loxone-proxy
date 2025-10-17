@@ -2,6 +2,11 @@ import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from './LoxonePlatform';
 import { Control } from './loxone/StructureFile';
 
+/**
+ * LoxoneAccessory
+ * An instance of this class is created for each accessory Loxone platform registers.
+ * Each accessory may expose multiple services of different service types.
+ */
 export class LoxoneAccessory {
   Accessory: PlatformAccessory | undefined;
   Service: Record<string, unknown> = {};

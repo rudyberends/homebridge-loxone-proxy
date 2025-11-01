@@ -40,6 +40,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    * Initializes the Loxone system and starts accessory mapping
    */
   async LoxoneInit(): Promise<void> {
+    // Reset name tracking before new session
+    this.displayNameCount = {};
+
     this.LoxoneHandler = new LoxoneHandler(this);
     await this.waitForLoxoneConfig();
     this.log.debug(`[LoxoneInit] Got Structure File; Last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
@@ -85,11 +88,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   /**
    * Maps all Loxone items to their HomeKit accessories
    */
-  /**
- * Maps all Loxone items to their HomeKit accessories
- */
   async mapLoxoneItems(items: Control[]): Promise<void> {
-  // Reset name tracking so duplicate counters start fresh
+    // Reset unique name counters before each mapping run
     this.displayNameCount = {};
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,8 +106,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
         this.log.debug(`[mapLoxoneItems] ${item.name} UUID: ${item.uuidAction}`);
 
         const isRoomExcluded =
-        (RoomFilterType.toLowerCase() === 'exclusion' && RoomFilterList.includes(item.room.toLowerCase())) ||
-        (RoomFilterType.toLowerCase() === 'inclusion' && !RoomFilterList.includes(item.room.toLowerCase()));
+          (RoomFilterType.toLowerCase() === 'exclusion' && RoomFilterList.includes(item.room.toLowerCase())) ||
+          (RoomFilterType.toLowerCase() === 'inclusion' && !RoomFilterList.includes(item.room.toLowerCase()));
 
         if (isRoomExcluded) {
           this.log.debug(`[mapLoxoneItem][RoomExclusion] Skipping Excluded Room: ${item.name} in room ${item.room}`);
@@ -155,36 +155,32 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.debug('Loading accessory from cache:', accessory.displayName);
     this.accessories.push(accessory);
+
+    // Reset name tracking if needed when cache restores first
+    if (!Object.keys(this.displayNameCount).length) {
+      this.displayNameCount = {};
+    }
   }
 
   /**
- * Sanitizes names for HomeKit compatibility.
- * - Keeps UTF-8 characters (é, ü, ñ, etc.)
- * - Removes non-printable characters
- * - Normalizes spaces
- * - Trims to 64 chars (HomeKit safe)
- */
+   * Sanitizes names for HomeKit compatibility.
+   */
   public sanitizeName(name: string): string {
     return name
-    // remove emoji / non-printable characters
-      .replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '')
-    // collapse multiple spaces
+      .replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '') // remove emoji / non-printable
       .replace(/\s+/g, ' ')
       .trim()
-    // enforce HomeKit display length
-      .substring(0, 64);
+      .substring(0, 64); // enforce HomeKit limit
   }
 
   /**
- * Generates unique, HomeKit-safe accessory names.
- * - Adds _1, _2, … if duplicates exist
- * - Prevents duplicate room prefix
- */
+   * Generates unique, HomeKit-safe accessory names.
+   */
   public generateUniqueName(room: string, base: string): string {
     const sanitizedRoom = this.sanitizeName(room || 'Unknown');
     const sanitizedBase = this.sanitizeName(base || 'Unnamed');
 
-    // avoid double room prefix
+    // avoid double prefix
     const alreadyPrefixed = sanitizedBase.toLowerCase().startsWith(sanitizedRoom.toLowerCase());
     const fullBase = alreadyPrefixed ? sanitizedBase : `${sanitizedRoom} ${sanitizedBase}`;
     let finalName = fullBase;

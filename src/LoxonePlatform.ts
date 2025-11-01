@@ -85,7 +85,13 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   /**
    * Maps all Loxone items to their HomeKit accessories
    */
+  /**
+ * Maps all Loxone items to their HomeKit accessories
+ */
   async mapLoxoneItems(items: Control[]): Promise<void> {
+  // Reset name tracking so duplicate counters start fresh
+    this.displayNameCount = {};
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const itemCache: { [key: string]: any } = {};
 
@@ -100,8 +106,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
         this.log.debug(`[mapLoxoneItems] ${item.name} UUID: ${item.uuidAction}`);
 
         const isRoomExcluded =
-          (RoomFilterType.toLowerCase() === 'exclusion' && RoomFilterList.includes(item.room.toLowerCase())) ||
-          (RoomFilterType.toLowerCase() === 'inclusion' && !RoomFilterList.includes(item.room.toLowerCase()));
+        (RoomFilterType.toLowerCase() === 'exclusion' && RoomFilterList.includes(item.room.toLowerCase())) ||
+        (RoomFilterType.toLowerCase() === 'inclusion' && !RoomFilterList.includes(item.room.toLowerCase()));
 
         if (isRoomExcluded) {
           this.log.debug(`[mapLoxoneItem][RoomExclusion] Skipping Excluded Room: ${item.name} in room ${item.room}`);

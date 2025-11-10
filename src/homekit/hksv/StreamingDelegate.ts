@@ -1,5 +1,6 @@
 import { LoxonePlatform } from '../../LoxonePlatform';
 import {
+  APIEvent,
   AudioStreamingCodecType,
   AudioStreamingSamplerate,
   CameraController,
@@ -73,6 +74,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   private cachedSnapshot: Buffer | null = null;
   private cachedAt = 0;
   private readonly cacheTtlMs = 5000;
+  private isShuttingDown = false;
 
   //private readonly camera;
   private readonly hap: HAP;
@@ -104,6 +106,12 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       this.recordingDelegate = undefined;
       this.platform.log.info(`[${this.cameraName}] HKSV is Disabled for this configuration.`);
     }
+
+    // Handle shutdown
+    platform.api.on(APIEvent.SHUTDOWN, () => {
+      this.isShuttingDown = true;
+      this.platform.log.debug(`[${this.cameraName}] Streaming delegate is shutting down`);
+    });
 
 
     const resolutions: Resolution[] = [
@@ -238,7 +246,6 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     const now = Date.now();
 
     if (this.cachedSnapshot && now - this.cachedAt < this.cacheTtlMs) {
-      this.platform.log.debug(`[${this.cameraName}] Snapshot cache hit`);
       return this.cachedSnapshot;
     }
 
@@ -260,7 +267,14 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     request: SnapshotRequest,
     callback: SnapshotRequestCallback,
   ) {
-    this.platform.log.debug(`[${this.cameraName}] Snapshot requested: ${request.width} x ${request.height}`);
+    // Don't process snapshot requests during shutdown
+    if (this.isShuttingDown) {
+      this.platform.log.debug(`[${this.cameraName}] Ignoring snapshot request during shutdown`);
+      callback(new Error('Plugin is shutting down'));
+      return;
+    }
+
+    this.platform.log.debug(`[${this.cameraName}] 📸 Snapshot requested: ${request.width} x ${request.height}`);
 
     // Spawn an ffmpeg process to capture a snapshot from the camera
     const ffmpeg = spawn('ffmpeg', [
@@ -368,9 +382,8 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   ) {
     switch (request.type) {
       case this.hap.StreamRequestTypes.START: {
-        this.platform.log.debug(
-          `[${this.cameraName}] Start stream requested:
-          ${request.video.width}x${request.video.height}, ${request.video.fps} fps, ${request.video.max_bit_rate} kbps`,
+        this.platform.log.info(
+          `[${this.cameraName}] Started video stream: ${request.video.width}x${request.video.height}, ${request.video.fps} fps, ${request.video.max_bit_rate} kbps`,
         );
 
         await this.startStream(request, callback);

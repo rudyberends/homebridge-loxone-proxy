@@ -67,22 +67,45 @@ export async function readLength(readable: Readable, length: number): Promise<Bu
       cleanup();
       reject(new Error(`stream ended during read for minimum ${length} bytes`));
     };
+    const c = () => {
+      cleanup();
+      reject(new Error(`stream closed during read for minimum ${length} bytes`));
+    };
+    const err = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
     const cleanup = () => {
       readable.removeListener('readable', r);
       readable.removeListener('end', e);
+      readable.removeListener('close', c);
+      readable.removeListener('error', err);
     };
     readable.on('readable', r);
     readable.on('end', e);
+    readable.on('close', c);
+    readable.on('error', err);
   });
 }
 
 export async function* parseFragmentedMP4(readable: Readable): AsyncGenerator<MP4Atom> {
-  while (true) {
-    const header = await readLength(readable, 8);
-    const length = header.readInt32BE(0) - 8;
-    const type = header.slice(4).toString();
-    const data = await readLength(readable, length);
-    yield { header, length, type, data };
+  try {
+    while (true) {
+      const header = await readLength(readable, 8);
+      const length = header.readInt32BE(0) - 8;
+      const type = header.slice(4).toString();
+      const data = await readLength(readable, length);
+      yield { header, length, type, data };
+    }
+  } catch (error) {
+    // Stream ended or closed - this is expected when stopping
+    if (error instanceof Error && (
+      error.message.includes('stream ended') ||
+      error.message.includes('stream closed')
+    )) {
+      return; // Gracefully exit the generator
+    }
+    throw error; // Re-throw unexpected errors
   }
 }
 
@@ -114,11 +137,24 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     this.cameraName = cameraName;
 
     platform.api.on(APIEvent.SHUTDOWN, () => {
-      this.preBufferSession?.process?.kill();
-      this.preBufferSession?.server?.close();
-      this.activeFFmpegProcesses.forEach(proc => proc.kill('SIGTERM'));
-      this.activeFFmpegProcesses.clear();
+      this.log.info(`[${this.cameraName}] Shutting down recording delegate`, this.streamUrl);
+      // Abort all active streams
+      this.streamAbortControllers.forEach(controller => controller.abort());
       this.streamAbortControllers.clear();
+      // Kill all FFmpeg processes
+      this.activeFFmpegProcesses.forEach(proc => {
+        if (!proc.killed) {
+          proc.kill('SIGTERM');
+        }
+      });
+      this.activeFFmpegProcesses.clear();
+      // Kill prebuffer process
+      if (this.preBufferSession?.process && !this.preBufferSession.process.killed) {
+        this.preBufferSession.process.kill('SIGKILL');
+      }
+      if (this.preBufferSession?.server) {
+        this.preBufferSession.server.close();
+      }
     });
   }
 
@@ -143,6 +179,7 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     const abortController = new AbortController();
     this.streamAbortControllers.set(streamId, abortController);
 
+    let fragmentCount = 0;
     try {
       await this.startPreBuffer();
       const fragmentGenerator = this.handleFragmentsRequests(this.currentRecordingConfiguration, streamId);
@@ -151,10 +188,13 @@ export class RecordingDelegate implements CameraRecordingDelegate {
           this.log.debug(`[${this.cameraName}] Aborted stream ${streamId}, skipping fragment`, this.streamUrl);
           break;
         }
+        fragmentCount++;
         yield { data: fragmentBuffer, isLast: false };
       }
+      this.log.info(`[${this.cameraName}] ✅ Recording completed successfully. Total fragments: ${fragmentCount}`, this.streamUrl);
+      yield { data: Buffer.alloc(0), isLast: true };
     } catch (error) {
-      this.log.error(`[${this.cameraName}] Recording stream error: ${error}`, this.streamUrl);
+      this.log.error(`[${this.cameraName}] ❌ Recording stream error: ${error}`, this.streamUrl);
       yield { data: Buffer.alloc(0), isLast: true };
     } finally {
       this.streamAbortControllers.delete(streamId);
@@ -181,7 +221,7 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     this.log.info(`[${this.cameraName}] Starting prebuffer for ${this.streamUrl}`);
     if (!this.preBuffer) {
       const ffmpegInput = [
-        '-headers', `Authorization: Basic ${this.base64auth}\\r\\n`,
+        '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
         '-use_wallclock_as_timestamps', '1',
         '-probesize', '32',
         '-analyzeduration', '0',
@@ -228,23 +268,34 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     let moofBuffer: Buffer | null = null;
     let pending: Buffer[] = [];
     let isFirst = true;
+    let fragmentCount = 0;
 
     try {
+      this.log.info(`[${this.cameraName}] 📹 Starting video fragments generation for stream ID: ${streamId}`, this.streamUrl);
       for await (const box of generator) {
         pending.push(box.header, box.data);
         if (isFirst && box.type === 'moov') {
+          this.log.info(`[${this.cameraName}] 📦 First moov atom received, yielding initial fragment`, this.streamUrl);
           yield Buffer.concat(pending);
           pending = [];
           isFirst = false;
         } else if (box.type === 'moof') {
           moofBuffer = Buffer.concat([box.header, box.data]);
+          this.log.debug(`[${this.cameraName}] 📦 moof atom received`, this.streamUrl);
         } else if (box.type === 'mdat' && moofBuffer) {
           const fragment = Buffer.concat([moofBuffer, box.header, box.data]);
+          fragmentCount++;
+          this.log.debug(`[${this.cameraName}] 📦 Fragment ${fragmentCount} (moof+mdat, ${fragment.length} bytes)`, this.streamUrl);
           yield fragment;
           moofBuffer = null;
         }
       }
+      this.log.info(`[${this.cameraName}] ✅ Recording fragments generation completed. Total fragments: ${fragmentCount}`, this.streamUrl);
+    } catch (e) {
+      this.log.error(`[${this.cameraName}] ❌ Recording fragments generation error: ${e}`, this.streamUrl);
+      throw e;
     } finally {
+      this.log.info(`[${this.cameraName}] 🧹 Cleaning up recording session for stream ID: ${streamId}`, this.streamUrl);
       if (!cp.killed) {
         cp.kill('SIGTERM');
       }
@@ -264,27 +315,50 @@ export class RecordingDelegate implements CameraRecordingDelegate {
       'pipe:1'];
 
     const cp = spawn(ffmpegPath, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    let intentionallyKilled = false;
+
+    // Track if process was intentionally killed
+    const originalKill = cp.kill.bind(cp);
+    cp.kill = function(signal?: NodeJS.Signals) {
+      intentionallyKilled = true;
+      return originalKill(signal);
+    };
 
     cp.on('exit', (code, signal) => {
-      this.log.error(`[${this.cameraName}] [FFmpeg] exited with code ${code}, signal ${signal}`);
+      if (code === 0 || code === null) {
+        this.log.info(`[${this.cameraName}] [FFmpeg] exited successfully with code ${code}, signal ${signal}`);
+      } else if (intentionallyKilled || signal === 'SIGTERM' || signal === 'SIGKILL') {
+        // Process was killed intentionally, this is expected
+        this.log.debug(`[${this.cameraName}] [FFmpeg] exited with code ${code}, signal ${signal} (intentional kill)`);
+      } else {
+        this.log.error(`[${this.cameraName}] [FFmpeg] exited with code ${code}, signal ${signal}`);
+      }
     });
 
     if (cp.stderr) {
       cp.stderr.on('data', data => {
         const msg = data.toString();
-        if (msg.includes('moov') || msg.toLowerCase().includes('error')) {
+        if (msg.includes('moov') || msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed')) {
           this.log.warn(`[${this.cameraName}] [FFmpeg stderr]: ${msg.trim()}`);
         }
       });
     }
 
     async function* generator() {
-      while (true) {
-        const header = await readLength(cp.stdout!, 8);
-        const length = header.readInt32BE(0) - 8;
-        const type = header.slice(4).toString();
-        const data = await readLength(cp.stdout!, length);
-        yield { header, length, type, data };
+      try {
+        while (true) {
+          const header = await readLength(cp.stdout!, 8);
+          const length = header.readInt32BE(0) - 8;
+          const type = header.slice(4).toString();
+          const data = await readLength(cp.stdout!, length);
+          yield { header, length, type, data };
+        }
+      } catch (error) {
+        if (cp.killed) {
+          // Process was killed, this is expected
+          return;
+        }
+        throw error;
       }
     }
 

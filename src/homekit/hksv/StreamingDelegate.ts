@@ -1,4 +1,5 @@
 import { LoxonePlatform } from '../../LoxonePlatform';
+import { get } from 'http';
 import {
   APIEvent,
   AudioStreamingCodecType,
@@ -78,17 +79,21 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
 
   //private readonly camera;
   private readonly hap: HAP;
+  private snapshotUrl?: string;
+
   constructor(
       private readonly platform: LoxonePlatform,
       streamUrl: string,
       base64auth: string,
       cameraName: string,
+      snapshotUrl?: string,
   ) {
     //this.camera = camera;
     this.hap = this.platform.api.hap;
     this.streamUrl = streamUrl;
     this.base64auth = base64auth;
     this.cameraName = cameraName;
+    this.snapshotUrl = snapshotUrl;
 
     // Extract the IP address using a regular expression
     const ipAddressRegex = /http:\/\/([\d.]+)/;
@@ -246,6 +251,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     const now = Date.now();
 
     if (this.cachedSnapshot && now - this.cachedAt < this.cacheTtlMs) {
+      this.platform.log.debug(`[${this.cameraName}] Snapshot cache hit`);
       return this.cachedSnapshot;
     }
 
@@ -263,66 +269,147 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     });
   }
 
+  /**
+   * Get snapshot via direct HTTP request (faster than FFmpeg)
+   */
+  private async getSnapshotViaHTTP(): Promise<Buffer | null> {
+    if (!this.snapshotUrl) {
+      return null;
+    }
+
+    return new Promise((resolve) => {
+      const request = get(this.snapshotUrl!, {
+        timeout: 500, // 500ms timeout for very fast response
+        headers: {
+          'Authorization': `Basic ${this.base64auth}`,
+        },
+      }, (response) => {
+        if (response.statusCode !== 200) {
+          this.platform.log.debug(`[${this.cameraName}] Snapshot HTTP request failed with status ${response.statusCode}`);
+          response.destroy();
+          resolve(null);
+          return;
+        }
+
+        const buffers: Buffer[] = [];
+        let hasError = false;
+
+        response.on('data', (chunk) => {
+          if (!hasError) {
+            buffers.push(chunk);
+          }
+        });
+
+        response.on('end', () => {
+          if (!hasError) {
+            resolve(Buffer.concat(buffers));
+          } else {
+            resolve(null);
+          }
+        });
+
+        response.on('error', (error) => {
+          hasError = true;
+          this.platform.log.debug(`[${this.cameraName}] Snapshot HTTP response error: ${error.message}`);
+          resolve(null);
+        });
+      });
+
+      request.on('error', (error) => {
+        this.platform.log.debug(`[${this.cameraName}] Snapshot HTTP request error: ${error.message}`);
+        resolve(null);
+      });
+
+      request.on('timeout', () => {
+        this.platform.log.debug(`[${this.cameraName}] Snapshot HTTP request timeout`);
+        request.destroy();
+        resolve(null);
+      });
+    });
+  }
+
   async handleSnapshotRequest(
     request: SnapshotRequest,
     callback: SnapshotRequestCallback,
-  ) {
-    // Don't process snapshot requests during shutdown
-    if (this.isShuttingDown) {
-      this.platform.log.debug(`[${this.cameraName}] Ignoring snapshot request during shutdown`);
-      callback(new Error('Plugin is shutting down'));
-      return;
+  ): Promise<void> {
+    this.platform.log.debug(`[${this.cameraName}] Snapshot requested: ${request.width} x ${request.height}`);
+
+    try {
+      // Try HTTP snapshot first (faster than FFmpeg)
+      let snapshot: Buffer | null = null;
+      if (this.snapshotUrl) {
+        try {
+          snapshot = await this.getSnapshotViaHTTP();
+          if (snapshot) {
+            // Update cache for next request
+            this.cachedSnapshot = snapshot;
+            this.cachedAt = Date.now();
+            this.platform.log.debug(`[${this.cameraName}] Successfully captured snapshot via HTTP at ${request.width}x${request.height}`);
+            callback(undefined, snapshot);
+            return;
+          }
+        } catch (error) {
+          this.platform.log.debug(`[${this.cameraName}] HTTP snapshot failed, falling back to FFmpeg: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      // Fallback to FFmpeg if HTTP failed or snapshotUrl not available
+      snapshot = await this.fetchSnapshot();
+      // Update cache for next request
+      this.cachedSnapshot = snapshot;
+      this.cachedAt = Date.now();
+      this.platform.log.debug(`[${this.cameraName}] Successfully captured snapshot via FFmpeg at ${request.width}x${request.height}`);
+      callback(undefined, snapshot);
+    } catch (error) {
+      this.platform.log.error(`[${this.cameraName}] Snapshot error: ${error instanceof Error ? error.message : String(error)}`);
+      callback(error instanceof Error ? error : new Error(String(error)));
     }
+  }
 
-    this.platform.log.debug(`[${this.cameraName}] 📸 Snapshot requested: ${request.width} x ${request.height}`);
+  private fetchSnapshot(): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const ffmpeg = spawn('ffmpeg', [
+        '-re',
+        '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+        '-i', `${this.streamUrl}`,
+        '-frames:v', '1',
+        '-update', '1',
+        '-loglevel', 'error',
+        '-f', 'image2',
+        '-vcodec', 'mjpeg',
+        '-',
+      ], { env: process.env });
 
-    // Spawn an ffmpeg process to capture a snapshot from the camera
-    const ffmpeg = spawn('ffmpeg', [
-      '-re',
-      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
-      '-i', `${this.streamUrl}`,
-      '-frames:v', '1',
-      '-update', '1',                      // Ensures only one frame is written
-      '-loglevel', 'error',
-      '-f', 'image2',
-      '-vcodec', 'mjpeg',                 // Explicit JPEG output
-      '-',                                // Output to stdout
-    ],
-    { env: process.env });
+      let snapshotBuffer = Buffer.alloc(0);
 
-    const snapshotBuffers: Buffer[] = [];
+      ffmpeg.stdout.on('data', (data) => {
+        snapshotBuffer = Buffer.concat([snapshotBuffer, data]);
+      });
 
-    // Collect the snapshot data from ffmpeg's stdout
-    ffmpeg.stdout.on('data', data => snapshotBuffers.push(data));
+      ffmpeg.on('error', (error: Error) => {
+        reject(new Error(`FFmpeg process creation failed: ${error.message}`));
+      });
 
-    // Log ffmpeg's stderr for diagnostics
-    ffmpeg.stderr.on('data', data => {
-      const line = data.toString();
-      if (/error|failed|unable|not found/i.test(line)) {
-        this.platform.log.error(`[${this.cameraName}] Snapshot error: ${line.trim()}`);
-      } else {
-        //this.platform.log.debug(`[${this.cameraName}] Snapshot stderr: ${line.trim()}`);
-      }
-    });
+      ffmpeg.stderr.on('data', (data) => {
+        const line = data.toString();
+        if (/error|failed|unable|not found/i.test(line)) {
+          this.platform.log.error(`[${this.cameraName}] Snapshot error: ${line.trim()}`);
+        }
+      });
 
-    // Handle process exit
-    ffmpeg.on('exit', (code, signal) => {
-      if (signal) {
-        this.platform.log.debug(`[${this.cameraName}] Snapshot process was killed with signal: ${signal}`);
-        callback(new Error('Snapshot process was killed with signal: ' + signal));
-      } else if (code === 0) {
-        this.platform.log.debug(`[${this.cameraName}] Successfully captured snapshot at ${request.width}x${request.height}`);
-        callback(undefined, Buffer.concat(snapshotBuffers));
-      } else {
-        this.platform.log.error(`[${this.cameraName}] Snapshot process exited with code ${code}`);
-        callback(new Error('Snapshot process exited with code ' + code));
-      }
-    });
-
-    // Handle unexpected errors
-    ffmpeg.on('error', (error) => {
-      this.platform.log.error(`[${this.cameraName}] Error while capturing snapshot: ${error.message}`);
-      callback(error);
+      ffmpeg.on('close', (code, signal) => {
+        if (signal) {
+          reject(new Error(`Snapshot process was killed with signal: ${signal}`));
+        } else if (code === 0) {
+          if (snapshotBuffer.length > 0) {
+            resolve(snapshotBuffer);
+          } else {
+            reject(new Error('Failed to fetch snapshot: buffer is empty'));
+          }
+        } else {
+          reject(new Error(`Snapshot process exited with code ${code}`));
+        }
+      });
     });
   }
 

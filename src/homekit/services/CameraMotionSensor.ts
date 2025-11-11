@@ -65,13 +65,6 @@ export class CameraMotionSensor extends BaseService {
     this.platform.log.debug(`[${this.accessory.displayName}] Starting camera motion detection`);
     this.active = true;
 
-    // Test trigger motion after 10 seconds for HKSV testing
-    setTimeout(() => {
-      this.platform.log.info(`[${this.accessory.displayName}] 🧪 Test motion trigger for HKSV testing`);
-      this.triggerMotion(Date.now());
-      // resetMotion will be called automatically by triggerMotion via motionResetTimer
-    }, 10000);
-
     const poll = async () => {
       if (!this.active || this.isPolling || this.isShuttingDown) {
         return;

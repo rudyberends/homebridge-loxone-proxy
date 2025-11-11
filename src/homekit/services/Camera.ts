@@ -37,7 +37,7 @@ export class CameraService {
    */
   private setupService(): void {
 
-    this.streamingDelegate = new streamingDelegate(this.platform, this.streamUrl, this.base64auth, this.accessory.displayName);
+    this.streamingDelegate = new streamingDelegate(this.platform, this.streamUrl, this.base64auth, this.accessory.displayName, this.snapshotUrl);
     this.accessory.configureController(this.streamingDelegate.controller);
   }
 
@@ -56,11 +56,12 @@ export class CameraService {
    * @returns File size in bytes, or null if unavailable
    */
   public async getSnapshotSize(): Promise<number | null> {
-    const url = `${this.snapshotUrl}?login=${this.base64auth}`;
-
     return new Promise((resolve) => {
-      const request = get(url, {
+      const request = get(this.snapshotUrl, {
         timeout: 3000, // 3 second timeout for fast response
+        headers: {
+          'Authorization': `Basic ${this.base64auth}`,
+        },
       }, (response) => {
         const contentLength = response.headers['content-length'];
 

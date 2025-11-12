@@ -223,15 +223,16 @@ export class RecordingDelegate implements CameraRecordingDelegate {
       const ffmpegInput = [
         '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
         '-use_wallclock_as_timestamps', '1',
-        '-probesize', '32',
+        '-probesize', '200000',
         '-analyzeduration', '0',
-        '-fflags', 'nobuffer',
+        '-fflags', '+genpts+nobuffer+igndts',
         '-flags', 'low_delay',
-        '-fflags', '+genpts',
         '-max_delay', '0',
+        '-thread_queue_size', '1024',
         '-f', 'mjpeg',
+        '-re',
         '-i', this.streamUrl,
-      ];
+    ];
       this.preBuffer = new PreBuffer(ffmpegInput, this.streamUrl, this.videoProcessor, this.log);
       this.preBufferSession = await this.preBuffer.startPreBuffer();
     }

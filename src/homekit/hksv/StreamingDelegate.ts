@@ -511,14 +511,15 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     //const fps = request.video.fps;
     //const videoBitrate = request.video.max_bit_rate;
 
-    const ffmpegArgs: string[] = [
+    const ffmpegArgs = [
       '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
       '-use_wallclock_as_timestamps', '1',
       '-probesize', '32',
       '-analyzeduration', '0',
-      '-fflags', 'nobuffer',
+      '-fflags', 'nobuffer+igndts',
       '-flags', 'low_delay',
       '-max_delay', '0',
+      '-re',
       '-i', `${this.streamUrl}`,
       '-an',
       '-sn',
@@ -530,7 +531,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-preset', 'veryfast',
       '-tune', 'zerolatency',
       '-crf', '22',
-      '-filter:v', 'scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
+      '-filter:v', 'fps=25:round=down,scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-b:v', '299k',
       '-payload_type', '99',
       '-ssrc', `${sessionInfo.videoSSRC}`,
@@ -538,7 +539,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
       '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
       `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
-    ];
+  ];
 
     // Setting up audio
     /*

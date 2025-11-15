@@ -14,7 +14,9 @@ export class LoxoneAccessory {
 
   constructor(readonly platform: LoxonePlatform, readonly device: Control) {
     if (this.platform.AccessoryCount >= 149) {
-      this.platform.log.info(`[${device.type}Item] Max HomeKit Accessories limit reached. Item not mapped: ${device.name}`);
+      this.platform.log.info(
+        `[${device.type}Item] Max HomeKit Accessories limit reached. Item not mapped: ${device.name}`,
+      );
       return;
     }
 
@@ -46,15 +48,25 @@ export class LoxoneAccessory {
 
   private getOrCreateAccessory(uuid: string): PlatformAccessory {
     let accessory = this.platform.accessories.find((acc) => acc.UUID === uuid);
+
     const baseName = this.device.name ?? 'Unnamed';
     const roomName = this.device.room ?? 'Unknown';
 
     if (!accessory) {
-      const uniqueName = this.platform.generateUniqueName(roomName, baseName);
+      // NEW: Clean + globally unique + UUID-stable name
+      const uniqueName = this.platform.generateUniqueName(roomName, baseName, uuid);
+
       accessory = new this.platform.api.platformAccessory(uniqueName, uuid);
 
-      this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
-      this.platform.log.debug(`[${this.device.type}Item] Adding new accessory: ${uniqueName} (original: ${this.device.name})`);
+      this.platform.api.registerPlatformAccessories(
+        'homebridge-loxone-proxy',
+        'LoxonePlatform',
+        [accessory],
+      );
+
+      this.platform.log.debug(
+        `[${this.device.type}Item] Adding new accessory: ${uniqueName} (original: ${this.device.name})`,
+      );
     } else {
       this.platform.log.debug(
         `[${this.device.type}Item] Restoring accessory from cache: ${accessory.displayName} (original: ${this.device.name})`,
@@ -76,7 +88,7 @@ export class LoxoneAccessory {
   // Override this in subclasses to add specific HomeKit services
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected configureServices(accessory: PlatformAccessory): void {
-    // To be implemented by child classes
+    // implemented by child classes
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -91,7 +103,12 @@ export class LoxoneAccessory {
     }
   }
 
-  private callBack = (message: { uuid: string; state: string; service: string; value: string | number }): void => {
+  private callBack = (message: {
+    uuid: string;
+    state: string;
+    service: string;
+    value: string | number;
+  }): void => {
     if (message.uuid) {
       const itemState = this.ItemStates[message.uuid];
       message.service = itemState.service;
@@ -100,9 +117,17 @@ export class LoxoneAccessory {
     }
   };
 
-  protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
+  protected callBackHandler(message: {
+    uuid: string;
+    state: string;
+    service: string;
+    value: string | number;
+  }): void {
     this.platform.log.debug(`[${this.device.name}] Callback service: ${message.service}`);
-    const updateService = new Function('message', `return this.Service["${message.service}"].updateService(message);`);
+    const updateService = new Function(
+      'message',
+      `return this.Service["${message.service}"].updateService(message);`,
+    );
     updateService.call(this, message);
   }
 

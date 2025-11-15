@@ -23,10 +23,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
   public readonly accessories: PlatformAccessory[] = []; // restored cached accessories
-  public mappedAccessories = new Set<string>(); // tracking of mapped UUIDs
-  private displayNameCount: Record<string, number> = {}; // for name uniqueness
-  private generatedNames = new Set<string>(); // track names within a mapping run
-  private accessoryNameMap: Map<string, string> = new Map();
+  public mappedAccessories = new Set<string>();          // tracking of mapped UUIDs
+  private usedNames = new Set<string>();                 // ensures global uniqueness
+  private accessoryNameMap: Map<string, string> = new Map(); // uuid → assigned name
 
   constructor(
     public readonly log: Logger,
@@ -43,8 +42,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    */
   async LoxoneInit(): Promise<void> {
     // Reset name tracking before new session
-    this.displayNameCount = {};
-    this.generatedNames.clear();
+    this.usedNames.clear();
+    this.accessoryNameMap.clear();
 
     this.LoxoneHandler = new LoxoneHandler(this);
     await this.waitForLoxoneConfig();
@@ -92,9 +91,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    * Maps all Loxone items to their HomeKit accessories
    */
   async mapLoxoneItems(items: Control[]): Promise<void> {
-    // Reset unique name counters before each mapping run
-    this.displayNameCount = {};
-    this.generatedNames.clear();
+    // Reset name tracking for the new mapping cycle
+    this.usedNames.clear();
+    this.accessoryNameMap.clear();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const itemCache: { [key: string]: any } = {};
@@ -160,59 +159,45 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     this.log.debug('Loading accessory from cache:', accessory.displayName);
     this.accessories.push(accessory);
 
-    // Reset name tracking if needed when cache restores first
-    if (!Object.keys(this.displayNameCount).length) {
-      this.displayNameCount = {};
-    }
-  }
-
-  /**
-   * Sanitizes names for HomeKit compatibility.
-   */
-  public sanitizeName(name: string): string {
-    return name
-      .replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '') // remove emoji / non-printable
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 64); // enforce HomeKit limit
+    // Zorg dat deze naam niet nogmaals gebruikt wordt
+    this.usedNames.add(accessory.displayName);
   }
 
   /**
    * Generates unique, HomeKit-safe accessory names.
    */
-  /**
- * Generates unique, HomeKit-safe accessory names.
- */
   generateUniqueName(room: string, base: string, uuid?: string): string {
-    const sanitizedRoom = this.sanitizeName(room || 'Unknown');
-    const sanitizedBase = this.sanitizeName(base || 'Unnamed');
-
-    // avoid double prefix
-    const alreadyPrefixed = sanitizedBase.toLowerCase().startsWith(sanitizedRoom.toLowerCase());
-    const fullBase = alreadyPrefixed ? sanitizedBase : `${sanitizedRoom} ${sanitizedBase}`;
-
-    // If this accessory already has an assigned name → reuse it
+    // If already assigned for this uuid → reuse
     if (uuid && this.accessoryNameMap.has(uuid)) {
       return this.accessoryNameMap.get(uuid)!;
     }
 
-    // If same base name was used by *another* accessory → suffix
-    if (this.displayNameCount[fullBase] !== undefined) {
-      this.displayNameCount[fullBase]++;
-      const final = `${fullBase}_${this.displayNameCount[fullBase]}`;
+    const clean = (s: string) =>
+      s
+        .replace(/\(.*?\)/g, '')                // remove parenthesis content
+        .replace(/[^\p{L}\p{N}\s']/gu, '')      // letters, numbers, spaces, apostrophes only
+        .replace(/\s+/g, ' ')
+        .trim();
 
-      if (uuid) {
-        this.accessoryNameMap.set(uuid, final);
-      }
-      return final;
+    const cleanRoom = clean(room || 'Unknown');
+    const cleanBase = clean(base || 'Unnamed');
+    const baseName = `${cleanRoom} ${cleanBase}`.trim();
+
+    // Find unique name
+    let finalName = baseName;
+    let counter = 1;
+
+    while (this.usedNames.has(finalName)) {
+      finalName = `${baseName} ${counter++}`;
     }
 
-    // First use → no suffix
-    this.displayNameCount[fullBase] = 0;
+    // Reserve this name
+    this.usedNames.add(finalName);
 
     if (uuid) {
-      this.accessoryNameMap.set(uuid, fullBase);
+      this.accessoryNameMap.set(uuid, finalName);
     }
-    return fullBase;
+
+    return finalName;
   }
 }

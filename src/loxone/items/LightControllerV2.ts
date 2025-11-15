@@ -6,10 +6,10 @@ import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
 
 const typeClassMap = {
-  'ColorPickerV2': ColorPickerV2,
-  'Dimmer': Dimmer,
-  'EIBDimmer': Dimmer,
-  'Switch': Switch,
+  ColorPickerV2,
+  Dimmer,
+  EIBDimmer: Dimmer,
+  Switch,
 };
 
 /**
@@ -18,19 +18,27 @@ const typeClassMap = {
 export class LightControllerV2 extends LoxoneAccessory {
 
   isSupported(): boolean {
-    this.registerChildItems();
+    // Main accessory: Mood group
+    this.device.name = this.platform.generateUniqueName(
+      this.device.room,
+      'Moods',
+      this.device.uuidAction,
+    );
 
-    // Override the base name used for the main Mood group
-    this.device.name = this.platform.generateUniqueName(this.device.room, 'Moods', this.device.uuidAction);
     return this.platform.config.options.MoodSwitches === 'enabled';
   }
 
   configureServices(): void {
+    this.registerChildItems();
+
     this.ItemStates = {
-      [this.device.states.activeMoods]: { service: 'PrimaryService', state: 'activeMoods' },
+      [this.device.states.activeMoods]: {
+        service: 'PrimaryService',
+        state: 'activeMoods',
+      },
     };
 
-    // Manually push cached zones ActiveMoods state to simulate an initial update
+    // Initial push of cached mood state
     this.platform.LoxoneHandler.pushCachedState(this, this.device.states.activeMoods);
 
     this.registerMoodSwitches();
@@ -45,9 +53,13 @@ export class LightControllerV2 extends LoxoneAccessory {
     );
 
     moods
-      .filter(mood => mood.id !== 778) // ignore default "off" mood
+      .filter(mood => mood.id !== 778) // ignore "off"
       .forEach(mood => {
-        const uniqueMoodName = this.platform.generateUniqueName(this.device.room, mood.name, this.device.uuidAction + ':' + mood.id);
+        const uniqueMoodName = this.platform.generateUniqueName(
+          this.device.room,
+          mood.name,
+          `${this.device.uuidAction}:${mood.id}`,
+        );
 
         const moodSwitchItem = {
           ...this.device,
@@ -69,51 +81,50 @@ export class LightControllerV2 extends LoxoneAccessory {
   }
 
   /**
-   * Instantiates child sub-controls as accessories (ColorPickers, Dimmers, etc.)
+   * Instantiates ColorPicker, Dimmer, Switch sub-controls
    */
   registerChildItems(): void {
-  // Skip if there are no subcontrols at all
-    if (!this.device.subControls || Object.keys(this.device.subControls).length === 0) {
+    const sub = this.device.subControls;
+
+    if (!sub || Object.keys(sub).length === 0) {
       this.platform.log.debug(`[${this.device.name}] has no subControls – skipping`);
       return;
     }
 
-    for (const childUuid in this.device.subControls) {
-      const lightItem = this.device.subControls[childUuid];
+    for (const childUuid in sub) {
+      const lightItem = sub[childUuid];
       if (!lightItem) {
         continue;
       }
 
-      // Ensure we never crash when accessing details
       lightItem.details = lightItem.details || {};
 
-      // Skip master entries (we only want actual channels)
+      // Skip master / internal channels
       if (
         lightItem.uuidAction?.includes('/masterValue') ||
-      lightItem.uuidAction?.includes('/masterColor')
+        lightItem.uuidAction?.includes('/masterColor')
       ) {
         continue;
       }
 
-      // Copy inherited context
+      // Inherit context
       lightItem.room = this.device.room;
       lightItem.cat = this.device.cat;
 
-      // Ensure unique naming before registering
+      // Unique guaranteed name
       lightItem.name = this.platform.generateUniqueName(
         lightItem.room,
         lightItem.name ?? lightItem.type,
         childUuid,
       );
 
-      // Match the correct HomeKit class for this control
       const ControlClass = typeClassMap[lightItem.type];
       if (!ControlClass) {
         this.platform.log.debug(`[${this.device.name}] Unsupported subcontrol type: ${lightItem.type}`);
         continue;
       }
 
-      // If the control is a Switch, determine its service type (Switch vs Outlet)
+      // Determine outlet vs switch for Switch type
       if (lightItem.type === 'Switch') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (lightItem.details as any).serviceType = Switch.determineSwitchType(
@@ -122,7 +133,6 @@ export class LightControllerV2 extends LoxoneAccessory {
         );
       }
 
-      // Instantiate the correct HomeKit service
       new ControlClass(this.platform, lightItem);
     }
   }
@@ -130,9 +140,13 @@ export class LightControllerV2 extends LoxoneAccessory {
   /**
    * Updates mood switch states when active mood changes
    */
-  protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
-    const currentIDpreg = message.value as string;
-    const currentID = parseInt(currentIDpreg.replace(/[[\]']+/g, ''));
+  protected callBackHandler(message: {
+    uuid: string;
+    state: string;
+    service: string;
+    value: string | number;
+  }): void {
+    const currentID = parseInt(String(message.value).replace(/[[\]']+/g, ''));
 
     for (const serviceName in this.Service) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,11 +161,7 @@ export class LightControllerV2 extends LoxoneAccessory {
     }
   }
 
-  /**
-   * Sends mood change command to Loxone Miniserver
-   */
   protected handleLoxoneCommand(value: string): void {
-    this.platform.log.debug(`[${this.device.name}] MoodSwitch update from Homekit ->`, value);
     const command = `changeTo/${value}`;
     this.platform.log.debug(`[${this.device.name}] Send command to Loxone: ${command}`);
     this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);

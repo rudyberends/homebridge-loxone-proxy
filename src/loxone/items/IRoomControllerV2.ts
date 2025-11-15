@@ -6,6 +6,12 @@ import { Thermostat } from '../../homekit/services/Thermostat';
 */
 export class IRoomControllerV2 extends LoxoneAccessory {
 
+  isSupported(): boolean {
+    // Ensure the accessory does NOT reuse the room name as base
+    this.device.name = 'Thermostat';
+    return true;
+  }
+
   configureServices(): void {
 
     this.ItemStates = {

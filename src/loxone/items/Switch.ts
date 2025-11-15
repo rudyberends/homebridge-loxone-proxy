@@ -10,7 +10,10 @@ export class Switch extends LoxoneAccessory {
 
   configureServices(): void {
     this.ItemStates = {
-      [this.device.states.active]: { service: 'PrimaryService', state: 'active' },
+      [this.device.states.active]: {
+        service: 'PrimaryService',
+        state: 'active',
+      },
     };
 
     const serviceType =
@@ -22,47 +25,43 @@ export class Switch extends LoxoneAccessory {
       case 'lock':
         this.Service.PrimaryService = new LockMechanism(this.platform, this.Accessory!);
         break;
+
       case 'outlet':
         this.Service.PrimaryService = new Outlet(this.platform, this.Accessory!);
         break;
+
       default:
         this.Service.PrimaryService = new SwitchService(this.platform, this.Accessory!);
+        break;
     }
   }
 
   /**
-   * Determine the HomeKit service type ('lock', 'outlet', or 'switch')
+   * Determine service type ('lock', 'outlet', or 'switch')
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static determineSwitchType(device: any, config: Record<string, any>): 'lock' | 'outlet' | 'switch' {
-    const name = device.name?.toLowerCase() || '';
-    const catIcon = device.catIcon?.toLowerCase() || '';
-    const defaultIcon = device.defaultIcon?.toLowerCase() || '';
+    const name = (device.name || '').toLowerCase();
+    const icon1 = (device.catIcon || '').toLowerCase();
+    const icon2 = (device.defaultIcon || '').toLowerCase();
 
     const matchesIcon = (icon: string): boolean =>
-      catIcon.includes(icon) || defaultIcon.includes(icon);
+      icon1.includes(icon) || icon2.includes(icon);
 
     const matchesAlias = (alias?: string): boolean =>
-      !!alias && new RegExp(`\\b${alias.toLowerCase()}\\b`).test(name);
+      !!alias && new RegExp(`\\b${alias.toLowerCase()}\\b`, 'i').test(name);
 
-    const isLock =
-    matchesIcon('lock') ||
-    matchesAlias(config.switchAlias?.Lock);
-
-    if (isLock) {
+    // lock?
+    if (matchesIcon('lock') || matchesAlias(config.switchAlias?.Lock)) {
       return 'lock';
     }
 
-    const isOutlet =
-    matchesIcon('outlet') ||
-    matchesAlias(config.switchAlias?.Outlet);
-
-    if (isOutlet) {
+    // outlet?
+    if (matchesIcon('outlet') || matchesAlias(config.switchAlias?.Outlet)) {
       return 'outlet';
     }
 
-    // 🔁 Fallback
+    // default
     return 'switch';
   }
-
 }

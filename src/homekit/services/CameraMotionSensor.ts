@@ -77,7 +77,7 @@ export class CameraMotionSensor extends BaseService {
 
       if (snapshotSize !== null) {
         // Successfully got size from HTTP headers - most efficient method
-        this.platform.log.debug(`[${this.accessory.displayName}] 📊 Got snapshot size: ${snapshotSize} bytes via HTTP headers`);
+        this.platform.log.debug(`[${this.accessory.displayName}] Got snapshot size: ${snapshotSize} bytes via HTTP headers`);
         currentSize = Math.max(0, snapshotSize - this.jpegHeaderSize);
         this.snapshotFailureCount = 0;
       } else {
@@ -119,8 +119,14 @@ export class CameraMotionSensor extends BaseService {
     }
 
     const medianSize = this.median(this.snapshotSizeHistory);
-    const delta = Math.abs(currentSize - medianSize) / medianSize;
 
+    // Skip evaluation until the history stabilizes
+    if (medianSize <= 0) {
+      this.platform.log.debug(`[${this.accessory.displayName}] Motion delta skipped (median=0)`);
+      return false;
+    }
+
+    const delta = Math.abs(currentSize - medianSize) / medianSize;
     this.platform.log.debug(`[${this.accessory.displayName}] Motion delta: ${(delta * 100).toFixed(2)}%`);
 
     return (
@@ -133,7 +139,7 @@ export class CameraMotionSensor extends BaseService {
 
   private triggerMotion(now: number) {
     if (!this.state.MotionDetected) {
-      this.platform.log.info(`[${this.accessory.displayName}] 📸 Motion detected via snapshot`);
+      this.platform.log.info(`[${this.accessory.displayName}] Motion detected via snapshot`);
       this.state.MotionDetected = true;
       this.service?.updateCharacteristic(this.platform.Characteristic.MotionDetected, true);
 
@@ -152,7 +158,7 @@ export class CameraMotionSensor extends BaseService {
       // Motion already reset, prevent double reset
       return;
     }
-    this.platform.log.info(`[${this.accessory.displayName}] ⏸️ Motion ended`);
+    this.platform.log.info(`[${this.accessory.displayName}] Motion ended`);
     this.state.MotionDetected = false;
     this.service?.updateCharacteristic(this.platform.Characteristic.MotionDetected, false);
     this.motionResetTimer = undefined;

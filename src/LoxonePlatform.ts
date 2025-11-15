@@ -55,8 +55,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    * Initial startup
    */
   async LoxoneInit(): Promise<void> {
-    // Reset name tracking before new session
-    this.displayNameCount = {};
+    this.usedNames.clear();
+    this.accessoryNameMap.clear();
 
     this.LoxoneHandler = new LoxoneHandler(this);
 
@@ -108,9 +108,6 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    * Map items → accessories
    */
   async mapLoxoneItems(items: Control[]): Promise<void> {
-    // Reset unique name counters before each mapping run
-    this.displayNameCount = {};
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cache: Record<string, any> = {};
 
@@ -165,47 +162,64 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     this.mappedAccessories.clear();
   }
 
-  /**
-   * Called at Homebridge startup to restore cached accessories
-   */
-  configureAccessory(accessory: PlatformAccessory): void {
-    this.log.debug('Loading accessory from cache:', accessory.displayName);
-    this.accessories.push(accessory);
+  configureAccessory(acc: PlatformAccessory): void {
+    this.log.debug('Loaded from cache:', acc.displayName);
+    this.accessories.push(acc);
+  }
 
-    // Reset name tracking if needed when cache restores first
-    if (!Object.keys(this.displayNameCount).length) {
-      this.displayNameCount = {};
+  /**
+   * Clean + unique + HAP-safe + UUID-stable name builder
+   */
+  generateUniqueName(
+    room: string,
+    base: string,
+    uuid?: string,
+    isSubItem = false,
+  ): string {
+
+    // --- Sanitizer: keep inner text of parentheses, drop parentheses only ---
+    const clean = (s: string) =>
+      s
+        .replace(/\((.*?)\)/g, '$1')                // "(MH06)" → "MH06"
+        .replace(/[^\p{L}\p{N}\s']/gu, '')          // allowed: letters, digits, space, apostrophe
+        .replace(/\s+/g, ' ')                       // collapse spaces
+        .trim();
+
+    const cleanRoom = clean(room || 'Unknown');
+    const cleanBase = clean(base || 'Unnamed');
+
+    // --- Ensure no duplicate prefix ---
+    const alreadyPrefixed =
+    cleanBase.toLowerCase().startsWith(cleanRoom.toLowerCase()) ||
+    cleanBase.toLowerCase().startsWith(cleanRoom.toLowerCase() + ' ');
+
+    const baseName = alreadyPrefixed
+      ? cleanBase
+      : `${cleanRoom} ${cleanBase}`;
+
+    // --- SUBITEMS NEVER GET SUFFIXES ---
+    if (isSubItem) {
+      return baseName;
     }
-  }
 
-  /**
-   * Sanitizes names for HomeKit compatibility.
-   */
-  public sanitizeName(name: string): string {
-    return name
-      .replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '') // remove emoji / non-printable
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 64); // enforce HomeKit limit
-  }
+    // --- ACCESSORY: ensure global unique name ---
+    // reuse existing mapping if UUID exists
+    if (uuid && this.accessoryNameMap.has(uuid)) {
+      return this.accessoryNameMap.get(uuid)!;
+    }
 
-  /**
-   * Generates unique, HomeKit-safe accessory names.
-   */
-  public generateUniqueName(room: string, base: string): string {
-    const sanitizedRoom = this.sanitizeName(room || 'Unknown');
-    const sanitizedBase = this.sanitizeName(base || 'Unnamed');
+    let finalName = baseName;
+    let counter = 1;
 
-    // avoid double prefix
-    const alreadyPrefixed = sanitizedBase.toLowerCase().startsWith(sanitizedRoom.toLowerCase());
-    const fullBase = alreadyPrefixed ? sanitizedBase : `${sanitizedRoom} ${sanitizedBase}`;
-    let finalName = fullBase;
+    while (this.usedNames.has(finalName)) {
+      finalName = `${baseName} ${counter++}`;
+    }
 
-    if (this.displayNameCount[fullBase] !== undefined) {
-      this.displayNameCount[fullBase]++;
-      finalName = `${fullBase}_${this.displayNameCount[fullBase]}`;
-    } else {
-      this.displayNameCount[fullBase] = 0;
+    this.usedNames.add(finalName);
+
+    // store stable mapping
+    if (uuid) {
+      this.accessoryNameMap.set(uuid, finalName);
     }
 
     return finalName;

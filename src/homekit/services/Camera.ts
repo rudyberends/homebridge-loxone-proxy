@@ -37,7 +37,11 @@ export class CameraService {
    */
   private setupService(): void {
 
-    this.streamingDelegate = new streamingDelegate(this.platform, this.streamUrl, this.base64auth, this.accessory.displayName, this.snapshotUrl);
+    this.streamingDelegate = new streamingDelegate(
+      this.platform, this.streamUrl,
+      this.base64auth,
+      this.accessory.displayName,
+      this.snapshotUrl);
     this.accessory.configureController(this.streamingDelegate.controller);
   }
 
@@ -71,14 +75,14 @@ export class CameraService {
         if (contentLength) {
           const size = parseInt(contentLength, 10);
           if (!isNaN(size) && size > 0) {
-            this.platform.log.debug(`[${this.accessory.displayName}] 📊 HTTP headers returned Content-Length: ${size} bytes`);
+            this.platform.log.debug(`[${this.accessory.displayName}] HTTP headers returned Content-Length: ${size} bytes`);
             resolve(size);
             return;
           } else {
-            this.platform.log.debug(`[${this.accessory.displayName}] ❌ Invalid Content-Length: ${contentLength}`);
+            this.platform.log.debug(`[${this.accessory.displayName}] Invalid Content-Length: ${contentLength}`);
           }
         } else {
-          this.platform.log.debug(`[${this.accessory.displayName}] ❌ No Content-Length header in response`);
+          this.platform.log.debug(`[${this.accessory.displayName}] No Content-Length header in response`);
         }
 
         // Content-Length not found or invalid
@@ -86,13 +90,13 @@ export class CameraService {
       });
 
       request.on('error', (error) => {
-        this.platform.log.debug(`[${this.accessory.displayName}] ❌ HTTP request error: ${error.message}`);
+        this.platform.log.debug(`[${this.accessory.displayName}] HTTP request error: ${error.message}`);
         // Silently fail - return null instead of rejecting
         resolve(null);
       });
 
       request.on('timeout', () => {
-        this.platform.log.debug(`[${this.accessory.displayName}] ⏰ HTTP request timeout`);
+        this.platform.log.debug(`[${this.accessory.displayName}] HTTP request timeout`);
         request.destroy();
         resolve(null);
       });

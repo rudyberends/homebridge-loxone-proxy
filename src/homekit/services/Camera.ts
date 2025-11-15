@@ -12,7 +12,7 @@ export class CameraService {
   private readonly accessory: PlatformAccessory;
   private readonly base64auth: string;
   private readonly streamUrl: string;
-  private readonly snapshotUrl: string;
+  private readonly snapshotUrl: string | undefined;
 
   private streamingDelegate!: streamingDelegate;
 
@@ -20,7 +20,7 @@ export class CameraService {
     platform: LoxonePlatform,
     accessory: PlatformAccessory,
     streamUrl: string,
-    snapshotUrl: string,
+    snapshotUrl: string | undefined,
     base64auth: string,
   ) {
     this.platform = platform;
@@ -60,8 +60,14 @@ export class CameraService {
    * @returns File size in bytes, or null if unavailable
    */
   public async getSnapshotSize(): Promise<number | null> {
+
+    // If the camera has no snapshot URL (Intercom V2), do not attempt HTTP header requests
+    if (!this.snapshotUrl) {
+      return Promise.resolve(null);
+    }
+
     return new Promise((resolve) => {
-      const request = get(this.snapshotUrl, {
+      const request = get(this.snapshotUrl as string, {
         timeout: 3000, // 3 second timeout for fast response
         headers: {
           'Authorization': `Basic ${this.base64auth}`,

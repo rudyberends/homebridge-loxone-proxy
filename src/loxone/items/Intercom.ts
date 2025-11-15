@@ -74,7 +74,7 @@ export class Intercom extends LoxoneAccessory {
    * Initializes the CameraService and attaches a motion sensor.
    * Motion is detected via snapshot-based MJPEG size variation.
    */
-  protected setupCamera(streamUrl: string, snapshotUrl: string, base64auth: string): void {
+  protected setupCamera(streamUrl: string, snapshotUrl: string | undefined, base64auth: string): void {
     this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, snapshotUrl, base64auth);
 
     this.Service['CameraMotion'] = new CameraMotionSensor(

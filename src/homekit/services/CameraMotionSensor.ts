@@ -1,8 +1,7 @@
-import { PlatformAccessory } from 'homebridge';
+import { PlatformAccessory, APIEvent } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { BaseService } from './BaseService';
 import { CameraService } from './Camera';
-import { APIEvent } from 'homebridge';
 
 /**
  * CameraMotionSensor uses periodic snapshot analysis to detect motion

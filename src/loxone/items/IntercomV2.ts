@@ -33,9 +33,8 @@ export class IntercomV2 extends Intercom {
 
       const base64auth = Buffer.from(`${this.platform.config.username}:${this.platform.config.password}`, 'utf8').toString('base64');
       const streamUrl = `http://${ip}/mjpg/video.mjpg`;
-      const snapshotUrl = `http://${ip}/jpg/image.jpg`;
 
-      this.setupCamera(streamUrl, snapshotUrl, base64auth);
+      this.setupCamera(streamUrl, undefined, base64auth);
       this.configureMotionSensor();
 
       isConfigured = true;

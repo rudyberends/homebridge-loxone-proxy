@@ -349,7 +349,9 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
             return;
           }
         } catch (error) {
-          this.platform.log.debug(`[${this.cameraName}] HTTP snapshot failed, falling back to FFmpeg: ${error instanceof Error ? error.message : String(error)}`);
+          this.platform.log.debug(
+            `[${this.cameraName}] HTTP snapshot failed, falling back to FFmpeg: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
 
@@ -470,6 +472,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     switch (request.type) {
       case this.hap.StreamRequestTypes.START: {
         this.platform.log.info(
+          // eslint-disable-next-line max-len
           `[${this.cameraName}] Started video stream: ${request.video.width}x${request.video.height}, ${request.video.fps} fps, ${request.video.max_bit_rate} kbps`,
         );
 
@@ -531,6 +534,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-preset', 'veryfast',
       '-tune', 'zerolatency',
       '-crf', '22',
+      // eslint-disable-next-line max-len
       '-filter:v', 'fps=25:round=down,scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-b:v', '299k',
       '-payload_type', '99',
@@ -539,7 +543,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
       '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
       `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
-  ];
+    ];
 
     // Setting up audio
     /*

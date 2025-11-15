@@ -25,6 +25,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   public readonly accessories: PlatformAccessory[] = []; // restored cached accessories
   public mappedAccessories = new Set<string>(); // tracking of mapped UUIDs
   private displayNameCount: Record<string, number> = {}; // for name uniqueness
+  private generatedNames = new Set<string>(); // track names within a mapping run
+  private accessoryNameMap: Map<string, string> = new Map();
 
   constructor(
     public readonly log: Logger,
@@ -42,6 +44,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   async LoxoneInit(): Promise<void> {
     // Reset name tracking before new session
     this.displayNameCount = {};
+    this.generatedNames.clear();
 
     this.LoxoneHandler = new LoxoneHandler(this);
     await this.waitForLoxoneConfig();
@@ -91,6 +94,7 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   async mapLoxoneItems(items: Control[]): Promise<void> {
     // Reset unique name counters before each mapping run
     this.displayNameCount = {};
+    this.generatedNames.clear();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const itemCache: { [key: string]: any } = {};
@@ -176,22 +180,39 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   /**
    * Generates unique, HomeKit-safe accessory names.
    */
-  public generateUniqueName(room: string, base: string): string {
+  /**
+ * Generates unique, HomeKit-safe accessory names.
+ */
+  generateUniqueName(room: string, base: string, uuid?: string): string {
     const sanitizedRoom = this.sanitizeName(room || 'Unknown');
     const sanitizedBase = this.sanitizeName(base || 'Unnamed');
 
     // avoid double prefix
     const alreadyPrefixed = sanitizedBase.toLowerCase().startsWith(sanitizedRoom.toLowerCase());
     const fullBase = alreadyPrefixed ? sanitizedBase : `${sanitizedRoom} ${sanitizedBase}`;
-    let finalName = fullBase;
 
-    if (this.displayNameCount[fullBase] !== undefined) {
-      this.displayNameCount[fullBase]++;
-      finalName = `${fullBase}_${this.displayNameCount[fullBase]}`;
-    } else {
-      this.displayNameCount[fullBase] = 0;
+    // If this accessory already has an assigned name → reuse it
+    if (uuid && this.accessoryNameMap.has(uuid)) {
+      return this.accessoryNameMap.get(uuid)!;
     }
 
-    return finalName;
+    // If same base name was used by *another* accessory → suffix
+    if (this.displayNameCount[fullBase] !== undefined) {
+      this.displayNameCount[fullBase]++;
+      const final = `${fullBase}_${this.displayNameCount[fullBase]}`;
+
+      if (uuid) {
+        this.accessoryNameMap.set(uuid, final);
+      }
+      return final;
+    }
+
+    // First use → no suffix
+    this.displayNameCount[fullBase] = 0;
+
+    if (uuid) {
+      this.accessoryNameMap.set(uuid, fullBase);
+    }
+    return fullBase;
   }
 }

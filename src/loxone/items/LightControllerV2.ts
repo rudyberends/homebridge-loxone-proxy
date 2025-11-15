@@ -21,7 +21,7 @@ export class LightControllerV2 extends LoxoneAccessory {
     this.registerChildItems();
 
     // Override the base name used for the main Mood group
-    this.device.name = this.platform.generateUniqueName(this.device.room, 'Moods');
+    this.device.name = this.platform.generateUniqueName(this.device.room, 'Moods', this.device.uuidAction);
     return this.platform.config.options.MoodSwitches === 'enabled';
   }
 
@@ -47,7 +47,7 @@ export class LightControllerV2 extends LoxoneAccessory {
     moods
       .filter(mood => mood.id !== 778) // ignore default "off" mood
       .forEach(mood => {
-        const uniqueMoodName = this.platform.generateUniqueName(this.device.room, mood.name);
+        const uniqueMoodName = this.platform.generateUniqueName(this.device.room, mood.name, this.device.uuidAction + ':' + mood.id);
 
         const moodSwitchItem = {
           ...this.device,
@@ -103,6 +103,7 @@ export class LightControllerV2 extends LoxoneAccessory {
       lightItem.name = this.platform.generateUniqueName(
         lightItem.room,
         lightItem.name ?? lightItem.type,
+        childUuid,
       );
 
       // Match the correct HomeKit class for this control

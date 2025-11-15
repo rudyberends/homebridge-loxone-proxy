@@ -8,24 +8,38 @@ import {
   Characteristic,
 } from 'homebridge';
 
-import { StructureFile, Controls, MSInfo, Control, Room, CatValue } from './loxone/StructureFile';
+import {
+  StructureFile,
+  Controls,
+  MSInfo,
+  Control,
+  Room,
+  CatValue,
+} from './loxone/StructureFile';
+
 import LoxoneHandler from './loxone/LoxoneHandler';
 
 /**
  * LoxonePlatform
- * This class is the main constructor for the plugin.
+ * Main plugin class
  */
 export class LoxonePlatform implements DynamicPlatformPlugin {
   public LoxoneHandler;
   public AccessoryCount = 1;
   public msInfo: MSInfo = {} as MSInfo;
   public LoxoneItems: Controls = {} as Controls;
+
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
-  public readonly accessories: PlatformAccessory[] = []; // restored cached accessories
-  public mappedAccessories = new Set<string>();          // tracking of mapped UUIDs
-  private usedNames = new Set<string>();                 // ensures global uniqueness
-  private accessoryNameMap: Map<string, string> = new Map(); // uuid → assigned name
+
+  public readonly accessories: PlatformAccessory[] = [];
+  public mappedAccessories = new Set<string>();
+
+  /** Track globally used names to prevent duplicates */
+  private usedNames = new Set<string>();
+
+  /** Map UUID → chosen unique stable name */
+  private accessoryNameMap: Map<string, string> = new Map();
 
   constructor(
     public readonly log: Logger,
@@ -38,48 +52,51 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * Initializes the Loxone system and starts accessory mapping
+   * Initial startup
    */
   async LoxoneInit(): Promise<void> {
-    // Reset name tracking before new session
     this.usedNames.clear();
     this.accessoryNameMap.clear();
 
     this.LoxoneHandler = new LoxoneHandler(this);
+
     await this.waitForLoxoneConfig();
-    this.log.debug(`[LoxoneInit] Got Structure File; Last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
+    this.log.debug(
+      `[LoxoneInit] Got Structure File; Modified: ${this.LoxoneHandler.loxdata.lastModified}`,
+    );
+
     this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
-    this.log.info('[LoxoneInit] Loxone Platform initialized successfully');
+    this.log.info('[LoxoneInit] Loxone Platform initialized');
   }
 
-  /**
-   * Waits until the structure file is received from Loxone
-   */
   waitForLoxoneConfig(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const waitInterval = setInterval(() => {
+    return new Promise((resolve) => {
+      const i = setInterval(() => {
         if (this.LoxoneHandler.loxdata) {
-          clearInterval(waitInterval);
+          clearInterval(i);
           resolve();
         }
-      }, 1000);
+      }, 500);
     });
   }
 
   /**
-   * Parses the structure file and begins item mapping
+   * Parse structure file
    */
   parseLoxoneConfig(config: StructureFile): void {
     this.msInfo = config.msInfo;
-    const LoxoneRooms: Record<string, Room> = { ...config.rooms };
-    const LoxoneCats: Record<string, CatValue> = { ...config.cats };
+
+    const rooms: Record<string, Room> = { ...config.rooms };
+    const cats: Record<string, CatValue> = { ...config.cats };
+
     this.LoxoneItems = { ...config.controls };
 
     for (const uuid in this.LoxoneItems) {
-      const Item = this.LoxoneItems[uuid];
-      Item.room = LoxoneRooms[Item.room]?.name || 'undefined';
-      Item.catIcon = LoxoneCats[Item.cat]?.image || 'undefined';
-      Item.cat = LoxoneCats[Item.cat]?.type || 'undefined';
+      const item = this.LoxoneItems[uuid];
+
+      item.room = rooms[item.room]?.name ?? 'undefined';
+      item.catIcon = cats[item.cat]?.image ?? 'undefined';
+      item.cat = cats[item.cat]?.type ?? 'undefined';
     }
 
     this.mapLoxoneItems(Object.values(this.LoxoneItems)).then(() => {
@@ -88,102 +105,109 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * Maps all Loxone items to their HomeKit accessories
+   * Map items → accessories
    */
   async mapLoxoneItems(items: Control[]): Promise<void> {
-    // Reset name tracking for the new mapping cycle
-    this.usedNames.clear();
-    this.accessoryNameMap.clear();
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const itemCache: { [key: string]: any } = {};
+    const cache: Record<string, any> = {};
 
-    const ExcludedItemTypes = this.config.Exclusions?.split(',') ?? [];
-    const RoomFilterList = this.config.roomfilter?.list?.split(',') ?? [];
-    const RoomFilterType = this.config.roomfilter?.type || 'exclusion';
+    const excludedTypes = this.config.Exclusions?.split(',') ?? [];
+    const roomFilterList = this.config.roomfilter?.list?.split(',') ?? [];
+    const roomFilterType = this.config.roomfilter?.type || 'exclusion';
 
     for (const item of items) {
       try {
-        const itemType = item.type;
+        const type = item.type;
 
-        this.log.debug(`[mapLoxoneItems] ${item.name} UUID: ${item.uuidAction}`);
+        const roomExcluded =
+          (roomFilterType === 'exclusion' && roomFilterList.includes(item.room.toLowerCase())) ||
+          (roomFilterType === 'inclusion' && !roomFilterList.includes(item.room.toLowerCase()));
 
-        const isRoomExcluded =
-          (RoomFilterType.toLowerCase() === 'exclusion' && RoomFilterList.includes(item.room.toLowerCase())) ||
-          (RoomFilterType.toLowerCase() === 'inclusion' && !RoomFilterList.includes(item.room.toLowerCase()));
-
-        if (isRoomExcluded) {
-          this.log.debug(`[mapLoxoneItem][RoomExclusion] Skipping Excluded Room: ${item.name} in room ${item.room}`);
-        } else if (ExcludedItemTypes.includes(itemType)) {
-          this.log.debug(`[mapLoxoneItem][ItemTypeExclusion] Skipping Excluded ItemType: ${item.name} with type ${item.type}`);
-        } else {
-          if (!itemCache[itemType]) {
-            const itemFile = await import(`./loxone/items/${itemType}`);
-            itemCache[itemType] = itemFile;
-          }
-
-          const itemFile = itemCache[itemType];
-          const constructorName = Object.keys(itemFile)[0];
-          new itemFile[constructorName](this, item);
+        if (roomExcluded) {
+          continue;
         }
-      } catch (error) {
-        this.log.debug(error instanceof Error ? error.message : String(error));
-        this.log.info(`[mapLoxoneItem] Skipping Unsupported ItemType: ${item.name} with type ${item.type}`);
+
+        if (excludedTypes.includes(type)) {
+          continue;
+        }
+
+        if (!cache[type]) {
+          cache[type] = await import(`./loxone/items/${type}`);
+        }
+
+        const file = cache[type];
+        const constructorName = Object.keys(file)[0];
+
+        new file[constructorName](this, item);
+      } catch {
+        this.log.info(`[mapLoxoneItem] Unsupported item type: ${item.name} → ${item.type}`);
       }
     }
   }
 
   /**
-   * Removes Homebridge-cached accessories that were not re-mapped during this session.
+   * Remove unused cached accessories
    */
   removeUnmappedAccessories(): void {
-    const pluginName = 'homebridge-loxone-proxy';
-    const platformName = 'LoxonePlatform';
+    const plugin = 'homebridge-loxone-proxy';
+    const platform = 'LoxonePlatform';
 
-    this.accessories.forEach((accessory: PlatformAccessory) => {
-      if (!this.mappedAccessories.has(accessory.UUID)) {
-        this.log.info('[RemoveAccessory] Removing unused accessory:', accessory.displayName);
-        this.api.unregisterPlatformAccessories(pluginName, platformName, [accessory]);
-      } else {
-        this.log.debug('[RemoveAccessory] Keeping mapped accessory:', accessory.displayName);
+    this.accessories.forEach((acc) => {
+      if (!this.mappedAccessories.has(acc.UUID)) {
+        this.log.info('[RemoveAccessory] Removing unused accessory:', acc.displayName);
+        this.api.unregisterPlatformAccessories(plugin, platform, [acc]);
       }
     });
 
-    this.mappedAccessories.clear(); // Reset after cleanup
+    this.mappedAccessories.clear();
+  }
+
+  configureAccessory(acc: PlatformAccessory): void {
+    this.log.debug('Loaded from cache:', acc.displayName);
+    this.accessories.push(acc);
   }
 
   /**
-   * Called at Homebridge startup to restore cached accessories
+   * Clean + unique + HAP-safe + UUID-stable name builder
    */
-  configureAccessory(accessory: PlatformAccessory): void {
-    this.log.debug('Loading accessory from cache:', accessory.displayName);
-    this.accessories.push(accessory);
+  generateUniqueName(
+    room: string,
+    base: string,
+    uuid?: string,
+    isSubItem = false,
+  ): string {
 
-    // Zorg dat deze naam niet nogmaals gebruikt wordt
-    this.usedNames.add(accessory.displayName);
-  }
-
-  /**
-   * Generates unique, HomeKit-safe accessory names.
-   */
-  generateUniqueName(room: string, base: string, uuid?: string): string {
-    // If already assigned for this uuid → reuse
-    if (uuid && this.accessoryNameMap.has(uuid)) {
-      return this.accessoryNameMap.get(uuid)!;
-    }
-
+    // --- Sanitizer: keep inner text of parentheses, drop parentheses only ---
     const clean = (s: string) =>
       s
-        .replace(/\(.*?\)/g, '')                // remove parenthesis content
-        .replace(/[^\p{L}\p{N}\s']/gu, '')      // letters, numbers, spaces, apostrophes only
-        .replace(/\s+/g, ' ')
+        .replace(/\((.*?)\)/g, '$1')                // "(MH06)" → "MH06"
+        .replace(/[^\p{L}\p{N}\s']/gu, '')          // allowed: letters, digits, space, apostrophe
+        .replace(/\s+/g, ' ')                       // collapse spaces
         .trim();
 
     const cleanRoom = clean(room || 'Unknown');
     const cleanBase = clean(base || 'Unnamed');
-    const baseName = `${cleanRoom} ${cleanBase}`.trim();
 
-    // Find unique name
+    // --- Ensure no duplicate prefix ---
+    const alreadyPrefixed =
+    cleanBase.toLowerCase().startsWith(cleanRoom.toLowerCase()) ||
+    cleanBase.toLowerCase().startsWith(cleanRoom.toLowerCase() + ' ');
+
+    const baseName = alreadyPrefixed
+      ? cleanBase
+      : `${cleanRoom} ${cleanBase}`;
+
+    // --- SUBITEMS NEVER GET SUFFIXES ---
+    if (isSubItem) {
+      return baseName;
+    }
+
+    // --- ACCESSORY: ensure global unique name ---
+    // reuse existing mapping if UUID exists
+    if (uuid && this.accessoryNameMap.has(uuid)) {
+      return this.accessoryNameMap.get(uuid)!;
+    }
+
     let finalName = baseName;
     let counter = 1;
 
@@ -191,9 +215,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
       finalName = `${baseName} ${counter++}`;
     }
 
-    // Reserve this name
     this.usedNames.add(finalName);
 
+    // store stable mapping
     if (uuid) {
       this.accessoryNameMap.set(uuid, finalName);
     }

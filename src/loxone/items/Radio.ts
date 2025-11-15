@@ -41,7 +41,7 @@ export class Radio extends LoxoneAccessory {
         ...this.device,
         name: uniqueName,
         type: 'Switch',
-        cat: key,             // used later to determine active radio output
+        cat: key,
         details: {},
         subControls: {},
       };
@@ -73,11 +73,8 @@ export class Radio extends LoxoneAccessory {
       const service: any = this.Service[serviceName];
       message.value = active === Number(service.device.cat) ? 1 : 0;
 
-      const updateService = new Function(
-        'message',
-        `return this.Service["${serviceName}"].updateService(message);`,
-      );
-      updateService.call(this, message);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.Service[serviceName] as any).updateService(message);
     }
   }
 

@@ -91,45 +91,56 @@ export class LightControllerV2 extends LoxoneAccessory {
    * Name uniqueness and HomeKit-safe naming are handled by LoxoneAccessory.
    */
   registerChildItems(): void {
-    const subs = this.device.subControls;
-    if (!subs || Object.keys(subs).length === 0) {
+  // Skip if there are no subcontrols at all
+    if (!this.device.subControls || Object.keys(this.device.subControls).length === 0) {
+      this.platform.log.debug(`[${this.device.name}] has no subControls – skipping`);
       return;
     }
 
-    for (const childUuid in subs) {
-      const lightItem = subs[childUuid];
+    for (const childUuid in this.device.subControls) {
+      const lightItem = this.device.subControls[childUuid];
       if (!lightItem) {
         continue;
       }
 
-      // Skip master channels used for aggregate values
+      // Ensure we never crash when accessing details
+      lightItem.details = lightItem.details || {};
+
+      // Skip master entries (we only want actual channels)
       if (
         lightItem.uuidAction?.includes('/masterValue') ||
-        lightItem.uuidAction?.includes('/masterColor')
+      lightItem.uuidAction?.includes('/masterColor')
       ) {
         continue;
       }
 
-      lightItem.details = lightItem.details || {};
+      // Copy inherited context
       lightItem.room = this.device.room;
       lightItem.cat = this.device.cat;
 
-      if (!lightItem.name) {
-        lightItem.name = lightItem.type;
-      }
+      // Ensure unique naming before registering
+      lightItem.name = this.platform.generateUniqueName(
+        lightItem.room,
+        lightItem.name ?? lightItem.type,
+      );
 
+      // Match the correct HomeKit class for this control
       const ControlClass = typeClassMap[lightItem.type];
       if (!ControlClass) {
+        this.platform.log.debug(`[${this.device.name}] Unsupported subcontrol type: ${lightItem.type}`);
         continue;
       }
 
+      // If the control is a Switch, determine its service type (Switch vs Outlet)
       if (lightItem.type === 'Switch') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (lightItem.details as any).serviceType =
-          Switch.determineSwitchType(lightItem, this.platform.config);
+        (lightItem.details as any).serviceType = Switch.determineSwitchType(
+          lightItem,
+          this.platform.config,
+        );
       }
 
-      // Each child becomes its own accessory
+      // Instantiate the correct HomeKit service
       new ControlClass(this.platform, lightItem);
     }
   }

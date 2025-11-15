@@ -41,10 +41,17 @@ export class Intercom extends LoxoneAccessory {
     }
 
     let streamUrl = 'undefined';
+    let snapshotUrl = 'undefined';
 
     // Device type 0 indicates a custom camera configuration
     if (this.device.details.deviceType === 0) {
       streamUrl = videoInfo.streamUrl;
+      // Extract IP from streamUrl for snapshot
+      const ipMatch = streamUrl.match(/http:\/\/([\d.]+)/);
+      const ipAddress = ipMatch?.[1];
+      if (ipAddress) {
+        snapshotUrl = `http://${ipAddress}/jpg/image.jpg`;
+      }
 
     // Device has alertImage URL (Loxone native V1/XL intercom)
     } else if (videoInfo.alertImage) {
@@ -53,21 +60,22 @@ export class Intercom extends LoxoneAccessory {
 
       if (ipAddress) {
         streamUrl = `http://${ipAddress}/mjpg/video.mjpg`;
+        snapshotUrl = `http://${ipAddress}/jpg/image.jpg`;
       }
     }
 
     // Basic authentication for camera access
     const base64auth = Buffer.from(`${videoInfo.user}:${videoInfo.pass}`, 'utf8').toString('base64');
 
-    this.setupCamera(streamUrl, base64auth);
+    this.setupCamera(streamUrl, snapshotUrl, base64auth);
   }
 
   /**
    * Initializes the CameraService and attaches a motion sensor.
    * Motion is detected via snapshot-based MJPEG size variation.
    */
-  protected setupCamera(streamUrl: string, base64auth: string): void {
-    this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, base64auth);
+  protected setupCamera(streamUrl: string, snapshotUrl: string, base64auth: string): void {
+    this.camera = new CameraService(this.platform, this.Accessory!, streamUrl, snapshotUrl, base64auth);
 
     this.Service['CameraMotion'] = new CameraMotionSensor(
       this.platform,

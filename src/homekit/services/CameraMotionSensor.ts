@@ -2,6 +2,7 @@ import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { BaseService } from './BaseService';
 import { CameraService } from './Camera';
+import { APIEvent } from 'homebridge';
 
 /**
  * CameraMotionSensor uses periodic snapshot analysis to detect motion
@@ -24,6 +25,7 @@ export class CameraMotionSensor extends BaseService {
   private snapshotFailureCount = 0;
   private readonly maxSnapshotWarnings = 3;
   private isPolling = false;
+  private isShuttingDown = false;
 
   private state = {
     MotionDetected: false,
@@ -42,6 +44,13 @@ export class CameraMotionSensor extends BaseService {
     this.jpegHeaderSize = this.platform.config?.Advanced?.JpegHeaderSize ?? 623;
     this.setupService();
     this.startDetection();
+
+    // Handle shutdown
+    platform.api.on(APIEvent.SHUTDOWN, () => {
+      this.isShuttingDown = true;
+      this.active = false;
+      this.platform.log.debug(`[${this.accessory.displayName}] Motion sensor stopping due to shutdown`);
+    });
   }
 
   setupService(): void {
@@ -57,29 +66,42 @@ export class CameraMotionSensor extends BaseService {
     this.active = true;
 
     const poll = async () => {
-      if (!this.active || this.isPolling) {
+      if (!this.active || this.isPolling || this.isShuttingDown) {
         return;
       }
       this.isPolling = true;
 
-      const snapshot = await this.camera.getSnapshot();
+      // Try to get snapshot size efficiently via HTTP headers first
+      let currentSize: number | null = null;
+      const snapshotSize = await this.camera.getSnapshotSize();
 
-      if (!snapshot) {
-        if (this.snapshotFailureCount < this.maxSnapshotWarnings) {
-          this.platform.log.warn(`[${this.accessory.displayName}] Snapshot unavailable`);
-          this.snapshotFailureCount++;
+      if (snapshotSize !== null) {
+        // Successfully got size from HTTP headers - most efficient method
+        this.platform.log.debug(`[${this.accessory.displayName}] 📊 Got snapshot size: ${snapshotSize} bytes via HTTP headers`);
+        currentSize = Math.max(0, snapshotSize - this.jpegHeaderSize);
+        this.snapshotFailureCount = 0;
+      } else {
+        // Fallback to full snapshot download if size request fails
+        const snapshot = await this.camera.getSnapshot();
+
+        if (!snapshot) {
+          if (this.snapshotFailureCount < this.maxSnapshotWarnings) {
+            this.platform.log.warn(`[${this.accessory.displayName}] Snapshot unavailable`);
+            this.snapshotFailureCount++;
+          }
+          const retryDelay = Math.min(this.intervalMs * 2 ** this.snapshotFailureCount, 60000);
+          this.isPolling = false;
+          setTimeout(poll, retryDelay);
+          return;
         }
-        const retryDelay = Math.min(this.intervalMs * 2 ** this.snapshotFailureCount, 60000);
-        this.isPolling = false;
-        setTimeout(poll, retryDelay);
-        return;
+
+        this.snapshotFailureCount = 0;
+        currentSize = Math.max(0, snapshot.length - this.jpegHeaderSize);
       }
 
-      this.snapshotFailureCount = 0;
-      const currentSize = Math.max(0, snapshot.length - this.jpegHeaderSize);
       const now = Date.now();
 
-      if (this.evaluateMotion(currentSize, now)) {
+      if (currentSize !== null && this.evaluateMotion(currentSize, now)) {
         this.triggerMotion(now);
       }
 
@@ -126,9 +148,14 @@ export class CameraMotionSensor extends BaseService {
   }
 
   private resetMotion() {
+    if (!this.state.MotionDetected) {
+      // Motion already reset, prevent double reset
+      return;
+    }
     this.platform.log.info(`[${this.accessory.displayName}] ⏸️ Motion ended`);
     this.state.MotionDetected = false;
     this.service?.updateCharacteristic(this.platform.Characteristic.MotionDetected, false);
+    this.motionResetTimer = undefined;
   }
 
   private median(values: number[]): number {

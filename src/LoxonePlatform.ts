@@ -55,8 +55,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    * Initial startup
    */
   async LoxoneInit(): Promise<void> {
-    this.usedNames.clear();
-    this.accessoryNameMap.clear();
+    // Reset name tracking before new session
+    this.displayNameCount = {};
 
     this.LoxoneHandler = new LoxoneHandler(this);
 
@@ -108,6 +108,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    * Map items → accessories
    */
   async mapLoxoneItems(items: Control[]): Promise<void> {
+    // Reset unique name counters before each mapping run
+    this.displayNameCount = {};
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cache: Record<string, any> = {};
 
@@ -162,64 +165,47 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     this.mappedAccessories.clear();
   }
 
-  configureAccessory(acc: PlatformAccessory): void {
-    this.log.debug('Loaded from cache:', acc.displayName);
-    this.accessories.push(acc);
+  /**
+   * Called at Homebridge startup to restore cached accessories
+   */
+  configureAccessory(accessory: PlatformAccessory): void {
+    this.log.debug('Loading accessory from cache:', accessory.displayName);
+    this.accessories.push(accessory);
+
+    // Reset name tracking if needed when cache restores first
+    if (!Object.keys(this.displayNameCount).length) {
+      this.displayNameCount = {};
+    }
   }
 
   /**
-   * Clean + unique + HAP-safe + UUID-stable name builder
+   * Sanitizes names for HomeKit compatibility.
    */
-  generateUniqueName(
-    room: string,
-    base: string,
-    uuid?: string,
-    isSubItem = false,
-  ): string {
+  public sanitizeName(name: string): string {
+    return name
+      .replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '') // remove emoji / non-printable
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 64); // enforce HomeKit limit
+  }
 
-    // --- Sanitizer: keep inner text of parentheses, drop parentheses only ---
-    const clean = (s: string) =>
-      s
-        .replace(/\((.*?)\)/g, '$1')                // "(MH06)" → "MH06"
-        .replace(/[^\p{L}\p{N}\s']/gu, '')          // allowed: letters, digits, space, apostrophe
-        .replace(/\s+/g, ' ')                       // collapse spaces
-        .trim();
+  /**
+   * Generates unique, HomeKit-safe accessory names.
+   */
+  public generateUniqueName(room: string, base: string): string {
+    const sanitizedRoom = this.sanitizeName(room || 'Unknown');
+    const sanitizedBase = this.sanitizeName(base || 'Unnamed');
 
-    const cleanRoom = clean(room || 'Unknown');
-    const cleanBase = clean(base || 'Unnamed');
+    // avoid double prefix
+    const alreadyPrefixed = sanitizedBase.toLowerCase().startsWith(sanitizedRoom.toLowerCase());
+    const fullBase = alreadyPrefixed ? sanitizedBase : `${sanitizedRoom} ${sanitizedBase}`;
+    let finalName = fullBase;
 
-    // --- Ensure no duplicate prefix ---
-    const alreadyPrefixed =
-    cleanBase.toLowerCase().startsWith(cleanRoom.toLowerCase()) ||
-    cleanBase.toLowerCase().startsWith(cleanRoom.toLowerCase() + ' ');
-
-    const baseName = alreadyPrefixed
-      ? cleanBase
-      : `${cleanRoom} ${cleanBase}`;
-
-    // --- SUBITEMS NEVER GET SUFFIXES ---
-    if (isSubItem) {
-      return baseName;
-    }
-
-    // --- ACCESSORY: ensure global unique name ---
-    // reuse existing mapping if UUID exists
-    if (uuid && this.accessoryNameMap.has(uuid)) {
-      return this.accessoryNameMap.get(uuid)!;
-    }
-
-    let finalName = baseName;
-    let counter = 1;
-
-    while (this.usedNames.has(finalName)) {
-      finalName = `${baseName} ${counter++}`;
-    }
-
-    this.usedNames.add(finalName);
-
-    // store stable mapping
-    if (uuid) {
-      this.accessoryNameMap.set(uuid, finalName);
+    if (this.displayNameCount[fullBase] !== undefined) {
+      this.displayNameCount[fullBase]++;
+      finalName = `${fullBase}_${this.displayNameCount[fullBase]}`;
+    } else {
+      this.displayNameCount[fullBase] = 0;
     }
 
     return finalName;

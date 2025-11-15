@@ -29,14 +29,6 @@ export class LightControllerV2 extends LoxoneAccessory {
    */
   isSupported(): boolean {
     this.registerChildItems();
-
-    // Set the base name for the main mood accessory
-    this.device.name = this.platform.generateUniqueName(
-      this.device.room,
-      'Moods',
-      this.device.uuidAction,
-    );
-
     return this.platform.config.options.MoodSwitches === 'enabled';
   }
 
@@ -45,6 +37,9 @@ export class LightControllerV2 extends LoxoneAccessory {
    * Maps the active mood state and registers one service per mood.
    */
   configureServices(): void {
+
+    this.device.name = this.platform.generateUniqueName(this.device.room, 'Moods', this.device.uuidAction);
+
     this.ItemStates = {
       [this.device.states.activeMoods]: {
         service: 'PrimaryService',
@@ -66,26 +61,20 @@ export class LightControllerV2 extends LoxoneAccessory {
    * on the main LightController accessory.
    */
   registerMoodSwitches(): void {
-    const moods = JSON.parse(
-      this.platform.LoxoneHandler.getLastCachedValue(this.device.states.moodList),
-    );
+    const moods = JSON.parse(this.platform.LoxoneHandler.getLastCachedValue(this.device.states.moodList));
 
     moods
       .filter(mood => mood.id !== 778) // ignore default "off" mood
       .forEach(mood => {
         const moodItem = {
           ...this.device,
-          // moods keep their original name (no room prefix)
           name: mood.name,
           cat: mood.id,
           details: {},
           subControls: {},
         };
 
-        const serviceType = Switch.determineSwitchType(
-          moodItem,
-          this.platform.config,
-        );
+        const serviceType = Switch.determineSwitchType(moodItem, this.platform.config);
 
         this.Service[mood.name] =
           serviceType === 'outlet'

@@ -1,3 +1,14 @@
+/**
+ * Handles a Loxone LightControllerV2 object.
+ *
+ * Responsibilities:
+ * - Creates one primary HomeKit accessory representing the Light Controller.
+ * - Exposes individual moods as HomeKit switch or outlet services on the primary accessory.
+ * - Registers each subcontrol (dimmers, switches, color outputs) as independent HomeKit accessories.
+ * - Processes mood state changes and updates all mood services accordingly.
+ * - Forwards HomeKit commands to the Loxone Miniserver.
+ */
+
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { Outlet } from '../../homekit/services/Outlet';
 import { Switch as SwitchService } from '../../homekit/services/Switch';
@@ -5,47 +16,32 @@ import { LightBulb } from '../../homekit/services/LightBulb';
 import { ColorLightBulb } from '../../homekit/services/ColorLightBulb';
 import { Switch } from './Switch';
 
-/**
- * LightControllerV2
- *
- * Represents a Loxone Light Controller including:
- *  • One main HomeKit accessory (room + "LightController")
- *  • Child subcontrols exposed as HomeKit services (dimmer, color light, switches)
- *  • Mood switches exposed as HomeKit services
- *
- * NOTE:
- * Subcontrols and moods are *not* separate accessories. They are individual
- * HomeKit services attached to the single LightController accessory.
- */
 export class LightControllerV2 extends LoxoneAccessory {
 
   /**
-   * Checks if moods are enabled in plugin configuration.
+   * Determines whether this controller should be processed based on configuration.
    */
   isSupported(): boolean {
     return this.platform.config.options.MoodSwitches === 'enabled';
   }
 
   /**
-   * Main accessory setup:
-   *  1. Assign unique/stable accessory name
-   *  2. Register all child subcontrols as HomeKit services
-   *  3. Register active mood listener
-   *  4. Create mood switches
+   * Configures the main accessory, registers subcontrols as standalone accessories,
+   * registers mood services on the main accessory, and initializes mood state listeners.
    */
   configureServices(): void {
 
-    // 1 — Main accessory naming
+    // Assign a stable, unique name to the primary accessory
     this.device.name = this.platform.generateUniqueName(
       this.device.room,
       'LightController',
       this.device.uuidAction,
     );
 
-    // 2 — Create child services
+    // Create HomeKit accessories for child subcontrols
     this.registerChildItems();
 
-    // 3 — Track active mood
+    // Register active mood state listener
     this.ItemStates = {
       [this.device.states.activeMoods]: {
         service: 'PrimaryService',
@@ -53,18 +49,19 @@ export class LightControllerV2 extends LoxoneAccessory {
       },
     };
 
+    // Push cached mood state into the main accessory on startup
     this.platform.LoxoneHandler.pushCachedState(
       this,
       this.device.states.activeMoods,
     );
 
-    // 4 — Create mood switch services
+    // Register mood switches as services of the primary accessory
     this.registerMoodSwitches();
   }
 
   /**
-   * Creates one HomeKit switch per available mood.
-   * All mood switches belong to the main LightController accessory.
+   * Registers one HomeKit service for each defined mood.
+   * The mood services are attached to the primary accessory.
    */
   registerMoodSwitches(): void {
     const moods = JSON.parse(
@@ -72,8 +69,9 @@ export class LightControllerV2 extends LoxoneAccessory {
     );
 
     moods
-      .filter(m => m.id !== 778) // skip the "off" mood
+      .filter(m => m.id !== 778)
       .forEach(m => {
+
         const moodName = this.platform.generateUniqueName(
           this.device.room,
           m.name,
@@ -98,8 +96,8 @@ export class LightControllerV2 extends LoxoneAccessory {
   }
 
   /**
-   * Registers services for each child subcontrol under this LightController.
-   * Subcontrols are not separate accessories.
+   * Registers each subcontrol as an individual HomeKit accessory.
+   * Supported subcontrols include dimmers, switches, and color outputs.
    */
   registerChildItems(): void {
     const subs = this.device.subControls;
@@ -125,6 +123,7 @@ export class LightControllerV2 extends LoxoneAccessory {
       item.room = this.device.room;
       item.cat = this.device.cat;
 
+      // Assign a deterministic unique name to the subcontrol accessory
       item.name = this.platform.generateUniqueName(
         item.room,
         item.name ?? item.type,
@@ -156,14 +155,13 @@ export class LightControllerV2 extends LoxoneAccessory {
           break;
 
         default:
-          // Unsupported control → ignore
           break;
       }
     }
   }
 
   /**
-   * Updates all mood switch services when the active mood changes.
+   * Updates all mood services on the primary accessory upon receiving an active mood state update.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected callBackHandler(message: any): void {
@@ -178,7 +176,7 @@ export class LightControllerV2 extends LoxoneAccessory {
   }
 
   /**
-   * Sends the changeTo/<id> command to the Miniserver.
+   * Sends a mood change command to the Loxone Miniserver.
    */
   protected handleLoxoneCommand(value: string): void {
     this.platform.LoxoneHandler.sendCommand(

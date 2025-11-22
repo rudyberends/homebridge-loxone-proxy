@@ -41,7 +41,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |`WindowMonitor` | ContactSensor | Auto
 |`Window` | Window | Auto
 
-For the plugin to recognize the items, the item needs to be vissible in the user interface. This can be done by enabling "use" in the userinterface section of the item.
+For the plugin to recognize the items, the item needs to be visible in the user interface. This can be done by enabling "use" in the userinterface section of the item.
 
 <img width="408" alt="useinuserinterface" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/b422015b-4a5d-411e-b98c-42ef86cf8d58">
 
@@ -68,14 +68,14 @@ Filters allow you to select what to expose to HomeKit.
 When enabled, all LightControllerV2 moods are mapped to a homekit switch. All Switches from  the same LightController will be grouped together. In homeKit this works as a radio switch, so only one switch (mood) can be active at the same time. Mixing moods is not possible. 
 
 ### Exclusions
-To exclude Itemtypes from being mapped, they can be added to the Exclussions section in the config. Use a comma-seperated list for multiple ItemTypes.
+To exclude Itemtypes from being mapped, add them to the Exclusions section in the config as a comma-separated list. Matching is case-sensitive — the case of the item type names is considered when comparing entries.
 
 <img width="748" alt="filters" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/c61daa1b-83aa-467b-a258-8b648a6f575e">
 
 The itemtype name can be found in the "mapped items" table.
 
 ### Room Filter
-The roomfilter List can fuction as a filter for certain rooms. Use a comma-seperated list for multiple Rooms. Depending on the roomfilter Type, this serves as an inclusion, or exclusion list.
+The roomfilter List can fuction as a filter for certain rooms. Add room names in lowercase (matching is performed against lowercase names). Use a comma-seperated list for multiple rooms. Depending on the roomfilter Type, this serves as an inclusion, or exclusion list.
 
 ## Manual mapping
 Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all Brightness sensors the convention "MH0'XX'" in Loxone Config 

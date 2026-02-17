@@ -65,6 +65,7 @@ import { RecordingDelegate } from './RecordingDelegate';
 
   type ActiveSession = {
       mainProcess?: FfmpegStreamingProcess;
+      homekitAudioProcess?: FfmpegStreamingProcess;
       returnProcess?: ReturnAudioTranscoder;
       timeout?: NodeJS.Timeout;
       socket?: Socket;
@@ -270,6 +271,14 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       } catch (error) {
         this.platform.log.error(
           `[${this.cameraName}] Error occurred terminating main FFmpeg process: ${error}`,
+        );
+      }
+
+      try {
+        session.homekitAudioProcess?.stop();
+      } catch (error) {
+        this.platform.log.error(
+          `[${this.cameraName}] Error occurred terminating HomeKit audio process: ${error}`,
         );
       }
 
@@ -786,7 +795,14 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
           signalingBaseUrl,
           username: this.platform.config.username,
           getToken: () => this.platform.LoxoneHandler?.getActiveCommunicationToken(),
+          onIncomingPcm: (chunk: Buffer) => this.feedHomeKitIncomingAudio(activeSession, chunk),
         });
+
+        activeSession.homekitAudioProcess = this.createLoxoneIncomingAudioBridge(
+          request.sessionID,
+          sessionInfo,
+          request,
+        );
 
         activeSession.loxoneTalkback = talkback;
         activeSession.returnAudioStdout = stdout;
@@ -808,10 +824,113 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
         this.detachReturnAudioStdout(activeSession);
         activeSession.loxoneTalkback?.stop();
         activeSession.loxoneTalkback = undefined;
+        activeSession.homekitAudioProcess?.stop();
+        activeSession.homekitAudioProcess = undefined;
         activeSession.returnProcess?.stop();
         activeSession.returnProcess = undefined;
         this.platform.log.error(`[${this.cameraName}] Failed to start Loxone two-way audio: ${message}`);
       });
+  }
+
+  private createLoxoneIncomingAudioBridge(
+    sessionId: string,
+    sessionInfo: SessionInfo,
+    request: StartStreamRequest,
+  ): FfmpegStreamingProcess | undefined {
+    const audioCodec = this.getAudioCodecArgs(request);
+    if (!audioCodec) {
+      this.platform.log.debug(
+        `[${this.cameraName}] Unsupported HomeKit audio codec for inbound bridge: ${request.audio.codec}`,
+      );
+      return undefined;
+    }
+
+    const sampleRateKhz = this.resolveAudioSampleRateKhz(request.audio.sample_rate);
+    const audioBitrate = Math.max(16, Math.round(request.audio.max_bit_rate || 24));
+    const channels = Math.max(1, request.audio.channel || 1);
+
+    const ffmpegArgs = [
+      '-hide_banner',
+      '-f', 's16le',
+      '-acodec', 'pcm_s16le',
+      '-ac', '1',
+      '-ar', '48000',
+      '-i', 'pipe:0',
+      '-vn',
+      '-sn',
+      '-dn',
+      ...audioCodec,
+      '-ar', `${sampleRateKhz}k`,
+      '-ac', `${channels}`,
+      '-b:a', `${audioBitrate}k`,
+      '-payload_type', `${request.audio.pt}`,
+      '-ssrc', `${sessionInfo.audioSSRC}`,
+      '-f', 'rtp',
+      '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
+      '-srtp_out_params', sessionInfo.audioSRTP.toString('base64'),
+      `srtp://${sessionInfo.address}:${sessionInfo.audioPort}?rtcpport=${sessionInfo.audioPort}&pkt_size=188`,
+      '-progress', 'pipe:1',
+    ];
+
+    this.platform.log.info(`[${this.cameraName}] Starting Loxone inbound audio bridge to HomeKit.`);
+
+    return new FfmpegStreamingProcess(
+      `${this.cameraName}-audio`,
+      sessionId,
+      defaultFfmpegPath,
+      ffmpegArgs,
+      this.platform.log,
+      true,
+      this,
+      undefined,
+      false,
+    );
+  }
+
+  private getAudioCodecArgs(request: StartStreamRequest): string[] | undefined {
+    switch (request.audio.codec) {
+      case AudioStreamingCodecType.OPUS:
+        return [
+          '-codec:a', 'libopus',
+          '-application', 'lowdelay',
+          '-frame_duration', '20',
+          '-flags', '+global_header',
+        ];
+      case AudioStreamingCodecType.AAC_ELD:
+        return [
+          '-codec:a', 'libfdk_aac',
+          '-profile:a', 'aac_eld',
+          '-flags', '+global_header',
+        ];
+      default:
+        return undefined;
+    }
+  }
+
+  private resolveAudioSampleRateKhz(value: number): number {
+    switch (value) {
+      case AudioStreamingSamplerate.KHZ_8:
+        return 8;
+      case AudioStreamingSamplerate.KHZ_16:
+        return 16;
+      case AudioStreamingSamplerate.KHZ_24:
+      default:
+        return 24;
+    }
+  }
+
+  private feedHomeKitIncomingAudio(session: ActiveSession, chunk: Buffer): void {
+    const stdin = session.homekitAudioProcess?.getStdin();
+    if (!stdin || stdin.destroyed || !chunk.length) {
+      return;
+    }
+
+    try {
+      stdin.write(chunk);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.platform.log.debug(`[${this.cameraName}] Failed to write inbound PCM to HomeKit bridge: ${message}`);
+    }
   }
 
   private createReturnAudioTranscoder(

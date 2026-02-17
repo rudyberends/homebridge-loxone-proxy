@@ -53,6 +53,7 @@ interface RtcIceCandidateLike {
 }
 
 interface RtcMediaStreamTrackLike {
+  kind?: string;
   stop?: () => void;
 }
 
@@ -67,11 +68,25 @@ interface RtcAudioSourceLike {
   }) => void;
 }
 
+interface RtcAudioSinkData {
+  samples: Int16Array;
+  sampleRate: number;
+  bitsPerSample: number;
+  channelCount: number;
+  numberOfFrames: number;
+}
+
+interface RtcAudioSinkLike {
+  ondata?: (data: RtcAudioSinkData) => void;
+  stop?: () => void;
+}
+
 interface RtcPeerConnectionLike {
   localDescription?: RtcSessionDescriptionInitLike | null;
   connectionState?: string;
   onicecandidate?: ((event: { candidate: RtcIceCandidateLike | null }) => void) | null;
   onconnectionstatechange?: (() => void) | null;
+  ontrack?: ((event: { track?: RtcMediaStreamTrackLike }) => void) | null;
   addTransceiver: (kind: 'audio' | 'video', init?: { direction?: string }) => unknown;
   addTrack: (track: RtcMediaStreamTrackLike) => unknown;
   createOffer: (options?: Record<string, unknown>) => Promise<RtcSessionDescriptionInitLike>;
@@ -87,6 +102,7 @@ interface WrtcModuleLike {
   RTCSessionDescription: new (init: RtcSessionDescriptionInitLike) => RtcSessionDescriptionInitLike;
   nonstandard?: {
     RTCAudioSource: new () => RtcAudioSourceLike;
+    RTCAudioSink?: new (track: RtcMediaStreamTrackLike) => RtcAudioSinkLike;
   };
 }
 
@@ -96,6 +112,7 @@ export interface LoxoneTalkbackOptions {
   signalingBaseUrl: string;
   username: string;
   getToken: () => string | undefined;
+  onIncomingPcm?: (chunk: Buffer) => void;
 }
 
 export class LoxoneTalkbackSession {
@@ -111,6 +128,7 @@ export class LoxoneTalkbackSession {
   private wrtc?: WrtcModuleLike;
   private peerConnection?: RtcPeerConnectionLike;
   private audioSource?: RtcAudioSourceLike;
+  private audioSink?: RtcAudioSinkLike;
   private localTrack?: RtcMediaStreamTrackLike;
 
   private rpcId = 0;
@@ -219,6 +237,12 @@ export class LoxoneTalkbackSession {
 
     this.peerConnection = undefined;
     this.audioSource = undefined;
+    try {
+      this.audioSink?.stop?.();
+    } catch {
+      // Ignore.
+    }
+    this.audioSink = undefined;
     this.localTrack = undefined;
     this.peerReady = false;
     this.localIceQueue = [];
@@ -351,6 +375,35 @@ export class LoxoneTalkbackSession {
           `[${this.options.cameraName}] Loxone WebRTC connection state: ${state}`,
         );
       }
+    };
+    this.peerConnection.ontrack = (event) => {
+      const track = event.track;
+      if (!track || track.kind !== 'audio' || !this.options.onIncomingPcm) {
+        return;
+      }
+
+      const audioSinkCtor = this.wrtc?.nonstandard?.RTCAudioSink;
+      if (!audioSinkCtor) {
+        this.options.platform.log.debug(
+          `[${this.options.cameraName}] wrtc nonstandard.RTCAudioSink is not available.`,
+        );
+        return;
+      }
+
+      try {
+        this.audioSink?.stop?.();
+      } catch {
+        // Ignore.
+      }
+
+      this.audioSink = new audioSinkCtor(track);
+      this.audioSink.ondata = (data: RtcAudioSinkData) => {
+        const mono = this.toMonoPcm(data.samples, data.channelCount);
+        if (!mono.length) {
+          return;
+        }
+        this.options.onIncomingPcm?.(mono);
+      };
     };
     // Loxone answer commonly contains a video m-line before audio. We don't consume video,
     // but adding a recvonly video transceiver aligns offer/answer m-line ordering.
@@ -1156,6 +1209,31 @@ export class LoxoneTalkbackSession {
       return Number.isFinite(parsed) ? parsed : undefined;
     }
     return undefined;
+  }
+
+  private toMonoPcm(samples: Int16Array, channelCount: number): Buffer {
+    if (channelCount <= 1) {
+      return Buffer.from(samples.buffer.slice(
+        samples.byteOffset,
+        samples.byteOffset + samples.byteLength,
+      ));
+    }
+
+    const frameCount = Math.floor(samples.length / channelCount);
+    if (!frameCount) {
+      return Buffer.alloc(0);
+    }
+
+    const mono = new Int16Array(frameCount);
+    for (let frame = 0; frame < frameCount; frame++) {
+      let sum = 0;
+      for (let channel = 0; channel < channelCount; channel++) {
+        sum += samples[frame * channelCount + channel];
+      }
+      mono[frame] = Math.max(-32768, Math.min(32767, Math.round(sum / channelCount)));
+    }
+
+    return Buffer.from(mono.buffer.slice(0));
   }
 
   private hexToBase64Url(hex: string): string {

@@ -57,6 +57,7 @@ export class FfmpegStreamingProcess {
     debug = false,
     delegate: StreamingDelegate,
     callback?: StreamRequestCallback,
+    stopSessionOnExitError = true,
   ) {
     // Debugging log message
     log.debug('Stream command: ' + videoProcessor + ' ' + ffmpegArgs.join(' '), cameraName, debug);
@@ -113,7 +114,9 @@ export class FfmpegStreamingProcess {
       if (callback) {
         callback(new Error('FFmpeg process creation failed'));
       }
-      delegate.stopStream(sessionId);
+      if (stopSessionOnExitError) {
+        delegate.stopStream(sessionId);
+      }
     });
 
     // Listen to the 'exit' event of the child process
@@ -134,11 +137,13 @@ export class FfmpegStreamingProcess {
         }
       } else {
         log.error(message + ' (Error)', cameraName);
-        delegate.stopStream(sessionId);
-        if (!started && callback) {
-          callback(new Error(message));
-        } else {
-          delegate.forceStopStream(sessionId);
+        if (stopSessionOnExitError) {
+          delegate.stopStream(sessionId);
+          if (!started && callback) {
+            callback(new Error(message));
+          } else {
+            delegate.forceStopStream(sessionId);
+          }
         }
       }
     });

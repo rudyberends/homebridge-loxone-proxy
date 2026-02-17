@@ -72,6 +72,7 @@ interface RtcPeerConnectionLike {
   connectionState?: string;
   onicecandidate?: ((event: { candidate: RtcIceCandidateLike | null }) => void) | null;
   onconnectionstatechange?: (() => void) | null;
+  addTransceiver: (kind: 'audio' | 'video', init?: { direction?: string }) => unknown;
   addTrack: (track: RtcMediaStreamTrackLike) => unknown;
   createOffer: (options?: Record<string, unknown>) => Promise<RtcSessionDescriptionInitLike>;
   setLocalDescription: (desc: RtcSessionDescriptionInitLike) => Promise<void>;
@@ -332,7 +333,15 @@ export class LoxoneTalkbackSession {
           this.localIceQueue.push(candidate);
         }
       } else {
-        void this.sendNotification('iceGatheringFinished', null);
+        if (this.stopped || !this.isSocketOpen()) {
+          return;
+        }
+        void this.sendNotification('iceGatheringFinished', null).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.options.platform.log.debug(
+            `[${this.options.cameraName}] Failed to send iceGatheringFinished: ${message}`,
+          );
+        });
       }
     };
     this.peerConnection.onconnectionstatechange = () => {
@@ -343,11 +352,14 @@ export class LoxoneTalkbackSession {
         );
       }
     };
+    // Loxone answer commonly contains a video m-line before audio. We don't consume video,
+    // but adding a recvonly video transceiver aligns offer/answer m-line ordering.
+    this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
     this.peerConnection.addTrack(this.localTrack);
 
     const offer = await this.peerConnection.createOffer({
       offerToReceiveAudio: false,
-      offerToReceiveVideo: false,
+      offerToReceiveVideo: true,
     });
     await this.peerConnection.setLocalDescription(offer);
 
@@ -357,11 +369,40 @@ export class LoxoneTalkbackSession {
     };
 
     const answerRaw = await this.callWithFallbackModes(offerPayload);
-    const answer = this.normalizeSessionDescription(answerRaw);
-    await this.peerConnection.setRemoteDescription(new this.wrtc.RTCSessionDescription(answer));
+    await this.applyRemoteAnswer(answerRaw, offerPayload.sdp);
 
     this.peerReady = true;
     await this.flushQueuedIceCandidates();
+  }
+
+  private async applyRemoteAnswer(answerRaw: unknown, offerSdp: string): Promise<void> {
+    if (!this.wrtc || !this.peerConnection) {
+      throw new Error('Peer connection not initialized');
+    }
+
+    const answer = this.normalizeSessionDescription(answerRaw);
+    try {
+      await this.peerConnection.setRemoteDescription(new this.wrtc.RTCSessionDescription(answer));
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.toLowerCase().includes('order of m-lines')) {
+        throw error;
+      }
+
+      const reorderedSdp = this.reorderAnswerMlines(offerSdp, answer.sdp ?? '');
+      if (!reorderedSdp) {
+        throw error;
+      }
+
+      this.options.platform.log.debug(
+        `[${this.options.cameraName}] Retrying remote SDP with reordered m-line sections.`,
+      );
+
+      await this.peerConnection.setRemoteDescription(
+        new this.wrtc.RTCSessionDescription({ ...answer, sdp: reorderedSdp }),
+      );
+    }
   }
 
   private async callWithFallbackModes(
@@ -788,6 +829,10 @@ export class LoxoneTalkbackSession {
     this.socket.send(JSON.stringify(payload));
   }
 
+  private isSocketOpen(): boolean {
+    return !!this.socket && this.socket.readyState === WebSocket.OPEN;
+  }
+
   private rejectAllPendingRpc(error: Error): void {
     for (const [, pending] of this.pendingRpc) {
       clearTimeout(pending.timeout);
@@ -838,6 +883,79 @@ export class LoxoneTalkbackSession {
 
     const sdp = this.stringValue(objectValue.sdp) ?? '';
     return { type, sdp };
+  }
+
+  private reorderAnswerMlines(offerSdp: string, answerSdp: string): string | undefined {
+    const offerParts = this.splitSdpSections(offerSdp);
+    const answerParts = this.splitSdpSections(answerSdp);
+    if (!offerParts || !answerParts) {
+      return undefined;
+    }
+
+    const { session: offerSession, mediaSections: offerSections, lineEnding } = offerParts;
+    const { session: answerSession, mediaSections: answerSections } = answerParts;
+
+    const orderedAnswerSections: string[] = [];
+    const availableByType = new Map<string, string[]>();
+
+    for (const section of answerSections) {
+      const mediaType = this.getSdpMediaType(section);
+      if (!mediaType) {
+        continue;
+      }
+      const bucket = availableByType.get(mediaType) ?? [];
+      bucket.push(section);
+      availableByType.set(mediaType, bucket);
+    }
+
+    for (const offerSection of offerSections) {
+      const mediaType = this.getSdpMediaType(offerSection);
+      if (!mediaType) {
+        return undefined;
+      }
+
+      const bucket = availableByType.get(mediaType);
+      if (!bucket?.length) {
+        return undefined;
+      }
+
+      const nextSection = bucket.shift();
+      if (!nextSection) {
+        return undefined;
+      }
+      orderedAnswerSections.push(nextSection);
+    }
+
+    return `${answerSession}${orderedAnswerSections.join('')}`.replace(/\r?\n/g, lineEnding);
+  }
+
+  private splitSdpSections(
+    sdp: string,
+  ): { session: string; mediaSections: string[]; lineEnding: '\r\n' | '\n' } | undefined {
+    if (!sdp.includes('m=')) {
+      return undefined;
+    }
+
+    const lineEnding: '\r\n' | '\n' = sdp.includes('\r\n') ? '\r\n' : '\n';
+    const normalized = sdp.replace(/\r\n/g, '\n');
+    const chunks = normalized.split('\nm=');
+    if (chunks.length < 2) {
+      return undefined;
+    }
+
+    const session = `${chunks[0]}\n`;
+    const mediaSections = chunks.slice(1).map((chunk) => `m=${chunk}`);
+    return {
+      session,
+      mediaSections: mediaSections.map((section) => section.replace(/\n/g, lineEnding)),
+      lineEnding,
+    };
+  }
+
+  private getSdpMediaType(section: string): string | undefined {
+    const firstLine = section.split(/\r?\n/, 1)[0];
+    const match = /^m=([^\s]+)/.exec(firstLine);
+    return match?.[1];
   }
 
   private rawDataToString(data: RawData): string {

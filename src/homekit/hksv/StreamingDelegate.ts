@@ -608,11 +608,33 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
 
     const mtu = request.video.mtu > 0 ? request.video.mtu : 1316;
     const fps = this.clamp(Math.round(request.video.fps || 25), 2, 30);
-    const targetWidth = this.clamp(Math.round(request.video.width || 1280), 320, 1920);
-    const targetHeight = this.clamp(Math.round(request.video.height || 720), 180, 1080);
-    const videoBitrate = this.clamp(Math.round(request.video.max_bit_rate || 299), 150, 4096);
+    const requestedWidth = Math.round(request.video.width || 1280);
+    const requestedHeight = Math.round(request.video.height || 720);
+    const requestedBitrate = Math.round(request.video.max_bit_rate || 299);
+
+    // HomeKit often requests low preview tiers (e.g. 640x360 @ ~132 kbps).
+    // Enforce a quality floor so doorbell previews stay usable.
+    const minLiveWidth = 960;
+    const minLiveHeight = 540;
+    const minLiveBitrate = 512;
+
+    const targetWidth = this.clamp(Math.max(requestedWidth, minLiveWidth), minLiveWidth, 1920);
+    const targetHeight = this.clamp(Math.max(requestedHeight, minLiveHeight), minLiveHeight, 1080);
+    const videoBitrate = this.clamp(Math.max(requestedBitrate, minLiveBitrate), minLiveBitrate, 4096);
     const payloadType = request.video.pt || 99;
     const keyframeInterval = Math.max(1, fps);
+
+    if (
+      requestedWidth !== targetWidth
+      || requestedHeight !== targetHeight
+      || requestedBitrate !== videoBitrate
+    ) {
+      this.platform.log.info(
+        `[${this.cameraName}] Live stream quality floor applied: `
+        + `${requestedWidth}x${requestedHeight}@${requestedBitrate}kbps -> `
+        + `${targetWidth}x${targetHeight}@${videoBitrate}kbps`,
+      );
+    }
 
     const ffmpegArgs = this.buildAuthArgs();
     ffmpegArgs.push(

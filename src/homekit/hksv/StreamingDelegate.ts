@@ -798,18 +798,19 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
           onIncomingPcm: (chunk: Buffer) => this.feedHomeKitIncomingAudio(activeSession, chunk),
         });
 
-        activeSession.homekitAudioProcess = this.createLoxoneIncomingAudioBridge(
-          request.sessionID,
-          sessionInfo,
-          request,
-        );
-
         activeSession.loxoneTalkback = talkback;
         activeSession.returnAudioStdout = stdout;
         activeSession.returnAudioStdoutHandler = (chunk: Buffer) => talkback.pushPcmChunk(chunk);
         stdout.on('data', activeSession.returnAudioStdoutHandler);
 
         await talkback.start();
+
+        activeSession.homekitAudioProcess = this.createLoxoneIncomingAudioBridge(
+          request.sessionID,
+          sessionInfo,
+          request,
+        );
+
         this.platform.log.info(`[${this.cameraName}] Two-way audio started (Loxone WebRTC talkback).`);
       })
       .catch((error: unknown) => {

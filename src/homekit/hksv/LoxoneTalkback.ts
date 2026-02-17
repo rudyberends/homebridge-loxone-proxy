@@ -390,18 +390,33 @@ export class LoxoneTalkbackSession {
         throw error;
       }
 
-      const reorderedSdp = this.reorderAnswerMlines(offerSdp, answer.sdp ?? '');
-      if (!reorderedSdp) {
-        throw error;
+      const offerSummary = this.describeSdpMlineOrder(offerSdp);
+      const answerSummary = this.describeSdpMlineOrder(answer.sdp ?? '');
+      this.options.platform.log.debug(
+        `[${this.options.cameraName}] Remote SDP m-line mismatch. `
+        + `offer=${offerSummary}; answer=${answerSummary}`,
+      );
+
+      const candidates = this.buildReorderedAnswerCandidates(offerSdp, answer.sdp ?? '');
+      for (const candidate of candidates) {
+        try {
+          this.options.platform.log.debug(
+            `[${this.options.cameraName}] Retrying remote SDP with candidate order: `
+            + `${this.describeSdpMlineOrder(candidate)}`,
+          );
+          await this.peerConnection.setRemoteDescription(
+            new this.wrtc.RTCSessionDescription({ ...answer, sdp: candidate }),
+          );
+          return;
+        } catch (candidateError) {
+          const candidateMessage = candidateError instanceof Error ? candidateError.message : String(candidateError);
+          this.options.platform.log.debug(
+            `[${this.options.cameraName}] Reordered SDP candidate rejected: ${candidateMessage}`,
+          );
+        }
       }
 
-      this.options.platform.log.debug(
-        `[${this.options.cameraName}] Retrying remote SDP with reordered m-line sections.`,
-      );
-
-      await this.peerConnection.setRemoteDescription(
-        new this.wrtc.RTCSessionDescription({ ...answer, sdp: reorderedSdp }),
-      );
+      throw error;
     }
   }
 
@@ -885,48 +900,38 @@ export class LoxoneTalkbackSession {
     return { type, sdp };
   }
 
-  private reorderAnswerMlines(offerSdp: string, answerSdp: string): string | undefined {
+  private buildReorderedAnswerCandidates(offerSdp: string, answerSdp: string): string[] {
     const offerParts = this.splitSdpSections(offerSdp);
     const answerParts = this.splitSdpSections(answerSdp);
     if (!offerParts || !answerParts) {
-      return undefined;
+      return [];
     }
 
-    const { session: offerSession, mediaSections: offerSections, lineEnding } = offerParts;
-    const { session: answerSession, mediaSections: answerSections } = answerParts;
+    const { mediaSections: offerSections } = offerParts;
+    const { mediaSections: answerSections } = answerParts;
 
-    const orderedAnswerSections: string[] = [];
-    const availableByType = new Map<string, string[]>();
-
-    for (const section of answerSections) {
-      const mediaType = this.getSdpMediaType(section);
-      if (!mediaType) {
-        continue;
-      }
-      const bucket = availableByType.get(mediaType) ?? [];
-      bucket.push(section);
-      availableByType.set(mediaType, bucket);
+    if (offerSections.length !== answerSections.length) {
+      return [];
     }
 
-    for (const offerSection of offerSections) {
-      const mediaType = this.getSdpMediaType(offerSection);
-      if (!mediaType) {
-        return undefined;
-      }
+    const candidates: string[] = [];
 
-      const bucket = availableByType.get(mediaType);
-      if (!bucket?.length) {
-        return undefined;
-      }
-
-      const nextSection = bucket.shift();
-      if (!nextSection) {
-        return undefined;
-      }
-      orderedAnswerSections.push(nextSection);
+    const byMid = this.reorderSectionsByMid(offerSections, answerSections);
+    if (byMid) {
+      candidates.push(this.composeSdpWithOrderedSections(answerParts, byMid));
     }
 
-    return `${answerSession}${orderedAnswerSections.join('')}`.replace(/\r?\n/g, lineEnding);
+    const byType = this.reorderSectionsByType(offerSections, answerSections);
+    if (byType) {
+      candidates.push(this.composeSdpWithOrderedSections(answerParts, byType));
+    }
+
+    const permutations = this.permuteSections(answerSections);
+    for (const permutation of permutations) {
+      candidates.push(this.composeSdpWithOrderedSections(answerParts, permutation));
+    }
+
+    return [...new Set(candidates)];
   }
 
   private splitSdpSections(
@@ -956,6 +961,144 @@ export class LoxoneTalkbackSession {
     const firstLine = section.split(/\r?\n/, 1)[0];
     const match = /^m=([^\s]+)/.exec(firstLine);
     return match?.[1];
+  }
+
+  private getSdpMid(section: string): string | undefined {
+    const match = section.match(/^a=mid:([^\r\n]+)/m);
+    return match?.[1];
+  }
+
+  private reorderSectionsByMid(offerSections: string[], answerSections: string[]): string[] | undefined {
+    const answerByMid = new Map<string, string>();
+    for (const section of answerSections) {
+      const mid = this.getSdpMid(section);
+      if (mid) {
+        answerByMid.set(mid, section);
+      }
+    }
+
+    const ordered: string[] = [];
+    for (const offerSection of offerSections) {
+      const offerMid = this.getSdpMid(offerSection);
+      if (!offerMid) {
+        return undefined;
+      }
+
+      const section = answerByMid.get(offerMid);
+      if (!section) {
+        return undefined;
+      }
+      ordered.push(section);
+    }
+
+    return ordered;
+  }
+
+  private reorderSectionsByType(offerSections: string[], answerSections: string[]): string[] | undefined {
+    const availableByType = new Map<string, string[]>();
+
+    for (const section of answerSections) {
+      const mediaType = this.getSdpMediaType(section);
+      if (!mediaType) {
+        continue;
+      }
+      const bucket = availableByType.get(mediaType) ?? [];
+      bucket.push(section);
+      availableByType.set(mediaType, bucket);
+    }
+
+    const ordered: string[] = [];
+    for (const offerSection of offerSections) {
+      const mediaType = this.getSdpMediaType(offerSection);
+      if (!mediaType) {
+        return undefined;
+      }
+
+      const bucket = availableByType.get(mediaType);
+      const nextSection = bucket?.shift();
+      if (!nextSection) {
+        return undefined;
+      }
+      ordered.push(nextSection);
+    }
+
+    return ordered;
+  }
+
+  private composeSdpWithOrderedSections(
+    parts: { session: string; mediaSections: string[]; lineEnding: '\r\n' | '\n' },
+    orderedSections: string[],
+  ): string {
+    const withBundle = this.rewriteBundleLine(parts.session, orderedSections, parts.lineEnding);
+    return `${withBundle}${orderedSections.join('')}`;
+  }
+
+  private rewriteBundleLine(
+    session: string,
+    orderedSections: string[],
+    lineEnding: '\r\n' | '\n',
+  ): string {
+    const mids = orderedSections
+      .map((section) => this.getSdpMid(section))
+      .filter((value): value is string => !!value);
+    if (!mids.length) {
+      return session;
+    }
+
+    const normalized = session.replace(/\r\n/g, '\n');
+    const replaced = normalized.replace(/^a=group:BUNDLE[^\n]*$/m, `a=group:BUNDLE ${mids.join(' ')}`);
+    return replaced.replace(/\n/g, lineEnding);
+  }
+
+  private permuteSections(sections: string[]): string[][] {
+    if (sections.length <= 1) {
+      return [sections.slice()];
+    }
+
+    // Avoid combinatorial explosion; typical SDP media sections are <= 3.
+    if (sections.length > 4) {
+      return [];
+    }
+
+    const results: string[][] = [];
+    const used = new Array<boolean>(sections.length).fill(false);
+    const current: string[] = [];
+
+    const dfs = (): void => {
+      if (current.length === sections.length) {
+        results.push(current.slice());
+        return;
+      }
+
+      for (let i = 0; i < sections.length; i++) {
+        if (used[i]) {
+          continue;
+        }
+        used[i] = true;
+        current.push(sections[i]);
+        dfs();
+        current.pop();
+        used[i] = false;
+      }
+    };
+
+    dfs();
+    return results;
+  }
+
+  private describeSdpMlineOrder(sdp: string): string {
+    const parts = this.splitSdpSections(sdp);
+    if (!parts) {
+      return 'none';
+    }
+
+    return parts.mediaSections
+      .map((section) => {
+        const type = this.getSdpMediaType(section) ?? '?';
+        const mid = this.getSdpMid(section) ?? '?';
+        return `${type}:${mid}`;
+      })
+      .join(',');
   }
 
   private rawDataToString(data: RawData): string {

@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rudyberends/homebridge-loxone-proxy.git"
+    "url": "git+https://github.com/rudyberends/homebridge-loxone-proxy.git"
   },
   "bugs": {
     "url": "https://github.com/rudyberends/homebridge-loxone-proxy/issues"

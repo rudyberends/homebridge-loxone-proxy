@@ -405,14 +405,14 @@ export class LoxoneTalkbackSession {
         this.options.onIncomingPcm?.(mono);
       };
     };
-    // Loxone answer commonly contains a video m-line before audio. We don't consume video,
-    // but adding a recvonly video transceiver aligns offer/answer m-line ordering.
-    this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
+    // Loxone answer commonly contains a video m-line before audio. Keep a video m-line
+    // for SDP compatibility, but mark it inactive so we don't request an extra live video stream.
+    this.peerConnection.addTransceiver('video', { direction: 'inactive' });
     this.peerConnection.addTrack(this.localTrack);
 
     const offer = await this.peerConnection.createOffer({
       offerToReceiveAudio: false,
-      offerToReceiveVideo: true,
+      offerToReceiveVideo: false,
     });
     await this.peerConnection.setLocalDescription(offer);
 

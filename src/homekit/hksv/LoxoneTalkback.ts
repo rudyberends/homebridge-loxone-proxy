@@ -551,6 +551,11 @@ export class LoxoneTalkbackSession {
       throw new Error('No active Loxone communication token available');
     }
 
+    this.options.platform.log.debug(
+      `[${this.options.cameraName}] Loxone auth challenge: modulus=${modulus?.length ?? 0}, `
+      + `exponent=${exponent?.length ?? 0}, fullPublicKey=${fullPublicKey ? 'yes' : 'no'}`,
+    );
+
     const aesKey = randomBytes(32);
     const iv = randomBytes(16);
     const cipher = createCipheriv('aes-256-cbc', aesKey, iv);
@@ -560,14 +565,30 @@ export class LoxoneTalkbackSession {
     ]).toString('base64');
 
     const rsaPayload = `${aesKey.toString('hex')}:${iv.toString('hex')}:${sessionToken}`;
-    const publicKey = this.createRsaPublicKey(modulus, exponent, fullPublicKey);
-    const rsaEncrypted = publicEncrypt(
-      {
-        key: publicKey,
-        padding: constants.RSA_PKCS1_PADDING,
-      },
-      Buffer.from(rsaPayload, 'utf8'),
-    ).toString('base64');
+    let publicKey: KeyObject;
+    try {
+      publicKey = this.createRsaPublicKey(modulus, exponent, fullPublicKey);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to parse RSA key (modulusLen=${modulus?.length ?? 0}, `
+        + `exponentLen=${exponent?.length ?? 0}, fullKeyLen=${fullPublicKey?.length ?? 0}): ${message}`,
+      );
+    }
+
+    let rsaEncrypted: string;
+    try {
+      rsaEncrypted = publicEncrypt(
+        {
+          key: publicKey,
+          padding: constants.RSA_PKCS1_PADDING,
+        },
+        Buffer.from(rsaPayload, 'utf8'),
+      ).toString('base64');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`RSA encryption failed: ${message}`);
+    }
 
     return [this.options.username, rsaEncrypted, encryptedToken];
   }
@@ -577,24 +598,88 @@ export class LoxoneTalkbackSession {
     exponent?: string,
     fullPublicKey?: string,
   ): KeyObject {
-    if (fullPublicKey) {
-      return createPublicKey(fullPublicKey);
+    const errors: string[] = [];
+
+    if (modulus && exponent) {
+      try {
+        return this.createRsaPublicKeyFromComponents(modulus, exponent);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`components: ${message}`);
+      }
     }
 
-    if (!modulus || !exponent) {
+    if (fullPublicKey) {
+      try {
+        return this.createRsaPublicKeyFromText(fullPublicKey);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`fullPublicKey: ${message}`);
+      }
+    }
+
+    if (!modulus && !fullPublicKey) {
       throw new Error('Missing RSA key parameters from signaling challenge');
     }
 
+    throw new Error(`Unable to parse RSA public key (${errors.join(' | ') || 'unknown format'})`);
+  }
+
+  private createRsaPublicKeyFromComponents(modulus: string, exponent: string): KeyObject {
     const jwk = {
       kty: 'RSA',
-      n: this.hexToBase64Url(modulus),
-      e: this.hexToBase64Url(exponent),
+      n: this.bigIntValueToBase64Url(modulus),
+      e: this.bigIntValueToBase64Url(exponent),
     };
 
     return createPublicKey({
       key: jwk,
       format: 'jwk',
     });
+  }
+
+  private createRsaPublicKeyFromText(fullPublicKey: string): KeyObject {
+    const trimmed = fullPublicKey.trim();
+    if (!trimmed) {
+      throw new Error('empty public key');
+    }
+
+    if (
+      trimmed.includes('-----BEGIN PUBLIC KEY-----')
+      || trimmed.includes('-----BEGIN RSA PUBLIC KEY-----')
+    ) {
+      return createPublicKey(trimmed);
+    }
+
+    if (trimmed.startsWith('{')) {
+      try {
+        return createPublicKey({
+          key: JSON.parse(trimmed) as Record<string, unknown>,
+          format: 'jwk',
+        });
+      } catch {
+        // Continue with binary decoding fallbacks.
+      }
+    }
+
+    const candidates = this.decodeBinaryKeyCandidates(trimmed);
+    let lastError: string | undefined;
+
+    for (const candidate of candidates) {
+      try {
+        return createPublicKey({ key: candidate, format: 'der', type: 'spki' });
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+
+      try {
+        return createPublicKey({ key: candidate, format: 'der', type: 'pkcs1' });
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    throw new Error(lastError ?? 'unsupported key encoding');
   }
 
   private async callRpc(method: string, params?: unknown[] | null): Promise<unknown> {
@@ -761,7 +846,80 @@ export class LoxoneTalkbackSession {
 
   private hexToBase64Url(hex: string): string {
     const normalized = hex.length % 2 === 0 ? hex : `0${hex}`;
-    return Buffer.from(normalized, 'hex')
+    return this.bufferToBase64Url(Buffer.from(normalized, 'hex'));
+  }
+
+  private bigIntValueToBase64Url(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new Error('empty RSA component');
+    }
+
+    if (/^[0-9]+$/.test(trimmed)) {
+      return this.bufferToBase64Url(this.bigIntToBuffer(BigInt(trimmed)));
+    }
+
+    if (/^[a-fA-F0-9]+$/.test(trimmed)) {
+      return this.hexToBase64Url(trimmed);
+    }
+
+    return this.bufferToBase64Url(this.decodeBase64Like(trimmed));
+  }
+
+  private decodeBinaryKeyCandidates(value: string): Buffer[] {
+    const normalized = value.replace(/\s+/g, '');
+    const candidates: Buffer[] = [];
+
+    if (/^[a-fA-F0-9]+$/.test(normalized)) {
+      const hex = normalized.length % 2 === 0 ? normalized : `0${normalized}`;
+      candidates.push(Buffer.from(hex, 'hex'));
+    }
+
+    try {
+      candidates.push(this.decodeBase64Like(normalized));
+    } catch {
+      // Ignore invalid base64 forms.
+    }
+
+    const unique = new Map<string, Buffer>();
+    for (const candidate of candidates) {
+      if (candidate.length > 0) {
+        unique.set(candidate.toString('hex'), candidate);
+      }
+    }
+
+    return [...unique.values()];
+  }
+
+  private decodeBase64Like(value: string): Buffer {
+    const normalized = value.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    const padding = (4 - (normalized.length % 4)) % 4;
+    const padded = `${normalized}${'='.repeat(padding)}`;
+    const decoded = Buffer.from(padded, 'base64');
+
+    if (decoded.length === 0) {
+      throw new Error('invalid base64 payload');
+    }
+
+    return decoded;
+  }
+
+  private bigIntToBuffer(value: bigint): Buffer {
+    if (value < BigInt(0)) {
+      throw new Error('negative RSA component');
+    }
+    const hex = value.toString(16);
+    return Buffer.from(hex.length % 2 === 0 ? hex : `0${hex}`, 'hex');
+  }
+
+  private bufferToBase64Url(buffer: Buffer): string {
+    let startIndex = 0;
+    while (startIndex < buffer.length - 1 && buffer[startIndex] === 0) {
+      startIndex++;
+    }
+
+    return buffer
+      .subarray(startIndex)
       .toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_')

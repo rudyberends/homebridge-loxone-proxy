@@ -1,5 +1,6 @@
 import { LoxonePlatform } from '../../LoxonePlatform';
-import { get } from 'http';
+import { get as httpGet } from 'http';
+import { get as httpsGet } from 'https';
 import {
   APIEvent,
   AudioStreamingCodecType,
@@ -30,11 +31,16 @@ import {
 import {
   defaultFfmpegPath,
   reservePorts,
+  ReturnAudioTranscoder,
+  RtpSplitter,
 } from '@homebridge/camera-utils';
 
-import { spawn } from 'child_process';
+import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
+import { Readable } from 'stream';
+import type { TwoWayAudioContext } from '../services/Camera';
 import { FfmpegStreamingProcess, StreamingDelegate as FfmpegStreamingDelegate } from './FfmpegStreamingProcess';
+import { LoxoneTalkbackSession } from './LoxoneTalkback';
 import { RecordingDelegate } from './RecordingDelegate';
 
   interface SessionInfo {
@@ -51,23 +57,35 @@ import { RecordingDelegate } from './RecordingDelegate';
       audioIncomingPort: number;
       audioCryptoSuite: SRTPCryptoSuites;
       audioSRTP: Buffer;
+      audioSRTPKey: Buffer;
+      audioSRTPSalt: Buffer;
       audioSSRC: number;
+      returnAudioSplitter?: RtpSplitter;
   }
 
   type ActiveSession = {
       mainProcess?: FfmpegStreamingProcess;
-      returnProcess?: FfmpegStreamingProcess;
+      returnProcess?: ReturnAudioTranscoder;
       timeout?: NodeJS.Timeout;
       socket?: Socket;
+      loxoneTalkback?: LoxoneTalkbackSession;
+      returnAudioStdout?: Readable;
+      returnAudioStdoutHandler?: (chunk: Buffer) => void;
   };
+
+type TwoWayAudioMode = 'disabled' | 'custom-args' | 'loxone-intercom-v2';
 
 export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreamingDelegate {
   public readonly controller: CameraController;
   public readonly recordingDelegate: CameraRecordingDelegate | undefined;
-  private readonly streamUrl;
-  private readonly ip;
-  private readonly base64auth;
+  private readonly streamUrl: string;
+  private readonly base64auth: string;
   private readonly cameraName: string;
+  private readonly twoWayAudioEnabled: boolean;
+  private readonly twoWayAudioMode: TwoWayAudioMode;
+  private readonly twoWayAudioOutputArgs?: string;
+  private readonly twoWayAudioTemplateVars?: Record<string, string>;
+  private readonly twoWayAudioContext?: TwoWayAudioContext;
 
   private pendingSessions: { [index: string]: SessionInfo } = {};
   private ongoingSessions: { [index: string]: ActiveSession } = {};
@@ -87,6 +105,8 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       base64auth: string,
       cameraName: string,
       snapshotUrl?: string,
+      twoWayAudioTemplateVars?: Record<string, string>,
+      twoWayAudioContext?: TwoWayAudioContext,
   ) {
     //this.camera = camera;
     this.hap = this.platform.api.hap;
@@ -94,12 +114,30 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     this.base64auth = base64auth;
     this.cameraName = cameraName;
     this.snapshotUrl = snapshotUrl;
+    this.twoWayAudioTemplateVars = twoWayAudioTemplateVars;
+    this.twoWayAudioContext = twoWayAudioContext;
+    this.twoWayAudioOutputArgs = this.platform.config?.Advanced?.TwoWayAudioOutputArgs;
+    const isTwoWayEnabledInConfig = this.platform.config?.Advanced?.EnableTwoWayAudio ?? false;
+    const useLoxoneAutoMode = isTwoWayEnabledInConfig && this.twoWayAudioContext?.mode === 'loxone-intercom-v2';
+    const useCustomArgsMode = isTwoWayEnabledInConfig && !!this.twoWayAudioOutputArgs;
 
-    // Extract the IP address using a regular expression
-    const ipAddressRegex = /http:\/\/([\d.]+)/;
-    const match = streamUrl.match(ipAddressRegex);
-    if (match && match[1]) {
-      this.ip = match[1];
+    if (useLoxoneAutoMode) {
+      this.twoWayAudioMode = 'loxone-intercom-v2';
+      this.twoWayAudioEnabled = true;
+      this.platform.log.info(`[${this.cameraName}] Two-way audio enabled (automatic Loxone mode).`);
+    } else if (useCustomArgsMode) {
+      this.twoWayAudioMode = 'custom-args';
+      this.twoWayAudioEnabled = true;
+      this.platform.log.info(`[${this.cameraName}] Two-way audio enabled (custom FFmpeg output args).`);
+    } else {
+      this.twoWayAudioMode = 'disabled';
+      this.twoWayAudioEnabled = false;
+      if (isTwoWayEnabledInConfig) {
+        this.platform.log.warn(
+          `[${this.cameraName}] Two-way audio requested, but no compatible mode is available. ` +
+          'For non-Loxone cameras set Advanced.TwoWayAudioOutputArgs.',
+        );
+      }
     }
 
     const enableHKSV = this.platform.config.enableHKSV ?? false;
@@ -116,6 +154,9 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     platform.api.on(APIEvent.SHUTDOWN, () => {
       this.isShuttingDown = true;
       this.platform.log.debug(`[${this.cameraName}] Streaming delegate is shutting down`);
+      Object.keys(this.ongoingSessions).forEach((sessionId) => this.stopStream(sessionId));
+      Object.values(this.pendingSessions).forEach((session) => session.returnAudioSplitter?.close());
+      this.pendingSessions = {};
     });
 
 
@@ -141,11 +182,15 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
         resolutions: resolutions,
       },
       audio: {
-        twoWayAudio: false,
+        twoWayAudio: this.twoWayAudioEnabled,
         codecs: [
           {
             type: AudioStreamingCodecType.AAC_ELD,
             samplerate: AudioStreamingSamplerate.KHZ_16,
+          },
+          {
+            type: AudioStreamingCodecType.OPUS,
+            samplerate: AudioStreamingSamplerate.KHZ_24,
           },
         ],
       },
@@ -228,18 +273,36 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
         );
       }
 
+      this.detachReturnAudioStdout(session);
+
+      try {
+        session.loxoneTalkback?.stop();
+      } catch (error) {
+        this.platform.log.error(
+          `[${this.cameraName}] Error occurred terminating Loxone talkback session: ${error}`,
+        );
+      }
+
       try {
         session.returnProcess?.stop();
       } catch (error) {
         this.platform.log.error(
-          `[${this.cameraName}] Error occurred terminating two-way FFmpeg process: ${error}`,
+          `[${this.cameraName}] Error occurred terminating two-way audio process: ${error}`,
         );
       }
 
       delete this.ongoingSessions[sessionId];
+      delete this.pendingSessions[sessionId];
 
       this.platform.log.info(`[${this.cameraName}] Stopped video stream.`);
+      return;
     }
+
+    const pendingSession = this.pendingSessions[sessionId];
+    if (pendingSession?.returnAudioSplitter) {
+      pendingSession.returnAudioSplitter.close();
+    }
+    delete this.pendingSessions[sessionId];
   }
 
   forceStopStream(sessionId: string) {
@@ -247,10 +310,10 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   }
 
   /** Public snapshot method with internal caching */
-  public async getSnapshot(): Promise<Buffer | null> {
+  public async getSnapshot(useCache = true): Promise<Buffer | null> {
     const now = Date.now();
 
-    if (this.cachedSnapshot && now - this.cachedAt < this.cacheTtlMs) {
+    if (useCache && this.cachedSnapshot && now - this.cachedAt < this.cacheTtlMs) {
       this.platform.log.debug(`[${this.cameraName}] Snapshot cache hit`);
       return this.cachedSnapshot;
     }
@@ -273,16 +336,21 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
    * Get snapshot via direct HTTP request (faster than FFmpeg)
    */
   private async getSnapshotViaHTTP(): Promise<Buffer | null> {
-    if (!this.snapshotUrl) {
+    const snapshotUrl = this.snapshotUrl;
+    if (!snapshotUrl) {
       return null;
     }
 
     return new Promise((resolve) => {
-      const request = get(this.snapshotUrl!, {
-        timeout: 500, // 500ms timeout for very fast response
-        headers: {
-          'Authorization': `Basic ${this.base64auth}`,
-        },
+      const requestHeaders: Record<string, string> = {};
+      if (this.base64auth) {
+        requestHeaders.Authorization = `Basic ${this.base64auth}`;
+      }
+
+      const requestFn = snapshotUrl.startsWith('https://') ? httpsGet : httpGet;
+      const request = requestFn(snapshotUrl, {
+        timeout: 2000,
+        headers: requestHeaders,
       }, (response) => {
         if (response.statusCode !== 200) {
           this.platform.log.debug(`[${this.cameraName}] Snapshot HTTP request failed with status ${response.statusCode}`);
@@ -356,7 +424,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       }
 
       // Fallback to FFmpeg if HTTP failed or snapshotUrl not available
-      snapshot = await this.fetchSnapshot();
+      snapshot = await this.fetchSnapshot(request.width, request.height);
       // Update cache for next request
       this.cachedSnapshot = snapshot;
       this.cachedAt = Date.now();
@@ -368,19 +436,30 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     }
   }
 
-  private fetchSnapshot(): Promise<Buffer> {
+  private fetchSnapshot(width: number, height: number): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', [
-        '-re',
-        '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+      const ffmpegArgs = [
+        '-hide_banner',
+        '-loglevel', 'error',
+      ];
+
+      if (this.base64auth) {
+        ffmpegArgs.push('-headers', `Authorization: Basic ${this.base64auth}\r\n`);
+      }
+
+      ffmpegArgs.push(
         '-i', `${this.streamUrl}`,
         '-frames:v', '1',
-        '-update', '1',
-        '-loglevel', 'error',
+        '-an',
+        '-sn',
+        '-dn',
+        '-vf', this.buildSnapshotFilter(width, height),
         '-f', 'image2',
         '-vcodec', 'mjpeg',
         '-',
-      ], { env: process.env });
+      );
+
+      const ffmpeg = spawn(defaultFfmpegPath, ffmpegArgs, { env: process.env });
 
       let snapshotBuffer = Buffer.alloc(0);
 
@@ -424,10 +503,16 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     });
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
 
-    const audioIncomingPort = await reservePorts({
+    let audioIncomingPort = await reservePorts({
       count: 1,
     });
     const audioSSRC = this.hap.CameraController.generateSynchronisationSource();
+
+    let returnAudioSplitter: RtpSplitter | undefined;
+    if (this.twoWayAudioEnabled) {
+      returnAudioSplitter = new RtpSplitter();
+      audioIncomingPort = [await returnAudioSplitter.portPromise];
+    }
 
     const sessionInfo: SessionInfo = {
       address: request.targetAddress,
@@ -436,8 +521,11 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       audioCryptoSuite: request.audio.srtpCryptoSuite,
       audioPort: request.audio.port,
       audioSRTP: Buffer.concat([request.audio.srtp_key, request.audio.srtp_salt]),
+      audioSRTPKey: request.audio.srtp_key,
+      audioSRTPSalt: request.audio.srtp_salt,
       audioSSRC: audioSSRC,
       audioIncomingPort: audioIncomingPort[0],
+      returnAudioSplitter,
 
       videoCryptoSuite: request.video.srtpCryptoSuite,
       videoPort: request.video.port,
@@ -506,81 +594,54 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     if (!sessionInfo) {
       this.platform.log.error(`[${this.cameraName}] Error finding session information.`);
       callback(new Error('Error finding session information'));
+      return;
     }
 
-    //const vcodec = 'libx264';
-    const mtu = 1316; // request.video.mtu is not used
+    const mtu = request.video.mtu > 0 ? request.video.mtu : 1316;
+    const fps = this.clamp(Math.round(request.video.fps || 25), 2, 30);
+    const targetWidth = this.clamp(Math.round(request.video.width || 1280), 320, 1920);
+    const targetHeight = this.clamp(Math.round(request.video.height || 720), 180, 1080);
+    const videoBitrate = this.clamp(Math.round(request.video.max_bit_rate || 299), 150, 4096);
+    const payloadType = request.video.pt || 99;
+    const keyframeInterval = Math.max(1, fps);
 
-    //const fps = request.video.fps;
-    //const videoBitrate = request.video.max_bit_rate;
-
-    const ffmpegArgs = [
-      '-headers', `Authorization: Basic ${this.base64auth}\r\n`,
+    const ffmpegArgs = this.buildAuthArgs();
+    ffmpegArgs.push(
+      '-hide_banner',
       '-use_wallclock_as_timestamps', '1',
       '-probesize', '32',
       '-analyzeduration', '0',
-      '-fflags', 'nobuffer+igndts',
+      '-fflags', '+genpts+nobuffer+igndts',
       '-flags', 'low_delay',
       '-max_delay', '0',
-      '-re',
       '-i', `${this.streamUrl}`,
       '-an',
       '-sn',
       '-dn',
       '-codec:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-color_range', 'mpeg',
-      '-f', 'rawvideo',
       '-preset', 'veryfast',
       '-tune', 'zerolatency',
+      '-pix_fmt', 'yuv420p',
+      '-color_range', 'mpeg',
       '-crf', '22',
+      '-r', `${fps}`,
+      '-g', `${keyframeInterval}`,
+      '-keyint_min', `${keyframeInterval}`,
+      '-sc_threshold', '0',
+      '-bf', '0',
       // eslint-disable-next-line max-len
-      '-filter:v', 'fps=25:round=down,scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-      '-b:v', '299k',
-      '-payload_type', '99',
+      '-filter:v', `fps=${fps}:round=down,scale='min(${targetWidth},iw)':'min(${targetHeight},ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2`,
+      '-b:v', `${videoBitrate}k`,
+      '-maxrate', `${videoBitrate}k`,
+      '-bufsize', `${videoBitrate * 2}k`,
+      '-payload_type', `${payloadType}`,
       '-ssrc', `${sessionInfo.videoSSRC}`,
       '-f', 'rtp',
       '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
       '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
       `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
-    ];
-
-    // Setting up audio
-    /*
-    if (
-      request.audio.codec === AudioStreamingCodecType.OPUS ||
-              request.audio.codec === AudioStreamingCodecType.AAC_ELD
-    ) {
-      ffmpegArgs.push('-vn', '-sn', '-dn');
-
-      if (request.audio.codec === AudioStreamingCodecType.OPUS) {
-        ffmpegArgs.push('-acodec', 'libopus', '-application', 'lowdelay');
-      } else {
-        ffmpegArgs.push('-acodec', 'libfdk_aac', '-profile:a', 'aac_eld');
-      }
-
-      ffmpegArgs.push(
-        '-flags', '+global_header',
-        '-f', 'null',
-        '-ar', `${request.audio.sample_rate}k`,
-        '-b:a', `${request.audio.max_bit_rate}k`,
-        '-ac', `${request.audio.channel}`,
-        '-payload_type', `${request.audio.pt}`,
-        '-ssrc', `${sessionInfo.audioSSRC}`,
-        '-f', 'rtp',
-        '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
-        '-srtp_out_params', sessionInfo.audioSRTP.toString('base64'),
-        `srtp://${sessionInfo.address}:${sessionInfo.audioPort}?rtcpport=${sessionInfo.audioPort}&pkt_size=188`,
-      );
-    } else {
-      this.platform.log.error(
-        `Unsupported audio codec requested: ${request.audio.codec}`,
-        this.ip,
-        'Homebridge',
-      );
-    }*/
-
-    ffmpegArgs.push('-progress', 'pipe:1');
+      '-progress', 'pipe:1',
+    );
 
     const activeSession: ActiveSession = {};
 
@@ -605,7 +666,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     activeSession.socket.bind(sessionInfo.videoIncomingPort);
 
     activeSession.mainProcess = new FfmpegStreamingProcess(
-      this.ip,
+      this.cameraName,
       request.sessionID,
       defaultFfmpegPath,
       ffmpegArgs,
@@ -615,7 +676,257 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       callback,
     );
 
+    if (this.twoWayAudioEnabled) {
+      this.startTwoWayAudio(activeSession, sessionInfo, request);
+    }
+
     this.ongoingSessions[request.sessionID] = activeSession;
     delete this.pendingSessions[request.sessionID];
+  }
+
+  private startTwoWayAudio(
+    activeSession: ActiveSession,
+    sessionInfo: SessionInfo,
+    request: StartStreamRequest,
+  ): void {
+    if (!sessionInfo.returnAudioSplitter) {
+      this.platform.log.warn(`[${this.cameraName}] No RTP splitter available for two-way audio. Skipping talkback setup.`);
+      return;
+    }
+
+    if (this.twoWayAudioMode === 'loxone-intercom-v2') {
+      this.startLoxoneTwoWayAudio(activeSession, sessionInfo, request);
+      return;
+    }
+
+    this.startCustomTwoWayAudio(activeSession, sessionInfo, request);
+  }
+
+  private startCustomTwoWayAudio(
+    activeSession: ActiveSession,
+    sessionInfo: SessionInfo,
+    request: StartStreamRequest,
+  ): void {
+    const outputArgs = this.buildTwoWayAudioOutputArgs();
+    if (!outputArgs.length) {
+      this.platform.log.warn(`[${this.cameraName}] Two-way audio output args are empty. Skipping talkback setup.`);
+      return;
+    }
+
+    try {
+      activeSession.returnProcess = this.createReturnAudioTranscoder(
+        sessionInfo,
+        request,
+        outputArgs,
+      );
+
+      void activeSession.returnProcess.start()
+        .then((splitterPort) => {
+          this.platform.log.info(
+            `[${this.cameraName}] Two-way audio started (RTP splitter on port ${splitterPort}).`,
+          );
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.platform.log.error(`[${this.cameraName}] Failed to start two-way audio: ${message}`);
+        });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.platform.log.error(`[${this.cameraName}] Could not initialize two-way audio: ${message}`);
+    }
+  }
+
+  private startLoxoneTwoWayAudio(
+    activeSession: ActiveSession,
+    sessionInfo: SessionInfo,
+    request: StartStreamRequest,
+  ): void {
+    const signalingBaseUrl = this.resolveLoxoneSignalingBaseUrl();
+    if (!signalingBaseUrl) {
+      this.platform.log.warn(
+        `[${this.cameraName}] Could not resolve Loxone signaling URL. Skipping two-way audio.`,
+      );
+      return;
+    }
+
+    try {
+      const outputArgs = [
+        '-f', 's16le',
+        '-acodec', 'pcm_s16le',
+        '-ac', '1',
+        '-ar', '48000',
+        'pipe:1',
+      ];
+
+      activeSession.returnProcess = this.createReturnAudioTranscoder(
+        sessionInfo,
+        request,
+        outputArgs,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.platform.log.error(`[${this.cameraName}] Could not initialize Loxone return-audio transcoder: ${message}`);
+      return;
+    }
+
+    void activeSession.returnProcess.start()
+      .then(async (splitterPort) => {
+        this.platform.log.info(
+          `[${this.cameraName}] Loxone return-audio transcoder started (RTP splitter on port ${splitterPort}).`,
+        );
+
+        const stdout = this.getReturnAudioStdout(activeSession.returnProcess);
+        if (!stdout) {
+          throw new Error('Unable to read PCM output from return-audio transcoder');
+        }
+
+        const talkback = new LoxoneTalkbackSession({
+          platform: this.platform,
+          cameraName: this.cameraName,
+          signalingBaseUrl,
+          username: this.platform.config.username,
+          getToken: () => this.platform.LoxoneHandler?.getActiveCommunicationToken(),
+        });
+
+        activeSession.loxoneTalkback = talkback;
+        activeSession.returnAudioStdout = stdout;
+        activeSession.returnAudioStdoutHandler = (chunk: Buffer) => talkback.pushPcmChunk(chunk);
+        stdout.on('data', activeSession.returnAudioStdoutHandler);
+
+        await talkback.start();
+        this.platform.log.info(`[${this.cameraName}] Two-way audio started (Loxone WebRTC talkback).`);
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.detachReturnAudioStdout(activeSession);
+        activeSession.loxoneTalkback?.stop();
+        activeSession.loxoneTalkback = undefined;
+        activeSession.returnProcess?.stop();
+        activeSession.returnProcess = undefined;
+        this.platform.log.error(`[${this.cameraName}] Failed to start Loxone two-way audio: ${message}`);
+      });
+  }
+
+  private createReturnAudioTranscoder(
+    sessionInfo: SessionInfo,
+    request: StartStreamRequest,
+    outputArgs: string[],
+  ): ReturnAudioTranscoder {
+    return new ReturnAudioTranscoder({
+      ffmpegPath: defaultFfmpegPath,
+      logger: {
+        error: (log: string): void => this.platform.log.error(`[${this.cameraName}] [Talkback] ${log}`),
+        info: (log: string): void => this.platform.log.debug(`[${this.cameraName}] [Talkback] ${log}`),
+      },
+      logLabel: `${this.cameraName}-talkback`,
+      outputArgs,
+      returnAudioSplitter: sessionInfo.returnAudioSplitter,
+      prepareStreamRequest: {
+        targetAddress: sessionInfo.address,
+        addressVersion: sessionInfo.addressVersion,
+        audio: {
+          srtp_key: sessionInfo.audioSRTPKey,
+          srtp_salt: sessionInfo.audioSRTPSalt,
+        },
+      },
+      incomingAudioOptions: {
+        ssrc: sessionInfo.audioSSRC,
+        rtcpPort: sessionInfo.audioPort,
+      },
+      startStreamRequest: {
+        audio: {
+          codec: request.audio.codec,
+          channel: request.audio.channel,
+          sample_rate: request.audio.sample_rate,
+          pt: request.audio.pt,
+        },
+      },
+    });
+  }
+
+  private getReturnAudioStdout(returnProcess?: ReturnAudioTranscoder): Readable | undefined {
+    if (!returnProcess) {
+      return undefined;
+    }
+
+    const ffmpegProcess = returnProcess as unknown as {
+      ffmpegProcess?: { ff?: ChildProcessWithoutNullStreams };
+    };
+    return ffmpegProcess.ffmpegProcess?.ff?.stdout;
+  }
+
+  private detachReturnAudioStdout(session: ActiveSession): void {
+    if (session.returnAudioStdout && session.returnAudioStdoutHandler) {
+      session.returnAudioStdout.off('data', session.returnAudioStdoutHandler);
+    }
+    session.returnAudioStdout = undefined;
+    session.returnAudioStdoutHandler = undefined;
+  }
+
+  private resolveLoxoneSignalingBaseUrl(): string | undefined {
+    const contextUrl = this.twoWayAudioContext?.signalingBaseUrl;
+    if (contextUrl) {
+      return contextUrl;
+    }
+
+    try {
+      const parsed = new URL(this.streamUrl);
+      return parsed.origin;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private buildAuthArgs(): string[] {
+    if (!this.base64auth) {
+      return [];
+    }
+
+    return ['-headers', `Authorization: Basic ${this.base64auth}\r\n`];
+  }
+
+  private buildSnapshotFilter(width: number, height: number): string {
+    const safeWidth = this.clamp(Math.round(width || 640), 64, 4096);
+    const safeHeight = this.clamp(Math.round(height || 360), 64, 2160);
+    return `scale='min(${safeWidth},iw)':'min(${safeHeight},ih)':force_original_aspect_ratio=decrease`;
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  private buildTwoWayAudioOutputArgs(): string[] {
+    const raw = this.twoWayAudioOutputArgs;
+    if (!raw) {
+      return [];
+    }
+
+    const cameraHost = this.extractHost(this.streamUrl);
+    const expanded = raw
+      .replace(/{camera_host}/g, cameraHost ?? '')
+      .replace(/{stream_url}/g, this.streamUrl);
+
+    const withTemplateVars = Object.entries(this.twoWayAudioTemplateVars ?? {})
+      .reduce((acc, [key, value]) => acc.replace(new RegExp(`\\{${key}\\}`, 'g'), value), expanded);
+
+    return this.tokenizeFfmpegArgs(withTemplateVars);
+  }
+
+  private extractHost(url: string): string | null {
+    try {
+      return new URL(url).host;
+    } catch {
+      return null;
+    }
+  }
+
+  private tokenizeFfmpegArgs(command: string): string[] {
+    const args: string[] = [];
+    const re = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(command)) !== null) {
+      args.push(match[1] ?? match[2] ?? match[0]);
+    }
+    return args;
   }
 }

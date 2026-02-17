@@ -62,6 +62,23 @@
             "type": "boolean",
             "title": "Use Motion to trigger Doorbell event",
             "default": false
+          },
+          "JpegHeaderSize": {
+            "type": "integer",
+            "title": "JPEG Header Size Offset (bytes)",
+            "description": "Adjust motion detection baseline when cameras prepend variable JPEG metadata.",
+            "default": 623
+          },
+          "EnableTwoWayAudio": {
+            "type": "boolean",
+            "title": "Enable Two-Way Audio (experimental)",
+            "description": "Enables HomeKit return audio. Loxone Intercom V2 uses automatic WebRTC talkback (no FFmpeg output args needed).",
+            "default": false
+          },
+          "TwoWayAudioOutputArgs": {
+            "type": "string",
+            "title": "Two-Way Audio FFmpeg Output Args",
+            "description": "Optional for non-Loxone cameras: FFmpeg output arguments for return audio. Placeholders: {camera_host}, {stream_url}, {audio_host}, {audio_user}, {audio_pass}. Example: -ac 1 -ar 8000 -acodec pcm_mulaw -f rtp rtp://{camera_host}:5004"
           }
         }
       },
@@ -240,7 +257,10 @@
       "title": "Advanced",
       "description": "",
       "items": [
-        "Advanced.NfcCodeTouchMapping"
+        "Advanced.NfcCodeTouchMapping",
+        "Advanced.JpegHeaderSize",
+        "Advanced.EnableTwoWayAudio",
+        "Advanced.TwoWayAudioOutputArgs"
       ]
     }
   ]

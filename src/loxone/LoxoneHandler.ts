@@ -215,6 +215,37 @@ class LoxoneHandler {
   }
 
   /**
+   * Returns the active Miniserver communication token if available.
+   * Used for authenticated side channels (for example IntercomV2 signaling).
+   */
+  public getActiveCommunicationToken(): string | undefined {
+    try {
+      const tokenHandler = this.socket?._tokenHandler;
+      if (!tokenHandler?.getToken) {
+        return undefined;
+      }
+
+      const appToken =
+        tokenHandler.getToken(WebSocketConfig.permission.APP, this.username) ??
+        tokenHandler.getToken(WebSocketConfig.permission.APP);
+      if (appToken?.token) {
+        return appToken.token as string;
+      }
+
+      const webToken =
+        tokenHandler.getToken(WebSocketConfig.permission.WEB, this.username) ??
+        tokenHandler.getToken(WebSocketConfig.permission.WEB);
+      if (webToken?.token) {
+        return webToken.token as string;
+      }
+
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Gets the last cached value for the specified UUID.
    * @param {string} uuid - The UUID of the device.
    * @returns {string} The last cached value for the UUID.

@@ -1,18 +1,27 @@
 import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { streamingDelegate } from '../hksv/StreamingDelegate';
-import { get } from 'http';
+import { get as httpGet } from 'http';
+import { get as httpsGet } from 'https';
+
+export type TwoWayAudioTemplateVars = Record<string, string>;
+export type TwoWayAudioContext = {
+  mode?: 'loxone-intercom-v2';
+  signalingBaseUrl?: string;
+};
 
 /**
- * CameraService wrapt de streamingDelegate en biedt HomeKit-camera-integratie
- * inclusief snapshot-opvraging en (optioneel) HKSV-ondersteuning.
+ * CameraService wraps the HKSV streamingDelegate and exposes
+ * HomeKit-compatible MJPEG streaming and snapshot functionality.
  */
 export class CameraService {
   private readonly platform: LoxonePlatform;
   private readonly accessory: PlatformAccessory;
   private readonly base64auth: string;
   private readonly streamUrl: string;
-  private readonly snapshotUrl: string | undefined;
+  private readonly snapshotUrl?: string;
+  private readonly twoWayAudioTemplateVars?: TwoWayAudioTemplateVars;
+  private readonly twoWayAudioContext?: TwoWayAudioContext;
 
   private streamingDelegate!: streamingDelegate;
 
@@ -22,87 +31,112 @@ export class CameraService {
     streamUrl: string,
     snapshotUrl: string | undefined,
     base64auth: string,
+    twoWayAudioTemplateVars?: TwoWayAudioTemplateVars,
+    twoWayAudioContext?: TwoWayAudioContext,
   ) {
     this.platform = platform;
     this.accessory = accessory;
-    this.base64auth = base64auth;
     this.streamUrl = streamUrl;
     this.snapshotUrl = snapshotUrl;
+    this.base64auth = base64auth;
+    this.twoWayAudioTemplateVars = twoWayAudioTemplateVars;
+    this.twoWayAudioContext = twoWayAudioContext;
 
     this.setupService();
   }
 
   /**
-   * Initialiseer streamingDelegate en koppel aan Homebridge CameraController
+   * Instantiates the HKSV streaming delegate and registers
+   * the controller with HomeKit.
    */
   private setupService(): void {
-
     this.streamingDelegate = new streamingDelegate(
-      this.platform, this.streamUrl,
+      this.platform,
+      this.streamUrl,
       this.base64auth,
       this.accessory.displayName,
-      this.snapshotUrl);
+      this.snapshotUrl,
+      this.twoWayAudioTemplateVars,
+      this.twoWayAudioContext,
+    );
+
     this.accessory.configureController(this.streamingDelegate.controller);
   }
 
   /**
-   * Levert een JPEG-snapshot van de stream, via de streamingDelegate.
-   * Wordt o.a. gebruikt voor snapshot-gebaseerde motion detection.
+   * Retrieves a JPEG snapshot from the streaming delegate.
+   * Used by HomeKit and snapshot-based motion detection.
    */
-  public async getSnapshot(): Promise<Buffer | null> {
-    return this.streamingDelegate.getSnapshot();
+  public async getSnapshot(useCache = true): Promise<Buffer | null> {
+    return this.streamingDelegate.getSnapshot(useCache);
   }
 
   /**
-   * Gets the file size of a static JPEG snapshot via HTTP GET request to /jpg/image.jpg endpoint.
-   * This is more efficient than downloading the entire file for motion detection.
-   * Only reads HTTP headers, does not download the file body.
-   * @returns File size in bytes, or null if unavailable
+   * Attempts to obtain only the snapshot file size via Content-Length.
+   * This avoids downloading full JPEGs for motion detection.
+   *
+   * Returns:
+   *  - size in bytes
+   *  - null if no snapshot URL or no Content-Length available
    */
   public async getSnapshotSize(): Promise<number | null> {
-
-    // If the camera has no snapshot URL (Intercom V2), do not attempt HTTP header requests
-    if (!this.snapshotUrl) {
-      return Promise.resolve(null);
+    const url = this.snapshotUrl;
+    if (!url) {
+      return null; // e.g., Intercom V2
     }
 
     return new Promise((resolve) => {
-      const request = get(this.snapshotUrl as string, {
-        timeout: 3000, // 3 second timeout for fast response
-        headers: {
-          'Authorization': `Basic ${this.base64auth}`,
+      const headers: Record<string, string> = {};
+      if (this.base64auth) {
+        headers.Authorization = `Basic ${this.base64auth}`;
+      }
+
+      const requestFn = url.startsWith('https://') ? httpsGet : httpGet;
+      const request = requestFn(
+        url,
+        {
+          timeout: 3000,
+          headers,
         },
-      }, (response) => {
-        const contentLength = response.headers['content-length'];
+        (response) => {
+          // Always destroy connection immediately (no body needed)
+          response.destroy();
 
-        // Immediately destroy connection without reading body
-        response.destroy();
-
-        if (contentLength) {
-          const size = parseInt(contentLength, 10);
-          if (!isNaN(size) && size > 0) {
-            this.platform.log.debug(`[${this.accessory.displayName}] HTTP headers returned Content-Length: ${size} bytes`);
-            resolve(size);
-            return;
-          } else {
-            this.platform.log.debug(`[${this.accessory.displayName}] Invalid Content-Length: ${contentLength}`);
+          if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+            this.platform.log.debug(
+              `[${this.accessory.displayName}] SnapshotSize status ${response.statusCode ?? 'unknown'}.`,
+            );
+            return resolve(null);
           }
-        } else {
-          this.platform.log.debug(`[${this.accessory.displayName}] No Content-Length header in response`);
-        }
 
-        // Content-Length not found or invalid
-        resolve(null);
-      });
+          const contentLengthHeader = response.headers['content-length'];
+          const header = Array.isArray(contentLengthHeader)
+            ? contentLengthHeader[0]
+            : contentLengthHeader;
 
-      request.on('error', (error) => {
-        this.platform.log.debug(`[${this.accessory.displayName}] HTTP request error: ${error.message}`);
-        // Silently fail - return null instead of rejecting
+          if (!header) {
+            this.platform.log.debug(`[${this.accessory.displayName}] No Content-Length header present.`);
+            return resolve(null);
+          }
+
+          const size = Number(header);
+          if (Number.isFinite(size) && size > 0) {
+            this.platform.log.debug(`[${this.accessory.displayName}] Content-Length: ${size} bytes`);
+            return resolve(size);
+          }
+
+          this.platform.log.debug(`[${this.accessory.displayName}] Invalid Content-Length header: ${header}`);
+          resolve(null);
+        },
+      );
+
+      request.on('error', (err) => {
+        this.platform.log.debug(`[${this.accessory.displayName}] SnapshotSize error: ${err.message}`);
         resolve(null);
       });
 
       request.on('timeout', () => {
-        this.platform.log.debug(`[${this.accessory.displayName}] HTTP request timeout`);
+        this.platform.log.debug(`[${this.accessory.displayName}] SnapshotSize timeout`);
         request.destroy();
         resolve(null);
       });

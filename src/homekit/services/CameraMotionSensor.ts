@@ -4,8 +4,8 @@ import { BaseService } from './BaseService';
 import { CameraService } from './Camera';
 
 /**
- * CameraMotionSensor uses periodic snapshot analysis to detect motion
- * by monitoring changes in image size over time.
+ * CameraMotionSensor performs motion detection by analyzing
+ * changes in JPEG snapshot size over time.
  */
 export class CameraMotionSensor extends BaseService {
   private readonly intervalMs = 1000;
@@ -15,170 +15,234 @@ export class CameraMotionSensor extends BaseService {
   private readonly cooldown = 8000;
   private readonly resetTimeout = 15000;
   private readonly historyLimit = 20;
+  private readonly minimumHistory = 5;
   private readonly jpegHeaderSize: number;
 
-  private snapshotSizeHistory: number[] = [];
+  private snapshotHistory: number[] = [];
+  private snapshotFailures = 0;
   private lastTrigger = 0;
-  private motionResetTimer?: NodeJS.Timeout;
-  private active = false;
-  private snapshotFailureCount = 0;
-  private readonly maxSnapshotWarnings = 3;
-  private isPolling = false;
-  private isShuttingDown = false;
 
-  private state = {
-    MotionDetected: false,
-  };
+  private loopTimer?: NodeJS.Timeout;
+  private resetTimer?: NodeJS.Timeout;
+  private polling = false;
+  private shuttingDown = false;
 
-  private camera: CameraService;
+  private state = { MotionDetected: false };
 
   constructor(
     platform: LoxonePlatform,
     accessory: PlatformAccessory,
-    camera: CameraService,
+    private readonly camera: CameraService,
     private readonly doorbellService?: { triggerDoorbell: () => void },
   ) {
     super(platform, accessory);
-    this.camera = camera;
-    this.jpegHeaderSize = this.platform.config?.Advanced?.JpegHeaderSize ?? 623;
-    this.setupService();
-    this.startDetection();
+    this.jpegHeaderSize = platform.config?.Advanced?.JpegHeaderSize ?? 623;
 
-    // Handle shutdown
+    this.setupService();
+    this.startPolling();
+
     platform.api.on(APIEvent.SHUTDOWN, () => {
-      this.isShuttingDown = true;
-      this.active = false;
-      this.platform.log.debug(`[${this.accessory.displayName}] Motion sensor stopping due to shutdown`);
+      this.shuttingDown = true;
+      if (this.loopTimer) {
+        clearTimeout(this.loopTimer);
+        this.loopTimer = undefined;
+      }
+      if (this.resetTimer) {
+        clearTimeout(this.resetTimer);
+        this.resetTimer = undefined;
+      }
+      this.platform.log.debug(`[${this.accessory.displayName}] Motion detection stopped (shutdown)`);
     });
   }
 
-  setupService(): void {
-    this.service = this.accessory.getService(this.platform.Service.MotionSensor)
-      || this.accessory.addService(this.platform.Service.MotionSensor);
+  public setupService(): void {
+    this.service =
+      this.accessory.getService(this.platform.Service.MotionSensor) ||
+      this.accessory.addService(this.platform.Service.MotionSensor);
 
-    this.service.getCharacteristic(this.platform.Characteristic.MotionDetected)
+    this.service
+      .getCharacteristic(this.platform.Characteristic.MotionDetected)
       .onGet(() => this.state.MotionDetected);
   }
 
-  private startDetection() {
-    this.platform.log.debug(`[${this.accessory.displayName}] Starting camera motion detection`);
-    this.active = true;
+  // --------------------------------------------------------------------------
+  // POLLING LOOP
+  // --------------------------------------------------------------------------
 
-    const poll = async () => {
-      if (!this.active || this.isPolling || this.isShuttingDown) {
-        return;
-      }
-      this.isPolling = true;
-
-      // Try to get snapshot size efficiently via HTTP headers first
-      let currentSize: number | null = null;
-      const snapshotSize = await this.camera.getSnapshotSize();
-
-      if (snapshotSize !== null) {
-        // Successfully got size from HTTP headers - most efficient method
-        this.platform.log.debug(`[${this.accessory.displayName}] Got snapshot size: ${snapshotSize} bytes via HTTP headers`);
-        currentSize = Math.max(0, snapshotSize - this.jpegHeaderSize);
-        this.snapshotFailureCount = 0;
-      } else {
-        // Fallback to full snapshot download if size request fails
-        const snapshot = await this.camera.getSnapshot();
-
-        if (!snapshot) {
-          if (this.snapshotFailureCount < this.maxSnapshotWarnings) {
-            this.platform.log.warn(`[${this.accessory.displayName}] Snapshot unavailable`);
-            this.snapshotFailureCount++;
-          }
-          const retryDelay = Math.min(this.intervalMs * 2 ** this.snapshotFailureCount, 60000);
-          this.isPolling = false;
-          setTimeout(poll, retryDelay);
-          return;
-        }
-
-        this.snapshotFailureCount = 0;
-        currentSize = Math.max(0, snapshot.length - this.jpegHeaderSize);
-      }
-
-      const now = Date.now();
-
-      if (currentSize !== null && this.evaluateMotion(currentSize, now)) {
-        this.triggerMotion(now);
-      }
-
-      this.isPolling = false;
-      setTimeout(poll, this.intervalMs);
-    };
-
-    poll();
+  private startPolling(): void {
+    this.scheduleNextPoll(0);
   }
 
-  private evaluateMotion(currentSize: number, now: number): boolean {
-    this.snapshotSizeHistory.push(currentSize);
-    if (this.snapshotSizeHistory.length > this.historyLimit) {
-      this.snapshotSizeHistory.shift();
+  private scheduleNextPoll(delayMs: number): void {
+    if (this.shuttingDown) {
+      return;
     }
 
-    const medianSize = this.median(this.snapshotSizeHistory);
+    if (this.loopTimer) {
+      clearTimeout(this.loopTimer);
+    }
 
-    // Skip evaluation until the history stabilizes
-    if (medianSize <= 0) {
-      this.platform.log.debug(`[${this.accessory.displayName}] Motion delta skipped (median=0)`);
+    this.loopTimer = setTimeout(() => {
+      void this.pollOnce();
+    }, delayMs);
+  }
+
+  private async pollOnce(): Promise<void> {
+    if (this.shuttingDown || this.polling) {
+      return;
+    }
+
+    this.polling = true;
+    let nextDelay = this.intervalMs;
+
+    try {
+      const size = await this.readSnapshotSize();
+
+      if (size !== null) {
+        this.snapshotFailures = 0;
+        const now = Date.now();
+
+        if (this.evaluateMotion(size, now)) {
+          this.triggerMotion(now);
+        }
+      } else {
+        nextDelay = this.handleSnapshotFailure();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.platform.log.debug(`[${this.accessory.displayName}] Motion polling error: ${message}`);
+      nextDelay = this.handleSnapshotFailure();
+    } finally {
+      this.polling = false;
+      this.scheduleNextPoll(nextDelay);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // SNAPSHOT SIZE HANDLING
+  // --------------------------------------------------------------------------
+
+  private async readSnapshotSize(): Promise<number | null> {
+    const headerSize = this.jpegHeaderSize;
+
+    // 1. Fast path: content-length header
+    const headerSizeResult = await this.camera.getSnapshotSize();
+    if (headerSizeResult !== null) {
+      return Math.max(0, headerSizeResult - headerSize);
+    }
+
+    // 2. Fallback: full image
+    const snapshot = await this.camera.getSnapshot(false);
+    if (!snapshot) {
+      return null;
+    }
+
+    return Math.max(0, snapshot.length - headerSize);
+  }
+
+  private handleSnapshotFailure(): number {
+    if (this.snapshotFailures < 3) {
+      this.platform.log.warn(
+        `[${this.accessory.displayName}] Snapshot unavailable`,
+      );
+    }
+
+    this.snapshotFailures++;
+    return Math.min(this.intervalMs * 2 ** this.snapshotFailures, 60000);
+  }
+
+  // --------------------------------------------------------------------------
+  // MOTION ANALYSIS
+  // --------------------------------------------------------------------------
+
+  private evaluateMotion(current: number, now: number): boolean {
+    this.snapshotHistory.push(current);
+    if (this.snapshotHistory.length > this.historyLimit) {
+      this.snapshotHistory.shift();
+    }
+
+    if (this.snapshotHistory.length < this.minimumHistory) {
       return false;
     }
 
-    const delta = Math.abs(currentSize - medianSize) / medianSize;
-    this.platform.log.debug(`[${this.accessory.displayName}] Motion delta: ${(delta * 100).toFixed(2)}%`);
+    const baseline = this.median(this.snapshotHistory.slice(0, -1));
+    if (baseline <= 0) {
+      return false;
+    }
+
+    const deltaAbs = Math.abs(current - baseline);
+    const deltaRel = deltaAbs / baseline;
 
     return (
-      delta > this.minThreshold &&
-      delta < this.maxThreshold &&
-      Math.abs(currentSize - medianSize) > this.minDeltaBytes &&
-      now - this.lastTrigger > this.cooldown
+      now - this.lastTrigger > this.cooldown &&
+      deltaRel > this.minThreshold &&
+      deltaRel < this.maxThreshold &&
+      deltaAbs > this.minDeltaBytes
     );
   }
 
-  private triggerMotion(now: number) {
+  private triggerMotion(now: number): void {
     if (!this.state.MotionDetected) {
-      this.platform.log.info(`[${this.accessory.displayName}] Motion detected via snapshot`);
+      this.platform.log.info(`[${this.accessory.displayName}] Motion detected`);
       this.state.MotionDetected = true;
-      this.service?.updateCharacteristic(this.platform.Characteristic.MotionDetected, true);
 
-      if (this.motionResetTimer) {
-        clearTimeout(this.motionResetTimer);
-      }
-
-      this.motionResetTimer = setTimeout(() => this.resetMotion(), this.resetTimeout);
+      this.service?.updateCharacteristic(
+        this.platform.Characteristic.MotionDetected,
+        true,
+      );
+      this.triggerDoorbellFromMotion();
     }
+
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+    }
+    this.resetTimer = setTimeout(() => this.resetMotion(), this.resetTimeout);
 
     this.lastTrigger = now;
   }
 
-  private resetMotion() {
-    if (!this.state.MotionDetected) {
-      // Motion already reset, prevent double reset
+  private triggerDoorbellFromMotion(): void {
+    if (!this.platform.config?.Advanced?.MotionTriggersDoorbell) {
       return;
     }
+
+    try {
+      this.doorbellService?.triggerDoorbell();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.platform.log.warn(`[${this.accessory.displayName}] Failed to trigger doorbell from motion: ${message}`);
+    }
+  }
+
+  private resetMotion(): void {
+    if (!this.state.MotionDetected) {
+      return;
+    }
+
     this.platform.log.info(`[${this.accessory.displayName}] Motion ended`);
     this.state.MotionDetected = false;
-    this.service?.updateCharacteristic(this.platform.Characteristic.MotionDetected, false);
-    this.motionResetTimer = undefined;
+
+    this.service?.updateCharacteristic(
+      this.platform.Characteristic.MotionDetected,
+      false,
+    );
+
+    this.resetTimer = undefined;
   }
+
+  // --------------------------------------------------------------------------
+  // UTILITIES
+  // --------------------------------------------------------------------------
 
   private median(values: number[]): number {
     if (!values.length) {
       return 0;
     }
-    const sorted = [...values].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 !== 0
+    const sorted = values.slice().sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    return sorted.length & 1
       ? sorted[mid]
       : (sorted[mid - 1] + sorted[mid]) / 2;
   }
 
-  private average(values: number[]): number {
-    if (!values.length) {
-      return 0;
-    }
-    const sum = values.reduce((acc, val) => acc + val, 0);
-    return sum / values.length;
-  }
 }

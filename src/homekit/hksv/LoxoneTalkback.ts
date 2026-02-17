@@ -368,8 +368,7 @@ export class LoxoneTalkbackSession {
       sdp: offer.sdp ?? '',
     };
 
-    const answerRaw = await this.callWithFallbackModes(offerPayload);
-    await this.applyRemoteAnswer(answerRaw, offerPayload.sdp);
+    await this.negotiateCallWithFallbackModes(offerPayload);
 
     this.peerReady = true;
     await this.flushQueuedIceCandidates();
@@ -420,20 +419,47 @@ export class LoxoneTalkbackSession {
     }
   }
 
-  private async callWithFallbackModes(
+  private async negotiateCallWithFallbackModes(
     offerPayload: { type: string; sdp: string },
-  ): Promise<unknown> {
-    const callParamsVariants: unknown[][] = [
+  ): Promise<void> {
+    const errors: string[] = [];
+    const primarySequence: unknown[][] = [
+      // Loxone IntercomV2 expects a two-step call negotiation:
+      // 1) create/base call, 2) add audio to that call.
       [offerPayload, 'add_audio', false, 0],
-      [offerPayload, 'new', false],
-      [offerPayload, 'new', false, 0],
       [offerPayload, 'add_audio', false],
     ];
 
-    const errors: string[] = [];
-    for (const params of callParamsVariants) {
+    for (const params of primarySequence) {
       try {
-        return await this.callRpc('call', params);
+        const answerRaw = await this.callRpc('call', params);
+        await this.applyRemoteAnswer(answerRaw, offerPayload.sdp);
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${JSON.stringify(params.slice(1))}: ${message}`);
+      }
+    }
+
+    // Reset session before trying alternate legacy call modes.
+    if (!this.stopped && this.isSocketOpen()) {
+      try {
+        await this.sendNotification('hangup', null);
+      } catch {
+        // Ignore.
+      }
+    }
+
+    const legacyFallbackModes: unknown[][] = [
+      [offerPayload, 'new', false],
+      [offerPayload, 'new', false, 0],
+    ];
+
+    for (const params of legacyFallbackModes) {
+      try {
+        const answerRaw = await this.callRpc('call', params);
+        await this.applyRemoteAnswer(answerRaw, offerPayload.sdp);
+        return;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`${JSON.stringify(params.slice(1))}: ${message}`);

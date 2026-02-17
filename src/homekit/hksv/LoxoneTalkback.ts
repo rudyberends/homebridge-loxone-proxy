@@ -246,7 +246,7 @@ export class LoxoneTalkbackSession {
     this.socket = new WebSocket(wsUrl, this.wsProtocol);
     this.socket.on('open', () => {
       this.authChallengeTimer = setTimeout(() => {
-        this.rejectReadyPromise(new Error('No auth challenge received from Loxone intercom'));
+        this.rejectReadyPromise(new Error('No auth challenge/ready notification received from Loxone intercom'));
       }, this.rpcTimeoutMs);
     });
 
@@ -273,11 +273,19 @@ export class LoxoneTalkbackSession {
   }
 
   private async getDeviceInfo(): Promise<Record<string, unknown>> {
-    const info = await this.callRpc('info');
-    if (!info || typeof info !== 'object') {
+    try {
+      const info = await this.callRpc('info');
+      if (!info || typeof info !== 'object') {
+        return {};
+      }
+      return info as Record<string, unknown>;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.options.platform.log.debug(
+        `[${this.options.cameraName}] Loxone signaling info() failed, continuing without TURN details: ${message}`,
+      );
       return {};
     }
-    return info as Record<string, unknown>;
   }
 
   private async initializePeerConnection(info: Record<string, unknown>): Promise<void> {
@@ -348,17 +356,35 @@ export class LoxoneTalkbackSession {
       sdp: offer.sdp ?? '',
     };
 
-    const answerRaw = await this.callRpc('call', [
-      offerPayload,
-      'add_audio',
-      false,
-      0,
-    ]);
+    const answerRaw = await this.callWithFallbackModes(offerPayload);
     const answer = this.normalizeSessionDescription(answerRaw);
     await this.peerConnection.setRemoteDescription(new this.wrtc.RTCSessionDescription(answer));
 
     this.peerReady = true;
     await this.flushQueuedIceCandidates();
+  }
+
+  private async callWithFallbackModes(
+    offerPayload: { type: string; sdp: string },
+  ): Promise<unknown> {
+    const callParamsVariants: unknown[][] = [
+      [offerPayload, 'add_audio', false, 0],
+      [offerPayload, 'new', false],
+      [offerPayload, 'new', false, 0],
+      [offerPayload, 'add_audio', false],
+    ];
+
+    const errors: string[] = [];
+    for (const params of callParamsVariants) {
+      try {
+        return await this.callRpc('call', params);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${JSON.stringify(params.slice(1))}: ${message}`);
+      }
+    }
+
+    throw new Error(`Loxone call() failed for all modes: ${errors.join(' | ')}`);
   }
 
   private async flushQueuedIceCandidates(): Promise<void> {
@@ -439,9 +465,13 @@ export class LoxoneTalkbackSession {
           this.sendRpcSuccess(id, authData);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          this.sendRpcError(id, -32062, 'Invalid params', message);
-          this.rejectReadyPromise(new Error(message));
+          this.options.platform.log.debug(
+            `[${this.options.cameraName}] Loxone auth response fallback (no encrypted payload): ${message}`,
+          );
+          this.sendRpcSuccess(id);
         }
+        // Some firmwares do not emit a subsequent "ready" notification.
+        this.resolveReadyPromise();
         return;
       }
       case 'addIceCandidate': {
@@ -534,9 +564,6 @@ export class LoxoneTalkbackSession {
 
   private createAuthResponse(params: unknown[]): [string, string, string] {
     this.clearAuthTimers();
-    this.authChallengeTimer = setTimeout(() => {
-      this.rejectReadyPromise(new Error('Timeout: signaling authentication'));
-    }, this.rpcTimeoutMs);
 
     const sessionToken = this.stringValue(params[0]);
     const modulus = this.stringValue(params[1]);

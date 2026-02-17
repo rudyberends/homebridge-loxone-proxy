@@ -798,6 +798,13 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
+        const sessionStillActive = this.ongoingSessions[request.sessionID] === activeSession;
+
+        if (!sessionStillActive || this.isShuttingDown) {
+          this.platform.log.debug(`[${this.cameraName}] Loxone two-way audio startup cancelled: ${message}`);
+          return;
+        }
+
         this.detachReturnAudioStdout(activeSession);
         activeSession.loxoneTalkback?.stop();
         activeSession.loxoneTalkback = undefined;

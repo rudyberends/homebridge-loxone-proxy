@@ -6,7 +6,8 @@ import { LightBulb } from './LightBulb';
  * Represents a color light bulb service for Homebridge.
  */
 export class ColorLightBulb extends LightBulb {
-  private lastSetMode = '';
+  private lastSetMode: 'color' | 'colortemperature' = 'color';
+  private lastOnBrightness = 100;
   //private lastUpdate = 0;
 
   State = {
@@ -62,6 +63,7 @@ export class ColorLightBulb extends LightBulb {
         this.State.Brightness = parseFloat((mV[1] || '0') + (mV[2] || ''));
         this.State.On = this.State.Brightness > 0;
         this.lastSetMode = 'color';
+        this.rememberOnBrightness();
       }
     };
 
@@ -86,6 +88,7 @@ export class ColorLightBulb extends LightBulb {
         this.State.Brightness = parseInt(params[0]);
         this.State.On = this.State.Brightness > 0;
         this.lastSetMode = 'colortemperature';
+        this.rememberOnBrightness();
       }
     };
 
@@ -109,17 +112,15 @@ export class ColorLightBulb extends LightBulb {
     const { name, uuidAction } = device;
     const { LoxoneHandler } = platform;
 
-    let command = '';
-    if (this.lastSetMode === 'color') {
-      command = `hsv(${State.Hue},${State.Saturation},${State.Brightness})`;
-    } else if (this.lastSetMode === 'colortemperature') {
-      command = `temp(${State.Brightness},${homekitToLoxoneColorTemperature(State.ColorTemperature)})`;
-    }
+    const command = this.lastSetMode === 'colortemperature'
+      ? `temp(${State.Brightness},${homekitToLoxoneColorTemperature(State.ColorTemperature)})`
+      : `hsv(${State.Hue},${State.Saturation},${State.Brightness})`;
 
     platform.log.debug(`[${name}] HomeKit - send message: ${command}`);
     LoxoneHandler.sendCommand(uuidAction, command);
 
     State.On = State.Brightness > 0;
+    this.rememberOnBrightness();
   }
 
   /**
@@ -128,8 +129,16 @@ export class ColorLightBulb extends LightBulb {
    */
   async setOn(value: CharacteristicValue): Promise<void> {
     if (!value) {
+      this.rememberOnBrightness();
       this.State.Brightness = 0;
-      this.setColorState();
+      return this.setColorState();
+    }
+
+    this.State.On = true;
+
+    if (this.State.Brightness === 0) {
+      this.State.Brightness = this.lastOnBrightness;
+      return this.setColorState();
     }
   }
 
@@ -140,7 +149,7 @@ export class ColorLightBulb extends LightBulb {
   async setBrightness(value: CharacteristicValue): Promise<void> {
     this.State.Brightness = value as number;
     this.State.On = this.State.Brightness > 0;
-    this.setColorState();
+    return this.setColorState();
   }
 
   /**
@@ -150,7 +159,7 @@ export class ColorLightBulb extends LightBulb {
   async setHue(value: CharacteristicValue): Promise<void> {
     this.State.Hue = value as number;
     this.lastSetMode = 'color';
-    this.setColorState();
+    return this.setColorState();
   }
 
   /**
@@ -168,7 +177,7 @@ export class ColorLightBulb extends LightBulb {
   async setSaturation(value: CharacteristicValue): Promise<void> {
     this.State.Saturation = value as number;
     this.lastSetMode = 'color';
-    this.setColorState();
+    return this.setColorState();
   }
 
   /**
@@ -186,7 +195,7 @@ export class ColorLightBulb extends LightBulb {
   async setColorTemperature(value: CharacteristicValue): Promise<void> {
     this.State.ColorTemperature = value as number;
     this.lastSetMode = 'colortemperature';
-    this.setColorState();
+    return this.setColorState();
   }
 
   /**
@@ -195,6 +204,12 @@ export class ColorLightBulb extends LightBulb {
    */
   async getColorTemperature(): Promise<CharacteristicValue> {
     return this.State.ColorTemperature;
+  }
+
+  private rememberOnBrightness(): void {
+    if (this.State.Brightness > 0) {
+      this.lastOnBrightness = this.State.Brightness;
+    }
   }
 }
 

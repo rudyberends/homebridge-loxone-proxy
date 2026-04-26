@@ -130,6 +130,10 @@ export class ColorLightBulb extends LightBulb {
     if (!value) {
       this.State.Brightness = 0;
       this.setColorState();
+    } else if (this.State.Brightness === 0) {
+      this.State.Brightness = 100;
+      this.State.On = true;
+      this.setColorState();
     }
   }
 

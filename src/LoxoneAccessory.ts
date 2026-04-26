@@ -93,7 +93,10 @@ export class LoxoneAccessory {
   ): AccessoryPlan {
     return {
       ...this.createBaseAccessoryPlan(uuid),
-      services: [service],
+      services: [{
+        ...service,
+        device: service.device ?? this.device,
+      }],
       stateBindings,
     };
   }

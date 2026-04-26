@@ -250,12 +250,14 @@ test('Structure File fixture plans keep command and state boundaries explicit', 
   assert.equal(structureFixture.controls['ctrl-switch'].room, 'room-kitchen');
 
   const switchPlan = planForControl(Switch, prepared.controls['ctrl-switch']);
+  assert.equal(switchPlan.services[0].device.uuidAction, 'ctrl-switch');
   assert.deepEqual(switchPlan.stateBindings, {
     'state-switch-active': { service: 'PrimaryService', state: 'active' },
   });
   assert.equal(command(switchPlan, 'setOn', true), 'On');
 
   const dimmerPlan = planForControl(Dimmer, prepared.controls['ctrl-dimmer']);
+  assert.equal(dimmerPlan.services[0].device.uuidAction, 'ctrl-dimmer');
   assert.deepEqual(dimmerPlan.stateBindings, {
     'state-dimmer-position': { service: 'PrimaryService', state: 'position' },
   });

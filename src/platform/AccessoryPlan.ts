@@ -25,6 +25,9 @@ export interface AccessoryPlan {
   id: string;
   displayName: string;
   room: string;
+  serviceLabels?: {
+    namespace: 'arabic-numerals' | 'dots';
+  };
   source: {
     type: string;
     uuidAction: string;

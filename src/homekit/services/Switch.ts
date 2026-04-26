@@ -12,10 +12,14 @@ export class Switch extends BaseService {
   setupService(): void {
     const switchType = this.getSwitchType();
 
-    this.service = (this.secondaryService)
-      ? this.accessory.getService(this.device.name) ||
-          this.accessory.addService(switchType, this.device.name, `${this.device.uuidAction}/${this.device.cat}`)
-      : this.accessory.getService(switchType) || this.accessory.addService(switchType);
+    if (this.secondaryService) {
+      const subtype = `${this.device.uuidAction}/${this.device.cat}`;
+      this.service =
+        this.accessory.getServiceById(switchType, subtype) ||
+        this.accessory.addService(switchType, this.device.name, subtype);
+    } else {
+      this.service = this.accessory.getService(switchType) || this.accessory.addService(switchType);
+    }
 
     if (this.secondaryService) {
       this.service.setCharacteristic(this.platform.Characteristic.Name, this.device.name);

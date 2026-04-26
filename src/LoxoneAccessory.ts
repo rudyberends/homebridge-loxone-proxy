@@ -102,13 +102,52 @@ export class LoxoneAccessory {
   }
 
   private configurePlannedServices(plan: AccessoryPlan): void {
-    for (const servicePlan of plan.services) {
-      this.Service[servicePlan.id] = buildHomeKitService(
+    this.configureServiceLabels(plan);
+
+    plan.services.forEach((servicePlan, index) => {
+      const service = buildHomeKitService(
         this.platform,
         this.Accessory!,
         servicePlan,
       );
+      this.configureServiceLabelIndex(plan, service, index);
+      this.Service[servicePlan.id] = service;
+    });
+  }
+
+  private configureServiceLabels(plan: AccessoryPlan): void {
+    if (!plan.serviceLabels || plan.services.length < 2) {
+      return;
     }
+
+    const labelService =
+      this.Accessory!.getService(this.platform.Service.ServiceLabel) ||
+      this.Accessory!.addService(this.platform.Service.ServiceLabel);
+
+    const namespace =
+      plan.serviceLabels.namespace === 'dots'
+        ? this.platform.Characteristic.ServiceLabelNamespace.DOTS
+        : this.platform.Characteristic.ServiceLabelNamespace.ARABIC_NUMERALS;
+
+    labelService.setCharacteristic(
+      this.platform.Characteristic.ServiceLabelNamespace,
+      namespace,
+    );
+  }
+
+  private configureServiceLabelIndex(
+    plan: AccessoryPlan,
+    service: HomeKitServiceAdapter,
+    index: number,
+  ): void {
+    if (!plan.serviceLabels || !service.service) {
+      return;
+    }
+
+    service.service.setCharacteristic(
+      this.platform.Characteristic.ServiceLabelIndex,
+      index + 1,
+    );
   }
 
   protected afterSetup(): void {

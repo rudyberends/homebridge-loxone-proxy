@@ -45,6 +45,9 @@ export class LightControllerV2 extends LoxoneAccessory {
 
     return {
       ...super.createAccessoryPlan(uuid),
+      serviceLabels: {
+        namespace: 'arabic-numerals',
+      },
       services: this.createMoodServicePlans(),
       stateBindings: {
         [this.device.states.activeMoods]: {

@@ -292,6 +292,7 @@ test('Lighting fixture keeps LightController moods and child light commands decl
   lightController.ItemStates = {};
   const moodPlan = lightController.createAccessoryPlan('light-plan');
 
+  assert.deepEqual(moodPlan.serviceLabels, { namespace: 'arabic-numerals' });
   assert.equal(moodPlan.services.length, 2);
   assert.equal(moodPlan.services[0].commands.setOn.uuid, 'ctrl-light-controller');
   assert.equal(command(moodPlan, 'setOn', true, 0), 'changeTo/7');
@@ -586,6 +587,7 @@ test('Radio and LightControllerV2 group services use parent UUID command binding
   lightController.ItemStates = {};
   const plan = lightController.createAccessoryPlan('light-plan');
 
+  assert.deepEqual(plan.serviceLabels, { namespace: 'arabic-numerals' });
   assert.equal(plan.services.length, 1);
   assert.equal(plan.services[0].commands.setOn.uuid, 'light-parent');
   assert.equal(command(plan, 'setOn', true), 'changeTo/7');

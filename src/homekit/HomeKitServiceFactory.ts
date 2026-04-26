@@ -90,7 +90,12 @@ export function buildHomeKitService(
   plan: ServicePlan,
 ): HomeKitServiceAdapter {
   const ServiceConstructor = serviceConstructors[plan.kind];
-  return new ServiceConstructor(platform, accessory, plan.device, createCommandExecutor(platform, plan));
+  const serviceDevice = isPrimaryService(plan) ? undefined : plan.device;
+  return new ServiceConstructor(platform, accessory, serviceDevice, createCommandExecutor(platform, plan));
+}
+
+function isPrimaryService(plan: ServicePlan): boolean {
+  return plan.id === 'PrimaryService' && !plan.name;
 }
 
 function createCommandExecutor(

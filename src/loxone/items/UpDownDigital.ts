@@ -1,23 +1,25 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { WindowCovering } from '../../homekit/services/WindowCovering';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone UpDownDigital Item
 */
 export class UpDownDigital extends LoxoneAccessory {
 
-  configureServices(): void {
-
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, {
+      id: 'PrimaryService',
+      kind: 'window-covering',
+      commands: {
+        setTargetPosition: { action: (value: unknown) => `manualPosition/${value}` },
+        setTargetHorizontalTiltAngle: { action: (value: unknown) => `manualLamelle/${value}` },
+      },
+    }, {
       [this.device.states.active]: {'service': 'PrimaryService', 'state': 'active'},
-    };
-
-    this.Service.PrimaryService = new WindowCovering(this.platform, this.Accessory!);
+    });
   }
 
   callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
-    console.log('!!!!!!')
-    console.log(message)    
-
-    }
+    this.platform.log.debug(`[${this.device.name}] UpDownDigital callback: ${message.value}`);
+  }
 }

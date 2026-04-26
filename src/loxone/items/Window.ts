@@ -1,20 +1,22 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { Window as HomeKitWindow } from '../../homekit/services/Window';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone Window Item
 */
 export class Window extends LoxoneAccessory {
 
-  configureServices(): void {
-
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, {
+      id: 'PrimaryService',
+      kind: 'window',
+      commands: {
+        setTargetPosition: { action: (value: unknown) => `moveToPosition/${value}` },
+      },
+    }, {
       [this.device.states.position]: {'service': 'PrimaryService', 'state': 'position'},
       [this.device.states.targetPosition]: {'service': 'PrimaryService', 'state': 'targetPosition'},
       [this.device.states.direction]: {'service': 'PrimaryService', 'state': 'direction'},
-      //[this.device.states.type]: {'service': 'PrimaryService', 'state': 'type'}, // Contains Window Type for Visualisation. No use for now
-    };
-
-    this.Service.PrimaryService = new HomeKitWindow(this.platform, this.Accessory!);
+    });
   }
 }

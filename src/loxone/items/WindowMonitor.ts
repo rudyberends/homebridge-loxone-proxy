@@ -6,12 +6,13 @@ import { Contact } from './Contact';
 */
 export class WindowMonitor extends LoxoneAccessory {
 
-  isSupported(): boolean {
-
+  protected beforeSetup(): void {
     // This item is a collection of Windows and doors.
     // They will be registered as individual items in HomeKit.
     this.registerContactItems();
+  }
 
+  isSupported(): boolean {
     return false; // the item itself will not be mapped.
   }
 

@@ -1,39 +1,49 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { LockMechanism } from '../../homekit/services/LockMechanism';
-import { Outlet } from '../../homekit/services/Outlet';
-import { Switch as SwitchService } from '../../homekit/services/Switch';
+import { HomeKitServiceKind } from '../../homekit/HomeKitServiceFactory';
+import { AccessoryPlan, CommandBinding } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone Switch Item
  */
 export class Switch extends LoxoneAccessory {
 
-  configureServices(): void {
-    this.ItemStates = {
-      [this.device.states.active]: {
-        service: 'PrimaryService',
-        state: 'active',
-      },
-    };
-
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
     const serviceType =
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.device.details as any)?.serviceType ||
       Switch.determineSwitchType(this.device, this.platform.config);
 
-    switch (serviceType) {
-      case 'lock':
-        this.Service.PrimaryService = new LockMechanism(this.platform, this.Accessory!);
-        break;
+    const kind: HomeKitServiceKind =
+      serviceType === 'lock'
+        ? 'lock-mechanism'
+        : serviceType === 'outlet'
+          ? 'outlet'
+          : 'switch';
 
-      case 'outlet':
-        this.Service.PrimaryService = new Outlet(this.platform, this.Accessory!);
-        break;
+    const commands: Record<string, CommandBinding> = serviceType === 'lock'
+      ? {
+        setTargetState: {
+          action: (value: unknown) => {
+            const reverse = this.platform.config.switchAlias?.ReverseLockSwitch;
+            const target = Number(value);
+            return reverse
+              ? (target === 0 ? 'Off' : 'On')
+              : (target === 0 ? 'On' : 'Off');
+          },
+        },
+      }
+      : {
+        setOn: {
+          action: (value: unknown) => value ? 'On' : 'Off',
+        },
+      };
 
-      default:
-        this.Service.PrimaryService = new SwitchService(this.platform, this.Accessory!);
-        break;
-    }
+    return this.createSingleServicePlan(uuid, { id: 'PrimaryService', kind, commands }, {
+      [this.device.states.active]: {
+        service: 'PrimaryService',
+        state: 'active',
+      },
+    });
   }
 
   /**

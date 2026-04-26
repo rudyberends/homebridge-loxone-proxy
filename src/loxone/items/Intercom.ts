@@ -1,12 +1,13 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { Doorbell } from '../../homekit/services/Doorbell';
-import { Switch } from '../../homekit/services/Switch';
 import {
   CameraService,
   TwoWayAudioContext,
   TwoWayAudioTemplateVars,
 } from '../../homekit/services/Camera';
 import { CameraMotionSensor } from '../../homekit/services/CameraMotionSensor';
+import { AccessoryPlan, ServicePlan } from '../../platform/AccessoryPlan';
+import { LoxoneItemStates } from '../LoxoneTypes';
 
 // Types
 type SecuredDetails = {
@@ -48,21 +49,63 @@ export class Intercom extends LoxoneAccessory {
    *   - the camera (if available)
    *   - all intercom sub-controls (door release etc.)
    */
-  configureServices(): void {
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return {
+      ...super.createAccessoryPlan(uuid),
+      services: [
+        { id: 'PrimaryService', kind: 'doorbell' },
+        ...this.createChildServicePlans(),
+      ],
+      stateBindings: this.createStateBindings(),
+    };
+  }
+
+  protected afterSetup(): void {
+    void this.configureCamera();
+  }
+
+  private createStateBindings(): LoxoneItemStates {
+    const stateBindings: LoxoneItemStates = {
       [this.device.states.bell]: {
         service: 'PrimaryService',
         state: 'bell',
       },
     };
 
-    void this.configureCamera();
-    this.registerChildItems();
+    if (!this.device.subControls) {
+      return stateBindings;
+    }
 
-    this.Service.PrimaryService = new Doorbell(
-      this.platform,
-      this.Accessory!,
-    );
+    for (const childUuid in this.device.subControls) {
+      const child = this.device.subControls[childUuid];
+      const serviceName = child.name.replace(/\s/g, '');
+
+      for (const stateName in child.states) {
+        const uuid = child.states[stateName];
+        stateBindings[uuid] = {
+          service: serviceName,
+          state: stateName,
+        };
+      }
+    }
+
+    return stateBindings;
+  }
+
+  private createChildServicePlans(): ServicePlan[] {
+    if (!this.device.subControls) {
+      return [];
+    }
+
+    return Object.values(this.device.subControls).map((child) => ({
+      id: child.name.replace(/\s/g, ''),
+      kind: 'switch',
+      name: child.name,
+      device: child,
+      commands: {
+        setOn: { action: (value: unknown) => value ? 'On' : 'Off' },
+      },
+    }));
   }
 
   /**
@@ -205,35 +248,6 @@ export class Intercom extends LoxoneAccessory {
     this.platform.log.info(
       `[${this.device.name}] Camera configured: ${streamUrl}`,
     );
-  }
-
-  /**
-   * Registers all sub-controls exposed by the intercom device
-   * (e.g. door release buttons) as HomeKit switch services.
-   */
-  private registerChildItems(): void {
-    if (!this.device.subControls) {
-      return;
-    }
-
-    for (const childUuid in this.device.subControls) {
-      const child = this.device.subControls[childUuid];
-      const serviceName = child.name.replace(/\s/g, '');
-
-      this.Service[serviceName] = new Switch(
-        this.platform,
-        this.Accessory!,
-        child,
-      );
-
-      for (const stateName in child.states) {
-        const uuid = child.states[stateName];
-        this.ItemStates[uuid] = {
-          service: serviceName,
-          state: stateName,
-        };
-      }
-    }
   }
 
   private parseSecuredDetails(raw: unknown): SecuredDetails | undefined {

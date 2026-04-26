@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { IrrigationSystem } from '../../homekit/services/IrrigationSystem';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Represents a Loxone-controlled Irrigation accessory in HomeKit.
@@ -9,19 +9,28 @@ import { IrrigationSystem } from '../../homekit/services/IrrigationSystem';
  */
 export class Irrigation extends LoxoneAccessory {
   /**
-   * Configures HomeKit services and registers relevant state listeners.
+   * Plans HomeKit services and relevant state listeners.
    */
-  configureServices(): void {
-    // Define which Loxone states to track and which service they belong to
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, {
+      id: 'PrimaryService',
+      kind: 'irrigation-system',
+      commands: {
+        selectZone: { action: (value: unknown) => `select/${value}` },
+        setZoneDuration: {
+          action: (value: unknown) => {
+            const payload = value as { id?: number; duration?: number };
+            return `setDuration/${payload.id ?? 0}=${payload.duration ?? 0}`;
+          },
+        },
+      },
+    }, {
       [this.device.states.zones]: { service: 'PrimaryService', state: 'zones' },
       [this.device.states.currentZone]: { service: 'PrimaryService', state: 'currentZone' },
-    };
+    });
+  }
 
-    // Create and assign the IrrigationSystem HomeKit service
-    this.Service.PrimaryService = new IrrigationSystem(this.platform, this.Accessory!);
-
-    // Manually push cached zones state to simulate an initial update
-    this.platform.LoxoneHandler.pushCachedState(this, this.device.states.zones);
+  protected afterSetup(): void {
+    this.platform.stateRouter.replayCachedState(this, this.device.states.zones);
   }
 }

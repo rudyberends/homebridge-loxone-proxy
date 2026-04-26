@@ -1,9 +1,11 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { Outlet } from '../../homekit/services/Outlet';
-import { Switch as SwitchService } from '../../homekit/services/Switch';
+import { HomeKitServiceKind } from '../../homekit/HomeKitServiceFactory';
+import { AccessoryPlan, ServicePlan } from '../../platform/AccessoryPlan';
 import { ColorPickerV2 } from './ColorPickerV2';
 import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
+import { LoxoneUpdateMessage } from '../LoxoneTypes';
+import { dispatchHomeKitUpdate } from '../../homekit/HomeKitServiceAdapter';
 
 const typeClassMap = {
   'ColorPickerV2': ColorPickerV2,
@@ -24,62 +26,83 @@ export class LightControllerV2 extends LoxoneAccessory {
 
   /**
    * Determines whether this control is supported.
-   * Always registers subcontrols as independent accessories.
    * Returns true only when mood switches are enabled in the plugin configuration.
    */
   isSupported(): boolean {
-    this.registerChildItems();
-    return this.platform.config.options.MoodSwitches === 'enabled';
+    return this.platform.config.options?.MoodSwitches === 'enabled';
   }
 
   /**
-   * Configures HomeKit services for the main LightController accessory.
-   * Maps the active mood state and registers one service per mood.
+   * Always registers subcontrols as independent accessories before deciding
+   * whether the mood accessory itself should be exposed.
    */
-  configureServices(): void {
+  protected beforeSetup(): void {
+    this.registerChildItems();
+  }
 
-    this.device.name = this.platform.generateUniqueName(this.device.room, 'Moods', this.device.uuidAction);
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    this.device.name = 'Moods';
 
-    this.ItemStates = {
-      [this.device.states.activeMoods]: {
-        service: 'PrimaryService',
-        state: 'activeMoods',
+    return {
+      ...super.createAccessoryPlan(uuid),
+      services: this.createMoodServicePlans(),
+      stateBindings: {
+        [this.device.states.activeMoods]: {
+          service: 'PrimaryService',
+          state: 'activeMoods',
+        },
       },
     };
+  }
 
-    // Push cached activeMoods state to initialize mood switches
-    this.platform.LoxoneHandler.pushCachedState(
+  protected afterSetup(): void {
+    this.platform.stateRouter.replayCachedState(
       this,
       this.device.states.activeMoods,
     );
-
-    this.registerMoodSwitches();
   }
 
   /**
    * Registers virtual switches for each mood as HomeKit services
    * on the main LightController accessory.
    */
-  registerMoodSwitches(): void {
-    const moods = JSON.parse(this.platform.LoxoneHandler.getLastCachedValue(this.device.states.moodList));
+  private createMoodServicePlans(): ServicePlan[] {
+    const cachedMoodList = this.platform.stateRouter.getCachedValue(this.device.states.moodList);
+    if (typeof cachedMoodList !== 'string') {
+      this.platform.log.warn(`[${this.device.name}] Missing moodList cache; mood switches were not registered.`);
+      return [];
+    }
 
-    moods
+    const moods = JSON.parse(cachedMoodList) as { id: number; name: string }[];
+
+    return moods
       .filter(mood => mood.id !== 778) // ignore default "off" mood
-      .forEach(mood => {
+      .map(mood => {
         const moodItem = {
           ...this.device,
           name: mood.name,
-          cat: mood.id,
+          cat: String(mood.id),
           details: {},
           subControls: {},
         };
 
         const serviceType = Switch.determineSwitchType(moodItem, this.platform.config);
+        const kind: HomeKitServiceKind = serviceType === 'outlet' ? 'outlet' : 'switch';
 
-        this.Service[mood.name] =
-          serviceType === 'outlet'
-            ? new Outlet(this.platform, this.Accessory!, moodItem, this.handleLoxoneCommand.bind(this))
-            : new SwitchService(this.platform, this.Accessory!, moodItem, this.handleLoxoneCommand.bind(this));
+        return {
+          id: mood.name,
+          kind,
+          name: mood.name,
+          device: moodItem,
+          commands: {
+            setOn: {
+              uuid: this.device.uuidAction,
+              action: (value: unknown, context) =>
+                value && context.device?.cat ? `changeTo/${context.device.cat}` : undefined,
+              source: this.device.name,
+            },
+          },
+        };
       });
   }
 
@@ -149,29 +172,21 @@ export class LightControllerV2 extends LoxoneAccessory {
    * Updates mood switch services when the active mood changes.
    * Sets the active mood switch to "on" and all others to "off".
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected callBackHandler(message: any): void {
+  public callBackHandler(message: LoxoneUpdateMessage): void {
     const currentID = parseInt(
       String(message.value).replace(/[[\]']+/g, ''),
       10,
     );
 
     for (const serviceName in this.Service) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const service: any = this.Service[serviceName];
+      const service = this.Service[serviceName];
+      if (!service.device) {
+        continue;
+      }
+
       message.value = currentID === parseInt(service.device.cat, 10) ? 1 : 0;
-      service.updateService(message);
+      dispatchHomeKitUpdate(service, message);
     }
   }
 
-  /**
-   * Sends a mood change command to the Loxone Miniserver.
-   */
-  protected handleLoxoneCommand(value: string): void {
-    const command = `changeTo/${value}`;
-    this.platform.LoxoneHandler.sendCommand(
-      this.device.uuidAction,
-      command,
-    );
-  }
 }

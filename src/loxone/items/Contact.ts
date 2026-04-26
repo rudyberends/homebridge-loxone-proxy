@@ -1,17 +1,14 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { ContactSensor } from '../../homekit/services/ContactSensor';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone Window/Door Item
 */
 export class Contact extends LoxoneAccessory {
 
-  configureServices(): void {
-
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, { id: 'PrimaryService', kind: 'contact-sensor' }, {
       [this.device.states.windowStates]: {'service': 'PrimaryService', 'state': 'windowStates'},
-    };
-
-    this.Service.PrimaryService = new ContactSensor(this.platform, this.Accessory!);
+    });
   }
 }

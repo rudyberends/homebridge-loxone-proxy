@@ -11,7 +11,7 @@ interface ZoneDefinition {
   duration: number;
 }
 
-type CommandHandler = (command: string) => void;
+type CommandHandler = (commandId: string, value?: unknown) => void;
 
 export class Valve {
   private readonly valveService: Service;
@@ -28,13 +28,13 @@ export class Valve {
    * @param platform - Homebridge platform context
    * @param accessory - Homebridge accessory this valve is part of
    * @param zone - Configuration object for the zone
-   * @param sendCommand - Optional function to send commands to external systems like Loxone
+   * @param emitCommand - Optional command emitter for the owning irrigation service
    */
   constructor(
     private readonly platform: any,
     private readonly accessory: any,
     private readonly zone: ZoneDefinition,
-    private readonly sendCommand: CommandHandler = () => void 0,
+    private readonly emitCommand: CommandHandler = () => void 0,
   ) {
     const { Characteristic, Service } = this.platform;
 
@@ -74,9 +74,9 @@ export class Valve {
       .on('set', (value, callback) => {
         const zoneId = this.meta.id + 1;
         if (value === 1) {
-          this.sendCommand(`select/${zoneId}`);
+          this.emitCommand('selectZone', zoneId);
         } else {
-          this.sendCommand('select/0');
+          this.emitCommand('selectZone', 0);
         }
         callback(null);
       });
@@ -88,7 +88,7 @@ export class Valve {
         const duration = typeof value === 'number' ? Math.max(0, Math.floor(value)) : 0;
         this.valveService.updateCharacteristic(this.platform.Characteristic.SetDuration, duration);
         this.meta.duration = duration;
-        this.sendCommand(`setDuration/${this.meta.id}=${duration}`);
+        this.emitCommand('setZoneDuration', { id: this.meta.id, duration });
         callback(null);
       });
   }

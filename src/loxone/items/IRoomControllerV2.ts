@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { Thermostat } from '../../homekit/services/Thermostat';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone IRoomControllerV2 Item
@@ -12,14 +12,31 @@ export class IRoomControllerV2 extends LoxoneAccessory {
     return true;
   }
 
-  configureServices(): void {
-
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, {
+      id: 'PrimaryService',
+      kind: 'thermostat',
+      commands: {
+        setTargetTemperature: {
+          action: (value: unknown) => {
+            const currentDate = new Date();
+            const nextDayAtMidnight = new Date(
+              currentDate.getFullYear(),
+              currentDate.getMonth(),
+              currentDate.getDate() + 1,
+              0,
+              0,
+              0,
+            );
+            const secondsDifference = (nextDayAtMidnight.getTime() / 1000) - (new Date('2009-01-01T00:00:00Z').getTime() / 1000);
+            return `override/3/[${secondsDifference}]/${value}`;
+          },
+        },
+      },
+    }, {
       [this.device.states.tempActual]: {'service': 'PrimaryService', 'state': 'tempActual'},
       [this.device.states.tempTarget]: {'service': 'PrimaryService', 'state': 'tempTarget'},
       [this.device.states.operatingMode]: {'service': 'PrimaryService', 'state': 'operatingMode'},
-    };
-
-    this.Service.PrimaryService = new Thermostat(this.platform, this.Accessory!);
+    });
   }
 }

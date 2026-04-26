@@ -1,0 +1,146 @@
+{
+  "lastModified": "2026-04-26T00:00:00.000Z",
+  "msInfo": {
+    "serialNr": "504F94TEST",
+    "msName": "Test Miniserver",
+    "projectName": "Fixture Project",
+    "localUrl": "http://192.168.1.10",
+    "remoteUrl": "",
+    "tempUnit": 0,
+    "currency": "EUR",
+    "squareMeasure": "m2",
+    "location": "Fixture",
+    "languageCode": "en",
+    "heatPeriodStart": "10-01",
+    "heatPeriodEnd": "04-30",
+    "coolPeriodStart": "05-01",
+    "coolPeriodEnd": "09-30",
+    "catTitle": "Category",
+    "roomTitle": "Room",
+    "miniserverType": 1,
+    "deviceMonitor": "",
+    "currentUser": {
+      "name": "homebridge",
+      "uuid": "user-homebridge",
+      "isAdmin": false,
+      "changePassword": false,
+      "userRights": 0
+    }
+  },
+  "globalStates": {},
+  "operatingModes": {},
+  "rooms": {
+    "room-kitchen": {
+      "uuid": "room-kitchen",
+      "name": "Kitchen",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    },
+    "room-living": {
+      "uuid": "room-living",
+      "name": "Living",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    }
+  },
+  "cats": {
+    "cat-lighting": {
+      "uuid": "cat-lighting",
+      "name": "Lighting",
+      "image": "Light",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": "lighting",
+      "color": "#ffffff"
+    },
+    "cat-shading": {
+      "uuid": "cat-shading",
+      "name": "Shading",
+      "image": "Jalousie",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": "shading",
+      "color": "#ffffff"
+    }
+  },
+  "controls": {
+    "ctrl-switch": {
+      "name": "Kitchen Switch",
+      "type": "Switch",
+      "uuidAction": "ctrl-switch",
+      "room": "room-kitchen",
+      "cat": "cat-lighting",
+      "catIcon": "",
+      "defaultIcon": "Light",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "active": "state-switch-active"
+      }
+    },
+    "ctrl-dimmer": {
+      "name": "Living Dimmer",
+      "type": "Dimmer",
+      "uuidAction": "ctrl-dimmer",
+      "room": "room-living",
+      "cat": "cat-lighting",
+      "catIcon": "",
+      "defaultIcon": "Light",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "position": "state-dimmer-position"
+      }
+    },
+    "ctrl-jalousie": {
+      "name": "Kitchen Blind",
+      "type": "Jalousie",
+      "uuidAction": "ctrl-jalousie",
+      "room": "room-kitchen",
+      "cat": "cat-shading",
+      "catIcon": "",
+      "defaultIcon": "Jalousie",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "position": "state-jalousie-position",
+        "shadePosition": "state-jalousie-shade"
+      }
+    }
+  },
+  "weatherServer": {
+    "states": {
+      "actual": "",
+      "forecast": ""
+    },
+    "format": {
+      "relativeHumidity": "",
+      "temperature": "",
+      "windSpeed": "",
+      "precipitation": "",
+      "barometricPressure": ""
+    },
+    "weatherTypeTexts": {},
+    "weatherFieldTypes": {}
+  },
+  "times": {},
+  "mediaServer": {},
+  "autopilot": {},
+  "messageCenter": {
+    "name": "",
+    "uuidAction": "",
+    "states": {
+      "changed": ""
+    }
+  }
+}

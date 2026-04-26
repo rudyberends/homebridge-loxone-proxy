@@ -1,5 +1,5 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { OccupancySensor } from '../../homekit/services/OccupancySensor';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone PresenceDetector Item
@@ -11,11 +11,9 @@ export class PresenceDetector extends LoxoneAccessory {
     return true;
   }
 
-  configureServices(): void {
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, { id: 'PrimaryService', kind: 'occupancy-sensor' }, {
       [this.device.states.active]: {'service': 'PrimaryService', 'state': 'active'},
-    };
-
-    this.Service.PrimaryService = new OccupancySensor(this.platform, this.Accessory!);
+    });
   }
 }

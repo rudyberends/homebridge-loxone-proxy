@@ -1,18 +1,15 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { Fanv2 } from '../../homekit/services/Fanv2';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone Ventilation Item
 */
 export class Ventilation extends LoxoneAccessory {
 
-  configureServices(): void {
-
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, { id: 'PrimaryService', kind: 'fanv2' }, {
       [this.device.states.mode]: {'service': 'PrimaryService', 'state': 'mode'},
       [this.device.states.speed]: {'service': 'PrimaryService', 'state': 'speed'},
-    };
-
-    this.Service.PrimaryService = new Fanv2(this.platform, this.Accessory!);
+    });
   }
 }

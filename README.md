@@ -8,8 +8,45 @@
 
 Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.
 
-The plugin uses Loxone [Lxcommunicator](https://github.com/Loxone/lxcommunicator) to setup a websocket connection to a Loxone miniserver.
-It retrieves the loxone [Structure-File](https://www.loxone.com/wp-content/uploads/datasheets/StructureFile.pdf) and tries to map all items to HomeKit accessories. The websocket connection allows for realtime 2 way updates between Loxone and HomeKit.
+The plugin uses [`@rudyberends/loxone-ts-api`](https://www.npmjs.com/package/@rudyberends/loxone-ts-api) to set up and maintain the connection to a Loxone Miniserver.
+It retrieves the Loxone [Structure-File](https://www.loxone.com/wp-content/uploads/datasheets/StructureFile.pdf) and maps supported controls to HomeKit accessories. The connection allows realtime two-way updates between Loxone and HomeKit.
+
+# Requirements
+
+| Requirement | Version |
+| --- | --- |
+| Node.js | 20 or newer |
+| Homebridge | 1.7.0 or newer, including Homebridge 2 beta |
+
+# Architecture
+
+This plugin is intentionally focused on one integration path: Loxone <-> HomeKit. The current architecture keeps that path explicit:
+
+| Layer | Responsibility |
+| --- | --- |
+| Loxone communication | Connects to the Miniserver through `@rudyberends/loxone-ts-api`, loads the Structure File, subscribes to state updates, and sends commands. |
+| Control mapping | Normalizes Loxone rooms, categories, controls, states, and command bindings into plugin-owned types. |
+| Accessory planning | Converts each supported Loxone control into a declarative HomeKit accessory plan. |
+| HomeKit reconciliation | Creates, updates, restores, and removes Homebridge platform accessories from those plans. |
+| Services | Bind HomeKit characteristics to Loxone state IDs and command IDs. |
+
+Commands and states are kept separate on purpose. Item implementations describe what HomeKit should expose, which Loxone state UUIDs feed it, and which Loxone command should be executed for each HomeKit action. Runtime code then routes state updates and command execution through shared infrastructure instead of letting each item talk to the Miniserver directly.
+
+The Loxone transport is also explicit. The plugin depends on a small internal transport contract, while the concrete implementation lives in the `@rudyberends/loxone-ts-api` adapter. Because that package is maintained together with this plugin, the adapter is intentionally thin: it keeps ownership boundaries clear without duplicating Loxone communication logic.
+
+The detailed architecture rules and release commit conventions are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+# Breaking Changes
+
+The refactor that migrates communication from `lxcommunicator` to `@rudyberends/loxone-ts-api` is intended for a breaking beta release. Existing Homebridge configuration values are kept where possible, but the runtime requirement is now Node.js 20 or newer.
+
+Before publishing the beta:
+
+- Bump the plugin with a breaking version number.
+- Publish and verify `@rudyberends/loxone-ts-api` before publishing this plugin.
+- Run `npm run lint`, `npm test`, and a real Homebridge smoke test against a Miniserver.
+- Call out Node.js 20+ in the release notes.
+- Tell beta users that Homebridge cached accessories may need review if names, rooms, or exposed controls changed.
 
 # Mapped Items
 The following list displays all supported itemtypes supported by this plugin.

@@ -89,8 +89,7 @@ export class GarageDoorOpener extends BaseService {
     this.platform.log.debug('Triggered SET TargetDoorState: ' + value);
     this.State.TargetDoorState = value;
 
-    const command = value === 0 ? 'open' : 'close';
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    this.executeCommand('setTargetDoorState', value);
   }
 
   /**

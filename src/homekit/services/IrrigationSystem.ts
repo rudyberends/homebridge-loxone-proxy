@@ -80,7 +80,7 @@ export class IrrigationSystem extends BaseService {
         this.platform,
         this.accessory,
         zone,
-        (command) => this.sendCommand(command),
+        (commandId, value) => this.executeCommand(commandId, value),
       );
       this.zoneValves.set(zone.id, valve);
     });
@@ -100,12 +100,4 @@ export class IrrigationSystem extends BaseService {
     }, 1000);
   }
 
-  /**
-   * Sends a command string to the associated Loxone device.
-   * @param command - The command to send (e.g., 'select/1')
-   */
-  private sendCommand(command: string): void {
-    this.platform.log.debug(`[${this.device.name}] Sending command to Loxone: ${command}`);
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
-  }
 }

@@ -1,0 +1,131 @@
+{
+  "lastModified": "2026-04-26T00:00:00.000Z",
+  "msInfo": {
+    "serialNr": "504F94LIGHT",
+    "msName": "Lighting Fixture",
+    "projectName": "Lighting Project",
+    "localUrl": "http://192.168.1.10",
+    "remoteUrl": "",
+    "tempUnit": 0,
+    "currency": "EUR",
+    "squareMeasure": "m2",
+    "location": "Fixture",
+    "languageCode": "en",
+    "heatPeriodStart": "10-01",
+    "heatPeriodEnd": "04-30",
+    "coolPeriodStart": "05-01",
+    "coolPeriodEnd": "09-30",
+    "catTitle": "Category",
+    "roomTitle": "Room",
+    "miniserverType": 1,
+    "deviceMonitor": "",
+    "currentUser": {
+      "name": "homebridge",
+      "uuid": "user-homebridge",
+      "isAdmin": false,
+      "changePassword": false,
+      "userRights": 0
+    }
+  },
+  "globalStates": {},
+  "operatingModes": {},
+  "rooms": {
+    "room-living": {
+      "uuid": "room-living",
+      "name": "Living",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    }
+  },
+  "cats": {
+    "cat-lighting": {
+      "uuid": "cat-lighting",
+      "name": "Lighting",
+      "image": "Light",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": "lighting",
+      "color": "#ffffff"
+    }
+  },
+  "controls": {
+    "ctrl-light-controller": {
+      "name": "Living Lights",
+      "type": "LightControllerV2",
+      "uuidAction": "ctrl-light-controller",
+      "room": "room-living",
+      "cat": "cat-lighting",
+      "catIcon": "",
+      "defaultIcon": "Light",
+      "defaultRating": 0,
+      "isFavorite": true,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "activeMoods": "state-light-active-moods",
+        "moodList": "state-light-mood-list"
+      },
+      "subControls": {
+        "ctrl-light-dimmer": {
+          "name": "Ceiling",
+          "type": "Dimmer",
+          "uuidAction": "ctrl-light-dimmer",
+          "room": "room-living",
+          "cat": "cat-lighting",
+          "catIcon": "",
+          "defaultIcon": "Light",
+          "defaultRating": 0,
+          "isFavorite": false,
+          "isSecured": false,
+          "details": {},
+          "states": {
+            "position": "state-light-dimmer-position"
+          }
+        },
+        "ctrl-light-color": {
+          "name": "Accent",
+          "type": "ColorPickerV2",
+          "uuidAction": "ctrl-light-color",
+          "room": "room-living",
+          "cat": "cat-lighting",
+          "catIcon": "",
+          "defaultIcon": "Light",
+          "defaultRating": 0,
+          "isFavorite": false,
+          "isSecured": false,
+          "details": {},
+          "states": {
+            "color": "state-light-color"
+          }
+        }
+      }
+    }
+  },
+  "weatherServer": {
+    "states": {
+      "actual": "",
+      "forecast": ""
+    },
+    "format": {
+      "relativeHumidity": "",
+      "temperature": "",
+      "windSpeed": "",
+      "precipitation": "",
+      "barometricPressure": ""
+    },
+    "weatherTypeTexts": {},
+    "weatherFieldTypes": {}
+  },
+  "times": {},
+  "mediaServer": {},
+  "autopilot": {},
+  "messageCenter": {
+    "name": "",
+    "uuidAction": "",
+    "states": {
+      "changed": ""
+    }
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "lastModified": "2026-04-26T00:00:00.000Z",
+  "msInfo": {
+    "serialNr": "504F94FILTER",
+    "msName": "Filter Fixture",
+    "projectName": "Filter Project",
+    "localUrl": "http://192.168.1.10",
+    "remoteUrl": "",
+    "tempUnit": 0,
+    "currency": "EUR",
+    "squareMeasure": "m2",
+    "location": "Fixture",
+    "languageCode": "en",
+    "heatPeriodStart": "10-01",
+    "heatPeriodEnd": "04-30",
+    "coolPeriodStart": "05-01",
+    "coolPeriodEnd": "09-30",
+    "catTitle": "Category",
+    "roomTitle": "Room",
+    "miniserverType": 1,
+    "deviceMonitor": "",
+    "currentUser": {
+      "name": "homebridge",
+      "uuid": "user-homebridge",
+      "isAdmin": false,
+      "changePassword": false,
+      "userRights": 0
+    }
+  },
+  "globalStates": {},
+  "operatingModes": {},
+  "rooms": {
+    "room-kitchen": {
+      "uuid": "room-kitchen",
+      "name": "Kitchen",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    },
+    "room-garage": {
+      "uuid": "room-garage",
+      "name": "Garage",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    },
+    "room-technical": {
+      "uuid": "room-technical",
+      "name": "Technical",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    }
+  },
+  "cats": {
+    "cat-misc": {
+      "uuid": "cat-misc",
+      "name": "Misc",
+      "image": "Misc",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": "misc",
+      "color": "#ffffff"
+    }
+  },
+  "controls": {
+    "unsupported-kitchen-1": {
+      "name": "Kitchen Unsupported 1",
+      "type": "UnsupportedFixtureType",
+      "uuidAction": "unsupported-kitchen-1",
+      "room": "room-kitchen",
+      "cat": "cat-misc",
+      "catIcon": "",
+      "defaultIcon": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "active": "state-unsupported-kitchen-1"
+      }
+    },
+    "unsupported-garage-1": {
+      "name": "Garage Unsupported 1",
+      "type": "UnsupportedFixtureType",
+      "uuidAction": "unsupported-garage-1",
+      "room": "room-garage",
+      "cat": "cat-misc",
+      "catIcon": "",
+      "defaultIcon": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "active": "state-unsupported-garage-1"
+      }
+    },
+    "excluded-technical-1": {
+      "name": "Technical Excluded",
+      "type": "Switch",
+      "uuidAction": "excluded-technical-1",
+      "room": "room-technical",
+      "cat": "cat-misc",
+      "catIcon": "",
+      "defaultIcon": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "active": "state-excluded-technical-1"
+      }
+    }
+  },
+  "weatherServer": {
+    "states": {
+      "actual": "",
+      "forecast": ""
+    },
+    "format": {
+      "relativeHumidity": "",
+      "temperature": "",
+      "windSpeed": "",
+      "precipitation": "",
+      "barometricPressure": ""
+    },
+    "weatherTypeTexts": {},
+    "weatherFieldTypes": {}
+  },
+  "times": {},
+  "mediaServer": {},
+  "autopilot": {},
+  "messageCenter": {
+    "name": "",
+    "uuidAction": "",
+    "states": {
+      "changed": ""
+    }
+  }
+}

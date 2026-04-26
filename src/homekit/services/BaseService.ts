@@ -1,6 +1,7 @@
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { Control } from '../../loxone/StructureFile';
+import { HomeKitCommandExecutor } from '../HomeKitServiceFactory';
 
 /**
  * BaseService
@@ -21,7 +22,7 @@ export class BaseService {
     readonly platform: LoxonePlatform,
     readonly accessory: PlatformAccessory,
     readonly secondaryService?: Control, // for aditional services on same Accesory
-    readonly handleLoxoneCommand?: (value : string) => void,
+    private readonly commandExecutor?: HomeKitCommandExecutor,
 
   ) {
 
@@ -38,6 +39,19 @@ export class BaseService {
    */
   setupService(): void {
     // This is a placeholder method that can be overridden by the derived classes.
+  }
+
+  updateService(_message: never): void {
+    // Services that react to Loxone state changes override this.
+  }
+
+  protected executeCommand(commandId: string, value?: unknown): void {
+    if (!this.commandExecutor) {
+      this.platform.log.warn(`[${this.device.name}] Missing command executor for: ${commandId}`);
+      return;
+    }
+
+    this.commandExecutor(commandId, value, this);
   }
 
   /**

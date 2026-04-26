@@ -1,5 +1,6 @@
 import { Intercom } from './Intercom';
-import { MotionSensor } from '../../homekit/services/MotionSensor';
+import { buildHomeKitService } from '../../homekit/HomeKitServiceFactory';
+import { dispatchHomeKitUpdate } from '../../homekit/HomeKitServiceAdapter';
 import { Control } from '../StructureFile';
 
 /**
@@ -87,17 +88,26 @@ export class IntercomV2 extends Intercom {
     const [, motionDevice] = this.pickBestMotionCandidate(candidates);
     const serviceName = 'NativeMotion';
 
-    this.Service[serviceName] = new MotionSensor(this.platform, this.Accessory!, motionDevice);
+    this.Service[serviceName] = buildHomeKitService(this.platform, this.Accessory!, {
+      id: serviceName,
+      kind: 'motion-sensor',
+      device: motionDevice,
+    });
 
     for (const stateName in motionDevice.states) {
       const stateUuid = motionDevice.states[stateName];
-      this.platform.LoxoneHandler.registerListenerForUUID(stateUuid, (message: unknown) => {
+      this.platform.LoxoneHandler.registerListenerForUUID(stateUuid, (message) => {
         const normalized = this.normalizeBinaryValue(message);
         if (normalized === undefined) {
           return;
         }
 
-        (this.Service[serviceName] as MotionSensor).updateService({ value: normalized });
+        dispatchHomeKitUpdate(this.Service[serviceName], {
+          uuid: stateUuid,
+          service: serviceName,
+          state: stateName,
+          value: normalized,
+        });
       });
     }
 

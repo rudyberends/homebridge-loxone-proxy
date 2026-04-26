@@ -74,11 +74,6 @@ export class LockMechanism extends BaseService {
 
     this.platform.log.debug('Triggered SET LockTargetState:' + value);
 
-    // If switch reversal is enabled, reverse the order of the switch
-    const reverse = this.platform.config.switchAlias?.ReverseLockSwitch;
-    const command = reverse ? (this.State.LockTargetState === 0 ? 'Off' : 'On') : (this.State.LockTargetState === 0 ? 'On' : 'Off');
-
-    this.platform.log.debug(`[${this.device.name}] - send message: ${command}`);
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    this.executeCommand('setTargetState', value);
   }
 }

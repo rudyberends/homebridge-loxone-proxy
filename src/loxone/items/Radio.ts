@@ -1,32 +1,37 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { Outlet } from '../../homekit/services/Outlet';
-import { Switch as SwitchService } from '../../homekit/services/Switch';
+import { HomeKitServiceKind } from '../../homekit/HomeKitServiceFactory';
+import { AccessoryPlan, ServicePlan } from '../../platform/AccessoryPlan';
 import { Switch } from './Switch';
+import { LoxoneUpdateMessage } from '../LoxoneTypes';
+import { dispatchHomeKitUpdate } from '../../homekit/HomeKitServiceAdapter';
 
 /**
  * Loxone Radio Item
  */
 export class Radio extends LoxoneAccessory {
 
-  configureServices(): void {
-    this.ItemStates = {
-      [this.device.states.activeOutput]: {
-        service: 'PrimaryService',
-        state: 'activeOutput',
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return {
+      ...super.createAccessoryPlan(uuid),
+      services: this.createRadioServicePlans(),
+      stateBindings: {
+        [this.device.states.activeOutput]: {
+          service: 'PrimaryService',
+          state: 'activeOutput',
+        },
       },
     };
-
-    this.registerRadioSwitches();
   }
 
   /**
    * Registers virtual switches for radio outputs
    */
-  registerRadioSwitches(): void {
+  private createRadioServicePlans(): ServicePlan[] {
     // Insert "allOff" virtual item at 0
     this.device.details!.outputs![0] = this.device.details.allOff;
 
     const outputs = this.device.details.outputs;
+    const services: ServicePlan[] = [];
 
     for (const key in outputs) {
       const rawName = outputs[key];
@@ -50,42 +55,46 @@ export class Radio extends LoxoneAccessory {
 
       this.platform.log.info(`[Radio: ${uniqueName}] resolved to service type: ${serviceType}`);
 
-      this.Service[uniqueName] =
-        serviceType === 'outlet'
-          ? new Outlet(this.platform, this.Accessory!, radioItem, this.handleLoxoneCommand.bind(this))
-          : new SwitchService(this.platform, this.Accessory!, radioItem, this.handleLoxoneCommand.bind(this));
+      const kind: HomeKitServiceKind = serviceType === 'outlet' ? 'outlet' : 'switch';
+      services.push({
+        id: uniqueName,
+        kind,
+        name: uniqueName,
+        device: radioItem,
+        commands: {
+          setOn: {
+            uuid: this.device.uuidAction,
+            action: (value: unknown, context) => {
+              if (!value || !context.device?.cat) {
+                return undefined;
+              }
+              const numeric = Number(context.device.cat);
+              return numeric === 0 ? 'reset' : String(context.device.cat);
+            },
+            source: this.device.name,
+          },
+        },
+      });
     }
+
+    return services;
   }
 
   /**
    * Updates all radio switches when activeOutput changes
    */
-  callBackHandler(message: {
-    uuid: string;
-    state: string;
-    service: string;
-    value: string | number;
-  }): void {
+  callBackHandler(message: LoxoneUpdateMessage): void {
     const active = Number(message.value);
 
     for (const serviceName in this.Service) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const service: any = this.Service[serviceName];
-      message.value = active === Number(service.device.cat) ? 1 : 0;
+      const service = this.Service[serviceName];
+      if (!service.device) {
+        continue;
+      }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.Service[serviceName] as any).updateService(message);
+      message.value = active === Number(service.device.cat) ? 1 : 0;
+      dispatchHomeKitUpdate(service, message);
     }
   }
 
-  /**
-   * Sends command to Loxone Miniserver
-   */
-  protected handleLoxoneCommand(value: string): void {
-    const numeric = Number(value);
-    const command = numeric === 0 ? 'reset' : value;
-
-    this.platform.log.debug(`[${this.device.name}] Send command: ${command}`);
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
-  }
 }

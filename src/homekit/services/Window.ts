@@ -93,8 +93,7 @@ export class Window extends BaseService {
   handleTargetPositionSet(value) {
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetPosition:` + value);
 
-    const command = `moveToPosition/${value}`;
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    this.executeCommand('setTargetPosition', value);
   }
 
   /**

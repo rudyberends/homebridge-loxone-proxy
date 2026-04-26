@@ -126,18 +126,8 @@ export class Thermostat extends BaseService {
    */
   handleTargetTemperatureSet(value) {
 
-    // Get the current date and time
-    const currentDate = new Date();
-    const nextDayAtMidnight = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 1, 0, 0, 0);
-    const nextDayAtMidnightInSeconds = nextDayAtMidnight.getTime() / 1000;
-
-    // Calculate the difference between the Loxone Epoch and the next day at 12 am
-    const secondsDifference = nextDayAtMidnightInSeconds - this.LoxoneEpoch;
-
-    // This will trigger an override on the Heating Schedule
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetTemperature:${value}`);
-    const command = `override/3/[${secondsDifference}]/${value}`;
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    this.executeCommand('setTargetTemperature', value);
   }
 
   /**

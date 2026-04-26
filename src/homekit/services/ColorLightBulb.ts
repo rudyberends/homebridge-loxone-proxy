@@ -109,15 +109,13 @@ export class ColorLightBulb extends LightBulb {
     //this.lastUpdate = Date.now();
 
     const { device, platform, State } = this;
-    const { name, uuidAction } = device;
-    const { LoxoneHandler } = platform;
+    const { name } = device;
 
-    const command = this.lastSetMode === 'colortemperature'
-      ? `temp(${State.Brightness},${homekitToLoxoneColorTemperature(State.ColorTemperature)})`
-      : `hsv(${State.Hue},${State.Saturation},${State.Brightness})`;
-
-    platform.log.debug(`[${name}] HomeKit - send message: ${command}`);
-    LoxoneHandler.sendCommand(uuidAction, command);
+    platform.log.debug(`[${name}] HomeKit - set color state`);
+    this.executeCommand('setColorState', {
+      ...State,
+      mode: this.lastSetMode,
+    });
 
     State.On = State.Brightness > 0;
     this.rememberOnBrightness();

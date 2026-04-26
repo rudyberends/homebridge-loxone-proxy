@@ -1,0 +1,152 @@
+{
+  "lastModified": "2026-04-26T00:00:00.000Z",
+  "msInfo": {
+    "serialNr": "504F94CLIMATE",
+    "msName": "Climate Fixture",
+    "projectName": "Climate Project",
+    "localUrl": "http://192.168.1.10",
+    "remoteUrl": "",
+    "tempUnit": 0,
+    "currency": "EUR",
+    "squareMeasure": "m2",
+    "location": "Fixture",
+    "languageCode": "en",
+    "heatPeriodStart": "10-01",
+    "heatPeriodEnd": "04-30",
+    "coolPeriodStart": "05-01",
+    "coolPeriodEnd": "09-30",
+    "catTitle": "Category",
+    "roomTitle": "Room",
+    "miniserverType": 1,
+    "deviceMonitor": "",
+    "currentUser": {
+      "name": "homebridge",
+      "uuid": "user-homebridge",
+      "isAdmin": false,
+      "changePassword": false,
+      "userRights": 0
+    }
+  },
+  "globalStates": {},
+  "operatingModes": {},
+  "rooms": {
+    "room-bedroom": {
+      "uuid": "room-bedroom",
+      "name": "Bedroom",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    },
+    "room-office": {
+      "uuid": "room-office",
+      "name": "Office",
+      "image": "",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": 0
+    }
+  },
+  "cats": {
+    "cat-climate": {
+      "uuid": "cat-climate",
+      "name": "Climate",
+      "image": "Climate",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": "climate",
+      "color": "#ffffff"
+    },
+    "cat-shading": {
+      "uuid": "cat-shading",
+      "name": "Shading",
+      "image": "Jalousie",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "type": "shading",
+      "color": "#ffffff"
+    }
+  },
+  "controls": {
+    "ctrl-thermostat": {
+      "name": "Bedroom Controller",
+      "type": "IRoomControllerV2",
+      "uuidAction": "ctrl-thermostat",
+      "room": "room-bedroom",
+      "cat": "cat-climate",
+      "catIcon": "",
+      "defaultIcon": "Climate",
+      "defaultRating": 0,
+      "isFavorite": true,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "tempActual": "state-thermostat-actual",
+        "tempTarget": "state-thermostat-target",
+        "operatingMode": "state-thermostat-mode"
+      }
+    },
+    "ctrl-window": {
+      "name": "Office Window",
+      "type": "Window",
+      "uuidAction": "ctrl-window",
+      "room": "room-office",
+      "cat": "cat-shading",
+      "catIcon": "",
+      "defaultIcon": "Window",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "position": "state-window-position",
+        "targetPosition": "state-window-target",
+        "direction": "state-window-direction"
+      }
+    },
+    "ctrl-blind": {
+      "name": "Office Blind",
+      "type": "Jalousie",
+      "uuidAction": "ctrl-blind",
+      "room": "room-office",
+      "cat": "cat-shading",
+      "catIcon": "",
+      "defaultIcon": "Jalousie",
+      "defaultRating": 0,
+      "isFavorite": false,
+      "isSecured": false,
+      "details": {},
+      "states": {
+        "up": "state-blind-up",
+        "down": "state-blind-down",
+        "position": "state-blind-position",
+        "shadePosition": "state-blind-shade"
+      }
+    }
+  },
+  "weatherServer": {
+    "states": {
+      "actual": "",
+      "forecast": ""
+    },
+    "format": {
+      "relativeHumidity": "",
+      "temperature": "",
+      "windSpeed": "",
+      "precipitation": "",
+      "barometricPressure": ""
+    },
+    "weatherTypeTexts": {},
+    "weatherFieldTypes": {}
+  },
+  "times": {},
+  "mediaServer": {},
+  "autopilot": {},
+  "messageCenter": {
+    "name": "",
+    "uuidAction": "",
+    "states": {
+      "changed": ""
+    }
+  }
+}

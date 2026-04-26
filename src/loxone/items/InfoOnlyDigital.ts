@@ -1,35 +1,28 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
-import { LeakSensor } from '../../homekit/services/LeakSensor';
-import { MotionSensor } from '../../homekit/services/MotionSensor';
-import { SmokeSensor } from '../../homekit/services/SmokeSensor';
-import { LoxonePlatform } from '../../LoxonePlatform';  // Adjust as necessary for actual import
-import { Control } from '../StructureFile';
+import { HomeKitServiceKind } from '../../homekit/HomeKitServiceFactory';
+import { AccessoryPlan } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone InfoOnlyDigital Item
  */
 export class InfoOnlyDigital extends LoxoneAccessory {
-  private ServiceType?: new (platform: LoxonePlatform, accessory: any, device: any, camera?: any) => any; // Optional ServiceType
-
-  constructor(platform: LoxonePlatform, device: Control) {
-    super(platform, device);
-  }
+  private serviceKind?: HomeKitServiceKind;
 
   isSupported(): boolean {
     const { config } = this.platform;
     const aliases: Record<string, string> = config.InfoOnlyDigitalAlias;
 
-    const serviceTypeMap = new Map<string, new (platform: LoxonePlatform, accessory: any, device: any, camera?: any) => any>([
-      ['Motion', MotionSensor],
-      ['Smoke', SmokeSensor],
-      ['Leak', LeakSensor],
+    const serviceTypeMap = new Map<string, HomeKitServiceKind>([
+      ['Motion', 'motion-sensor'],
+      ['Smoke', 'smoke-sensor'],
+      ['Leak', 'leak-sensor'],
     ]);
 
     for (const [key, alias] of Object.entries(aliases)) {
       if (this.matchAlias(this.device.name, alias)) {
-        this.ServiceType = serviceTypeMap.get(key) || this.ServiceType; // Get service type from the map or retain default
+        this.serviceKind = serviceTypeMap.get(key) || this.serviceKind;
 
-        if (this.ServiceType) {
+        if (this.serviceKind) {
           this.device.name = `${this.device.room} (${this.device.name})`;
           return true;
         }
@@ -38,13 +31,9 @@ export class InfoOnlyDigital extends LoxoneAccessory {
     return false;
   }
 
-  configureServices(): void {
-    this.ItemStates = {
+  protected createAccessoryPlan(uuid: string): AccessoryPlan {
+    return this.createSingleServicePlan(uuid, { id: 'PrimaryService', kind: this.serviceKind! }, {
       [this.device.states.active]: { service: 'PrimaryService', state: 'active' },
-    };
-
-    if (this.ServiceType) {
-      this.Service.PrimaryService = new this.ServiceType(this.platform, this.Accessory, this.device);
-    }
+    });
   }
 }

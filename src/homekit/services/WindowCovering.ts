@@ -99,8 +99,7 @@ export class WindowCovering extends BaseService {
 
     const loxoneValue = 100 - parseInt(value);
 
-    const command = `manualPosition/${loxoneValue}`;
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    this.executeCommand('setTargetPosition', loxoneValue);
   }
 
   handleCurrentShadePositionGet() {
@@ -118,8 +117,7 @@ export class WindowCovering extends BaseService {
 
     const loxoneValue = (value + 90) * 100 / 180;
 
-    const command = `manualLamelle/${loxoneValue}`;
-    this.platform.LoxoneHandler.sendCommand(this.device.uuidAction, command);
+    this.executeCommand('setTargetHorizontalTiltAngle', loxoneValue);
   }
 
   handleObstructionDetectedGet() {

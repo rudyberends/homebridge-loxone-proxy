@@ -1320,9 +1320,9 @@ export class LoxoneTalkbackSession {
 
   private loadWrtcModule(): WrtcModuleLike {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const moduleValue = require('wrtc') as WrtcModuleLike;
+    const moduleValue = require('@roamhq/wrtc') as WrtcModuleLike;
     if (!moduleValue?.RTCPeerConnection) {
-      throw new Error('wrtc module does not expose RTCPeerConnection');
+      throw new Error('@roamhq/wrtc module does not expose RTCPeerConnection');
     }
     return moduleValue;
   }

@@ -34,6 +34,10 @@ export class AccessoryReconciler {
       );
     }
 
+    // Converge cached accessories on the freshly sanitized name. Older cache
+    // entries may hold names with characters HAP rejects (parentheses, %, …).
+    accessory.displayName = plan.displayName;
+
     accessory.context.device = plan.context.device;
     accessory.context.mapped = true;
     accessory.context.planId = plan.id;
@@ -72,7 +76,7 @@ export class AccessoryReconciler {
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
       .setCharacteristic(this.platform.Characteristic.Model, plan.room)
       .setCharacteristic(this.platform.Characteristic.SerialNumber, plan.source.uuidAction)
-      .setCharacteristic(this.platform.Characteristic.Name, accessory.displayName);
+      .setCharacteristic(this.platform.Characteristic.Name, plan.displayName);
   }
 }
 

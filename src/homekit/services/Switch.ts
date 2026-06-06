@@ -22,8 +22,11 @@ export class Switch extends BaseService {
     }
 
     if (this.secondaryService) {
+      // ConfiguredName is not a standard Switch characteristic; register it as
+      // optional so HAP does not warn each time we set the per-service name.
+      this.service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
       this.service.setCharacteristic(this.platform.Characteristic.Name, this.device.name);
-      this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, this.device.name); // Not supported, but does the job
+      this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, this.device.name);
     }
 
     this.service.getCharacteristic(this.platform.Characteristic.On)

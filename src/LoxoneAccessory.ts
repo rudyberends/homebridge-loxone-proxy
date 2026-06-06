@@ -199,6 +199,9 @@ export class LoxoneAccessory {
       return;
     }
 
+    // ServiceLabelIndex is not a standard Switch/Outlet characteristic; register
+    // it as optional so HAP does not warn each time we set the group index.
+    service.service.addOptionalCharacteristic(this.platform.Characteristic.ServiceLabelIndex);
     service.service.setCharacteristic(
       this.platform.Characteristic.ServiceLabelIndex,
       index + 1,

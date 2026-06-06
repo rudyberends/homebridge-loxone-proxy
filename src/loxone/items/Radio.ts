@@ -36,15 +36,20 @@ export class Radio extends LoxoneAccessory {
     for (const key in outputs) {
       const rawName = outputs[key];
 
-      const uniqueName = this.platform.generateUniqueName(
+      // Radio outputs are services within a single accessory, distinguished by
+      // their subtype. They must not pass through the global accessory-name
+      // registry, otherwise an output name that also occurs elsewhere in the run
+      // (another control or radio block) gets a spurious " 1" suffix.
+      const displayName = this.platform.generateUniqueName(
         this.device.room,
         rawName,
-        `${this.device.uuidAction}:radio:${key}`,
+        undefined,
+        true, // isSubItem: clean + room-prefixed name without global dedup
       );
 
       const radioItem = {
         ...this.device,
-        name: uniqueName,
+        name: displayName,
         type: 'Switch',
         cat: key,
         details: {},
@@ -53,13 +58,13 @@ export class Radio extends LoxoneAccessory {
 
       const serviceType = Switch.determineSwitchType(radioItem, this.platform.config);
 
-      this.platform.log.info(`[Radio: ${uniqueName}] resolved to service type: ${serviceType}`);
+      this.platform.log.info(`[Radio: ${displayName}] resolved to service type: ${serviceType}`);
 
       const kind: HomeKitServiceKind = serviceType === 'outlet' ? 'outlet' : 'switch';
       services.push({
-        id: uniqueName,
+        id: `${this.device.uuidAction}:radio:${key}`,
         kind,
-        name: uniqueName,
+        name: displayName,
         device: radioItem,
         commands: {
           setOn: {

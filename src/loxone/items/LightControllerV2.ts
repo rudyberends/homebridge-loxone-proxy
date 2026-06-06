@@ -88,6 +88,10 @@ export class LightControllerV2 extends LoxoneAccessory {
       return;
     }
 
+    this.platform.log.info(
+      `[Moods] Registered ${servicePlans.length} mood switch(es): ${servicePlans.map(s => s.name).join(', ')}`,
+    );
+
     // LightControllerV2 owns only mood services on its accessory; clear the map
     // so removed moods do not linger between moodList updates.
     this.Service = {};

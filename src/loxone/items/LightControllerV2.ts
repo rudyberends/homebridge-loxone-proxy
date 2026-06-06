@@ -4,7 +4,7 @@ import { AccessoryPlan, ServicePlan } from '../../platform/AccessoryPlan';
 import { ColorPickerV2 } from './ColorPickerV2';
 import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
-import { LoxoneUpdateMessage } from '../LoxoneTypes';
+import { LoxoneEventValue, LoxoneUpdateMessage } from '../LoxoneTypes';
 import { dispatchHomeKitUpdate } from '../../homekit/HomeKitServiceAdapter';
 
 const typeClassMap = {
@@ -40,15 +40,19 @@ export class LightControllerV2 extends LoxoneAccessory {
     this.registerChildItems();
   }
 
+  private static readonly MOOD_LABELS = {
+    namespace: 'arabic-numerals',
+  } as const;
+
   protected createAccessoryPlan(uuid: string): AccessoryPlan {
     this.device.name = 'Moods';
 
+    // Mood switches are not built here: the moodList state is not yet cached at
+    // mapping time. They are registered once moodList arrives (see afterSetup).
     return {
       ...super.createAccessoryPlan(uuid),
-      serviceLabels: {
-        namespace: 'arabic-numerals',
-      },
-      services: this.createMoodServicePlans(),
+      serviceLabels: LightControllerV2.MOOD_LABELS,
+      services: [],
       stateBindings: {
         [this.device.states.activeMoods]: {
           service: 'PrimaryService',
@@ -58,7 +62,37 @@ export class LightControllerV2 extends LoxoneAccessory {
     };
   }
 
+  /**
+   * The moodList state is never part of ItemStates, so it is not subscribed
+   * through the normal binding path. Register a dedicated listener so the
+   * Miniserver pushes it; mood switches are (re)built whenever it arrives.
+   */
   protected afterSetup(): void {
+    this.platform.LoxoneHandler.registerListenerForUUID(
+      this.device.states.moodList,
+      (message) => this.handleMoodList(message.value),
+    );
+  }
+
+  /**
+   * Builds the mood switches from a freshly received moodList payload and
+   * replays the active mood so HomeKit reflects the current state.
+   */
+  private handleMoodList(rawMoodList: LoxoneEventValue): void {
+    if (typeof rawMoodList !== 'string') {
+      return;
+    }
+
+    const servicePlans = this.createMoodServicePlans(rawMoodList);
+    if (servicePlans.length === 0) {
+      return;
+    }
+
+    // LightControllerV2 owns only mood services on its accessory; clear the map
+    // so removed moods do not linger between moodList updates.
+    this.Service = {};
+    this.applyServicePlans(servicePlans, LightControllerV2.MOOD_LABELS, true);
+
     this.platform.stateRouter.replayCachedState(
       this,
       this.device.states.activeMoods,
@@ -69,14 +103,8 @@ export class LightControllerV2 extends LoxoneAccessory {
    * Registers virtual switches for each mood as HomeKit services
    * on the main LightController accessory.
    */
-  private createMoodServicePlans(): ServicePlan[] {
-    const cachedMoodList = this.platform.stateRouter.getCachedValue(this.device.states.moodList);
-    if (typeof cachedMoodList !== 'string') {
-      this.platform.log.warn(`[${this.device.name}] Missing moodList cache; mood switches were not registered.`);
-      return [];
-    }
-
-    const moods = JSON.parse(cachedMoodList) as { id: number; name: string }[];
+  private createMoodServicePlans(rawMoodList: string): ServicePlan[] {
+    const moods = JSON.parse(rawMoodList) as { id: number; name: string }[];
 
     return moods
       .filter(mood => mood.id !== 778) // ignore default "off" mood

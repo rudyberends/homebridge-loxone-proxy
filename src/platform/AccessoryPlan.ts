@@ -28,6 +28,13 @@ export interface AccessoryPlan {
   serviceLabels?: {
     namespace: 'arabic-numerals' | 'dots';
   };
+  /**
+   * When true, services left on a restored accessory that are not part of this
+   * plan are removed. Only safe for accessories whose plan is the complete set
+   * of services (grouped switches); accessories that add services outside the
+   * plan (e.g. cameras configured asynchronously) must leave this unset.
+   */
+  pruneStale?: boolean;
   source: {
     type: string;
     uuidAction: string;

@@ -279,27 +279,27 @@ test('Lighting fixture keeps LightController moods and child light commands decl
   assert.equal(lightingFixture.controls['ctrl-light-controller'].room, 'room-living');
 
   const lightController = Object.create(LightControllerV2.prototype);
-  lightController.platform = makePlatform({
-    stateRouter: {
-      getCachedValue: () => JSON.stringify([
-        { id: 778, name: 'Off' },
-        { id: 7, name: 'Dinner' },
-        { id: 8, name: 'Reading' },
-      ]),
-    },
-  });
+  lightController.platform = makePlatform();
   lightController.device = controller;
   lightController.ItemStates = {};
   const moodPlan = lightController.createAccessoryPlan('light-plan');
 
   assert.deepEqual(moodPlan.serviceLabels, { namespace: 'arabic-numerals' });
-  assert.equal(moodPlan.services.length, 2);
-  assert.equal(moodPlan.services[0].commands.setOn.uuid, 'ctrl-light-controller');
-  assert.equal(command(moodPlan, 'setOn', true, 0), 'changeTo/7');
-  assert.equal(command(moodPlan, 'setOn', true, 1), 'changeTo/8');
+  // Moods are deferred: they are built once the moodList state arrives, not at plan time.
+  assert.equal(moodPlan.services.length, 0);
   assert.deepEqual(moodPlan.stateBindings, {
     'state-light-active-moods': { service: 'PrimaryService', state: 'activeMoods' },
   });
+
+  const moodServices = lightController.createMoodServicePlans(JSON.stringify([
+    { id: 778, name: 'Off' },
+    { id: 7, name: 'Dinner' },
+    { id: 8, name: 'Reading' },
+  ]));
+  assert.equal(moodServices.length, 2);
+  assert.equal(moodServices[0].commands.setOn.uuid, 'ctrl-light-controller');
+  assert.equal(command({ services: moodServices }, 'setOn', true, 0), 'changeTo/7');
+  assert.equal(command({ services: moodServices }, 'setOn', true, 1), 'changeTo/8');
 
   const dimmerPlan = planForControl(Dimmer, controller.subControls['ctrl-light-dimmer']);
   assert.equal(command(dimmerPlan, 'setBrightness', 55), '55');
@@ -570,16 +570,8 @@ test('Radio and LightControllerV2 group services use parent UUID command binding
   assert.equal(command(radioPlan, 'setOn', true, 1), '1');
   assert.equal(command(radioPlan, 'setOn', false, 1), undefined);
 
-  const platform = makePlatform({
-    stateRouter: {
-      getCachedValue: () => JSON.stringify([
-        { id: 778, name: 'Off' },
-        { id: 7, name: 'Dinner' },
-      ]),
-    },
-  });
   const lightController = Object.create(LightControllerV2.prototype);
-  lightController.platform = platform;
+  lightController.platform = makePlatform();
   lightController.device = makeControl({
     uuidAction: 'light-parent',
     type: 'LightControllerV2',
@@ -588,8 +580,15 @@ test('Radio and LightControllerV2 group services use parent UUID command binding
   const plan = lightController.createAccessoryPlan('light-plan');
 
   assert.deepEqual(plan.serviceLabels, { namespace: 'arabic-numerals' });
-  assert.equal(plan.services.length, 1);
-  assert.equal(plan.services[0].commands.setOn.uuid, 'light-parent');
-  assert.equal(command(plan, 'setOn', true), 'changeTo/7');
-  assert.equal(command(plan, 'setOn', false), undefined);
+  // Moods are deferred until the moodList state arrives.
+  assert.equal(plan.services.length, 0);
+
+  const moodServices = lightController.createMoodServicePlans(JSON.stringify([
+    { id: 778, name: 'Off' },
+    { id: 7, name: 'Dinner' },
+  ]));
+  assert.equal(moodServices.length, 1);
+  assert.equal(moodServices[0].commands.setOn.uuid, 'light-parent');
+  assert.equal(command({ services: moodServices }, 'setOn', true), 'changeTo/7');
+  assert.equal(command({ services: moodServices }, 'setOn', false), undefined);
 });

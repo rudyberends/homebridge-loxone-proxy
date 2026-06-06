@@ -1,4 +1,4 @@
-import { PlatformAccessory } from 'homebridge';
+import { PlatformAccessory, Service } from 'homebridge';
 import { LoxonePlatform } from './LoxonePlatform';
 import { Control } from './loxone/StructureFile';
 import { LoxoneItemStates, LoxoneUpdateMessage } from './loxone/LoxoneTypes';
@@ -102,21 +102,76 @@ export class LoxoneAccessory {
   }
 
   private configurePlannedServices(plan: AccessoryPlan): void {
-    this.configureServiceLabels(plan);
+    this.applyServicePlans(plan.services, plan.serviceLabels, plan.pruneStale);
+  }
 
-    plan.services.forEach((servicePlan, index) => {
+  /**
+   * Builds (or reuses) the given service plans on this accessory. Safe to call
+   * after setup for items whose services only become known once a Loxone state
+   * arrives (e.g. LightControllerV2 moods).
+   *
+   * Set pruneStale only when these plans are the complete set of services for
+   * the accessory; otherwise services added outside the plan (cameras, sensors
+   * configured asynchronously) would be wrongly removed.
+   */
+  protected applyServicePlans(
+    services: ServicePlan[],
+    serviceLabels?: AccessoryPlan['serviceLabels'],
+    pruneStale = false,
+  ): void {
+    if (!this.Accessory) {
+      return;
+    }
+
+    this.configureServiceLabels(serviceLabels, services.length);
+
+    const kept = new Set<Service>();
+    services.forEach((servicePlan, index) => {
       const service = buildHomeKitService(
         this.platform,
         this.Accessory!,
         servicePlan,
       );
-      this.configureServiceLabelIndex(plan, service, index);
+      this.configureServiceLabelIndex(serviceLabels, service, index);
       this.Service[servicePlan.id] = service;
+      if (service.service) {
+        kept.add(service.service);
+      }
     });
+
+    if (pruneStale) {
+      this.pruneStaleServices(kept);
+    }
   }
 
-  private configureServiceLabels(plan: AccessoryPlan): void {
-    if (!plan.serviceLabels || plan.services.length < 2) {
+  /**
+   * Removes services left over on a restored accessory that are no longer part
+   * of the current plan (e.g. renamed grouped switches from older versions).
+   * The reconciler only prunes whole accessories, so without this stale
+   * services linger and surface as duplicate tiles in HomeKit.
+   */
+  private pruneStaleServices(kept: Set<Service>): void {
+    const protectedTypes = new Set([
+      this.platform.Service.AccessoryInformation.UUID,
+      this.platform.Service.ServiceLabel.UUID,
+    ]);
+
+    for (const service of [...this.Accessory!.services]) {
+      if (kept.has(service) || protectedTypes.has(service.UUID)) {
+        continue;
+      }
+      this.platform.log.info(
+        `[${this.device.name}] Removing stale service: ${service.displayName ?? service.UUID}`,
+      );
+      this.Accessory!.removeService(service);
+    }
+  }
+
+  private configureServiceLabels(
+    serviceLabels: AccessoryPlan['serviceLabels'],
+    serviceCount: number,
+  ): void {
+    if (!serviceLabels || serviceCount < 2) {
       return;
     }
 
@@ -125,7 +180,7 @@ export class LoxoneAccessory {
       this.Accessory!.addService(this.platform.Service.ServiceLabel);
 
     const namespace =
-      plan.serviceLabels.namespace === 'dots'
+      serviceLabels.namespace === 'dots'
         ? this.platform.Characteristic.ServiceLabelNamespace.DOTS
         : this.platform.Characteristic.ServiceLabelNamespace.ARABIC_NUMERALS;
 
@@ -136,11 +191,11 @@ export class LoxoneAccessory {
   }
 
   private configureServiceLabelIndex(
-    plan: AccessoryPlan,
+    serviceLabels: AccessoryPlan['serviceLabels'],
     service: HomeKitServiceAdapter,
     index: number,
   ): void {
-    if (!plan.serviceLabels || !service.service) {
+    if (!serviceLabels || !service.service) {
       return;
     }
 

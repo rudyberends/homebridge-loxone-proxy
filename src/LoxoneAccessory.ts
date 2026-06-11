@@ -151,6 +151,11 @@ export class LoxoneAccessory {
    * services linger and surface as duplicate tiles in HomeKit.
    */
   private pruneStaleServices(kept: Set<Service>): void {
+    // Camera and motion sensor are added in afterSetup(); pruning here breaks HomeKit camera.
+    if (this.device.type === 'Intercom' || this.device.type === 'IntercomV2') {
+      return;
+    }
+
     const protectedTypes = new Set([
       this.platform.Service.AccessoryInformation.UUID,
       this.platform.Service.ServiceLabel.UUID,

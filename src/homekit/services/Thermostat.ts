@@ -60,17 +60,25 @@ export class Thermostat extends BaseService {
             this.State.TargetHeatingCoolingState = 2;
             break;
         }
+        this.service!.getCharacteristic(this.platform.Characteristic.TargetHeatingCoolingState)
+          .updateValue(this.State.TargetHeatingCoolingState);
         break;
 
       case 'tempActual':
         this.State.CurrentTemperature = this.limitHomeKitTemperature(message.value);
-        this.updateCharacteristicValue('CurrentTemperature', this.State.CurrentTemperature);
         this.State.CurrentHeatingCoolingState = (this.State.CurrentTemperature < this.State.TargetTemperature) ? 1 : 0;
+        this.service!.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
+          .updateValue(this.State.CurrentTemperature);
+        this.service!.getCharacteristic(this.platform.Characteristic.CurrentHeatingCoolingState)
+          .updateValue(this.State.CurrentHeatingCoolingState);
         break;
       case 'tempTarget':
         this.State.TargetTemperature = this.limitHomeKitTemperature(message.value);
-        this.updateCharacteristicValue('TargetTemperature', this.State.TargetTemperature);
         this.State.CurrentHeatingCoolingState = (this.State.CurrentTemperature < this.State.TargetTemperature) ? 1 : 0;
+        this.service!.getCharacteristic(this.platform.Characteristic.TargetTemperature)
+          .updateValue(this.State.TargetTemperature);
+        this.service!.getCharacteristic(this.platform.Characteristic.CurrentHeatingCoolingState)
+          .updateValue(this.State.CurrentHeatingCoolingState);
         break;
     }
   }

@@ -1,4 +1,4 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { Service, PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { Control } from '../../loxone/StructureFile';
 import { HomeKitCommandExecutor } from '../HomeKitServiceFactory';
@@ -52,19 +52,5 @@ export class BaseService {
     }
 
     this.commandExecutor(commandId, value, this);
-  }
-
-  /**
-   * Updates the value of a characteristic for the service.
-   * @param characteristic - The characteristic to update.
-   * @param value - The new value for the characteristic.
-   */
-  protected updateCharacteristicValue(characteristic: string, value: CharacteristicValue): void {
-    if (this.service) {
-      const characteristicInstance = this.service.getCharacteristic(characteristic);
-      if (characteristicInstance) {
-        characteristicInstance.updateValue(value);
-      }
-    }
   }
 }

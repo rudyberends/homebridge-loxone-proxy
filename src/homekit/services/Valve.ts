@@ -4,6 +4,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Service } from 'homebridge';
+import { LoxoneCommandId } from '../../platform/AccessoryPlan';
 
 interface ZoneDefinition {
   id: number;
@@ -11,7 +12,7 @@ interface ZoneDefinition {
   duration: number;
 }
 
-type CommandHandler = (commandId: string, value?: unknown) => void;
+type CommandHandler = (commandId: LoxoneCommandId, value?: unknown) => void;
 
 export class Valve {
   private readonly valveService: Service;

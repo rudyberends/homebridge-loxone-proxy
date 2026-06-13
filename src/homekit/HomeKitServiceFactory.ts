@@ -1,6 +1,6 @@
 import type { PlatformAccessory } from 'homebridge';
 import type { LoxonePlatform } from '../LoxonePlatform';
-import type { ServicePlan } from '../platform/AccessoryPlan';
+import type { LoxoneCommandId, ServicePlan } from '../platform/AccessoryPlan';
 import type { HomeKitServiceAdapter } from './HomeKitServiceAdapter';
 import { ColorLightBulb } from './services/ColorLightBulb';
 import { ContactSensor } from './services/ContactSensor';
@@ -55,7 +55,7 @@ type HomeKitServiceConstructor = new (
 ) => HomeKitServiceAdapter;
 
 export type HomeKitCommandExecutor = (
-  commandId: string,
+  commandId: LoxoneCommandId,
   value?: unknown,
   service?: unknown,
 ) => void;

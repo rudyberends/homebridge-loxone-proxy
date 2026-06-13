@@ -1,6 +1,6 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { HomeKitServiceKind } from '../../homekit/HomeKitServiceFactory';
-import { AccessoryPlan, CommandBinding } from '../../platform/AccessoryPlan';
+import { AccessoryPlan, CommandBinding, LoxoneCommandId } from '../../platform/AccessoryPlan';
 
 /**
  * Loxone Switch Item
@@ -20,7 +20,7 @@ export class Switch extends LoxoneAccessory {
           ? 'outlet'
           : 'switch';
 
-    const commands: Record<string, CommandBinding> = serviceType === 'lock'
+    const commands: Partial<Record<LoxoneCommandId, CommandBinding>> = serviceType === 'lock'
       ? {
         setTargetState: {
           action: (value: unknown) => {

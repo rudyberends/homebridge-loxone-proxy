@@ -2,6 +2,7 @@ import { Service, PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { Control } from '../../loxone/StructureFile';
 import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
+import { LoxoneCommandId } from '../../platform/AccessoryPlan';
 import { HomeKitCommandExecutor } from '../HomeKitServiceFactory';
 
 /**
@@ -48,7 +49,7 @@ export class BaseService {
     // Services that react to Loxone state changes override this.
   }
 
-  protected executeCommand(commandId: string, value?: unknown): void {
+  protected executeCommand(commandId: LoxoneCommandId, value?: unknown): void {
     if (!this.commandExecutor) {
       this.platform.log.warn(`[${this.device.name}] Missing command executor for: ${commandId}`);
       return;

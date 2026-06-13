@@ -7,6 +7,23 @@ export interface CommandActionContext {
   service?: unknown;
 }
 
+/**
+ * Every HomeKit-action command an item plan can bind and a service can execute.
+ * Typed as a closed union so a typo (executeCommand('setTargetPositon')) or an
+ * unknown command becomes a compile error instead of a runtime-only warning.
+ */
+export type LoxoneCommandId =
+  | 'setOn'
+  | 'setBrightness'
+  | 'setColorState'
+  | 'setTargetPosition'
+  | 'setTargetHorizontalTiltAngle'
+  | 'setTargetDoorState'
+  | 'setTargetState'
+  | 'setTargetTemperature'
+  | 'selectZone'
+  | 'setZoneDuration';
+
 export interface CommandBinding {
   uuid?: string;
   action: string | ((value: unknown, context: CommandActionContext) => string | undefined);
@@ -18,7 +35,7 @@ export interface ServicePlan {
   kind: HomeKitServiceKind;
   name?: string;
   device?: Control;
-  commands?: Record<string, CommandBinding>;
+  commands?: Partial<Record<LoxoneCommandId, CommandBinding>>;
 }
 
 export interface AccessoryPlan {

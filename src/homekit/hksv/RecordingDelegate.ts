@@ -171,8 +171,28 @@ export class RecordingDelegate implements CameraRecordingDelegate {
       void this.startPreBuffer().catch((error) => {
         this.log.warn(`[${this.cameraName}] Failed to warm prebuffer: ${error}`, this.streamUrl);
       });
+    } else {
+      // Recording was turned off: tear the prebuffer down so its FFmpeg process
+      // and localhost TCP server do not keep running for the rest of the
+      // process lifetime. startPreBuffer() re-warms it on re-activation.
+      this.stopPreBuffer();
     }
     return Promise.resolve();
+  }
+
+  private stopPreBuffer(): void {
+    if (!this.preBufferSession && !this.preBuffer) {
+      return;
+    }
+    this.log.info(`[${this.cameraName}] Stopping prebuffer for ${this.streamUrl}`);
+    if (this.preBufferSession?.process && !this.preBufferSession.process.killed) {
+      this.preBufferSession.process.kill('SIGKILL');
+    }
+    if (this.preBufferSession?.server) {
+      this.preBufferSession.server.close();
+    }
+    this.preBufferSession = undefined;
+    this.preBuffer = undefined;
   }
 
   updateRecordingConfiguration(config: CameraRecordingConfiguration | undefined): Promise<void> {

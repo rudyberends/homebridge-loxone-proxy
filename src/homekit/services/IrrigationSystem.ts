@@ -75,6 +75,12 @@ export class IrrigationSystem extends BaseService {
    * @param zones - Array of zone definition objects
    */
   private setupZones(zones: ZoneDefinition[]): void {
+    // Stop and drop any previously created valves before rebuilding, otherwise
+    // every 'zones' update orphans the prior Valve instances and their running
+    // 1s countdown intervals.
+    this.zoneValves.forEach((valve) => valve.stopTimerLoop());
+    this.zoneValves.clear();
+
     zones.forEach((zone) => {
       const valve = new Valve(
         this.platform,

@@ -68,7 +68,7 @@ export class LightControllerV2 extends LoxoneAccessory {
    * Miniserver pushes it; mood switches are (re)built whenever it arrives.
    */
   protected afterSetup(): void {
-    this.platform.LoxoneHandler.registerListenerForUUID(
+    this.platform.stateRouter.subscribe(
       this.device.states.moodList,
       (message) => this.handleMoodList(message.value),
     );

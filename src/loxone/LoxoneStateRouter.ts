@@ -20,6 +20,17 @@ export class LoxoneStateRouter {
     }
   }
 
+  /**
+   * Subscribe a handler to a single Loxone state UUID through the router, so
+   * items and services never reach into LoxoneHandler directly. Use this for
+   * dynamic subscriptions that are not part of an accessory's declared
+   * ItemStates (e.g. LightControllerV2 moodList, IntercomV2 address and native
+   * motion). The router stays the single owner of state subscription.
+   */
+  subscribe(uuid: string, handler: (message: LoxoneEventMessage) => void): void {
+    this.platform.LoxoneHandler.registerListenerForUUID(uuid, handler);
+  }
+
   replayCachedState(target: LoxoneStateTarget, uuid: string): void {
     const value = this.getCachedValue(uuid);
     if (value === undefined) {

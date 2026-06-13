@@ -22,9 +22,9 @@ export class IntercomV2 extends Intercom {
   async configureCamera(): Promise<void> {
     let isConfigured = false;
 
-    this.platform.LoxoneHandler.registerListenerForUUID(
+    this.platform.stateRouter.subscribe(
       this.device.states.address,
-      (value: unknown) => {
+      (value) => {
 
         if (isConfigured) {
           return;
@@ -96,7 +96,7 @@ export class IntercomV2 extends Intercom {
 
     for (const stateName in motionDevice.states) {
       const stateUuid = motionDevice.states[stateName];
-      this.platform.LoxoneHandler.registerListenerForUUID(stateUuid, (message) => {
+      this.platform.stateRouter.subscribe(stateUuid, (message) => {
         const normalized = this.normalizeBinaryValue(message);
         if (normalized === undefined) {
           return;

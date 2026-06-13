@@ -1,3 +1,4 @@
+import { CharacteristicValue } from 'homebridge';
 import { BaseService } from './BaseService';
 
 /**
@@ -108,7 +109,7 @@ export class Thermostat extends BaseService {
   /**
    * Handle requests to set the "Target Heating Cooling State" characteristic
    */
-  handleTargetHeatingCoolingStateSet(value) {
+  handleTargetHeatingCoolingStateSet(value: CharacteristicValue) {
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetHeatingCoolingState: ${value}`);
     // Todo: Set from homekit
   }
@@ -132,7 +133,7 @@ export class Thermostat extends BaseService {
   /**
    * Handle requests to set the "Target Temperature" characteristic
    */
-  handleTargetTemperatureSet(value) {
+  handleTargetTemperatureSet(value: CharacteristicValue) {
 
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetTemperature:${value}`);
     this.executeCommand('setTargetTemperature', value);

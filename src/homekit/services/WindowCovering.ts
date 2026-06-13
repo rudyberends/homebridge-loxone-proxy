@@ -1,3 +1,4 @@
+import { CharacteristicValue } from 'homebridge';
 import { BaseService } from './BaseService';
 
 export class WindowCovering extends BaseService {
@@ -94,10 +95,10 @@ export class WindowCovering extends BaseService {
     return this.State.TargetPosition;
   }
 
-  handleTargetPositionSet(value) {
+  handleTargetPositionSet(value: CharacteristicValue) {
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetPosition:` + value);
 
-    const loxoneValue = 100 - parseInt(value);
+    const loxoneValue = 100 - Number(value);
 
     this.executeCommand('setTargetPosition', loxoneValue);
   }
@@ -112,10 +113,10 @@ export class WindowCovering extends BaseService {
     return this.State.TargetHorizontalTiltAngle;
   }
 
-  handleTargetShadePositionSet(value) {
+  handleTargetShadePositionSet(value: CharacteristicValue) {
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetHorizontalTiltAngle:` + value);
 
-    const loxoneValue = (value + 90) * 100 / 180;
+    const loxoneValue = (Number(value) + 90) * 100 / 180;
 
     this.executeCommand('setTargetHorizontalTiltAngle', loxoneValue);
   }

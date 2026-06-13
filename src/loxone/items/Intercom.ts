@@ -8,6 +8,7 @@ import {
 import { CameraMotionSensor } from '../../homekit/services/CameraMotionSensor';
 import { AccessoryPlan, ServicePlan } from '../../platform/AccessoryPlan';
 import { LoxoneItemStates } from '../LoxoneTypes';
+import { Control } from '../StructureFile';
 
 // Types
 type SecuredDetails = {
@@ -77,7 +78,7 @@ export class Intercom extends LoxoneAccessory {
     }
 
     for (const childUuid in this.device.subControls) {
-      const child = this.device.subControls[childUuid];
+      const child: Control = this.device.subControls[childUuid];
       const serviceName = child.name.replace(/\s/g, '');
 
       for (const stateName in child.states) {

@@ -1,3 +1,4 @@
+import { CharacteristicValue } from 'homebridge';
 import { BaseService } from './BaseService';
 
 /**
@@ -70,7 +71,7 @@ export class LockMechanism extends BaseService {
   /**
    * Handle requests to set the "Lock Target State" characteristic.
    */
-  handleLockTargetStateSet(value) {
+  handleLockTargetStateSet(value: CharacteristicValue) {
 
     this.platform.log.debug('Triggered SET LockTargetState:' + value);
 

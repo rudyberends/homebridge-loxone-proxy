@@ -18,18 +18,17 @@ export class WindowMonitor extends LoxoneAccessory {
 
   // Create individual WindowItems
   registerContactItems(): void {
-    for (const windowKey in this.device.details.windows) {
+    const windows = this.device.details.windows ?? [];
 
-      const window = this.device.details.windows[windowKey];
-
+    windows.forEach((window, index) => {
       const windowItem = { ...this.device };
       windowItem.name = window.name;
       windowItem.type = 'Contact';
-      windowItem.cat = windowKey; // Store ID in CAT field
+      windowItem.cat = String(index); // Store ID in CAT field
       windowItem.details = {};
-      windowItem.uuidAction = windowItem.uuidAction + '/' + windowKey;
+      windowItem.uuidAction = windowItem.uuidAction + '/' + index;
 
       new Contact(this.platform, windowItem);
-    }
+    });
   }
 }

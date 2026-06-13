@@ -1,3 +1,4 @@
+import { CharacteristicValue } from 'homebridge';
 import { BaseService } from './BaseService';
 
 export class Window extends BaseService {
@@ -90,7 +91,7 @@ export class Window extends BaseService {
     return this.State.TargetPosition;
   }
 
-  handleTargetPositionSet(value) {
+  handleTargetPositionSet(value: CharacteristicValue) {
     this.platform.log.debug(`[${this.device.name}] Triggered SET TargetPosition:` + value);
 
     this.executeCommand('setTargetPosition', value);

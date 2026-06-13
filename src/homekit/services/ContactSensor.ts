@@ -27,7 +27,7 @@ export class ContactSensor extends BaseService {
   updateService(message: { uuid: string; value: string}): void {
     // The value contains the entries for all items in the WindowMonitor. We only need our own entry.
     const valuesArray = message.value.split(',');
-    const itemEntry = valuesArray[this.device.cat]; // We saved our ItemEntry in CAT.
+    const itemEntry = valuesArray[Number(this.device.cat)]; // We saved our ItemEntry index in CAT.
 
     this.platform.log.debug(`[${this.device.name}] Callback state update for ContactSensor: ${itemEntry}`);
 

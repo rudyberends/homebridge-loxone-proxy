@@ -183,7 +183,7 @@ export class LightControllerV2 extends LoxoneAccessory {
       );
 
       // Match the correct HomeKit class for this control
-      const ControlClass = typeClassMap[lightItem.type];
+      const ControlClass = typeClassMap[lightItem.type as keyof typeof typeClassMap];
       if (!ControlClass) {
         this.platform.log.debug(`[${this.device.name}] Unsupported subcontrol type: ${lightItem.type}`);
         continue;

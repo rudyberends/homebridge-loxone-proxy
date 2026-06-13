@@ -24,9 +24,12 @@ export class SecuritySystem extends BaseService {
 
   updateAlarmState(): void {
     if (this.State.level > 0) {
-      this.State.SecuritySystemCurrentState = this.State.SecuritySystemTargetState = 4;
+      // ALARM_TRIGGERED (4) is only valid for CurrentState; TargetState range
+      // is [0..3], so leave the target at the armed mode to avoid a HAP warning
+      // and a Current/Target desync.
+      this.State.SecuritySystemCurrentState = 4;
     } else if (this.State.SecuritySystemCurrentState === 1 && this.State.disabledMove === 1) {
-      this.State.SecuritySystemCurrentState = this.State.SecuritySystemTargetState = 2;
+      this.State.SecuritySystemCurrentState = this.State.SecuritySystemTargetState = 2; // NIGHT_ARM
     }
 
     this.service!.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
@@ -42,8 +45,12 @@ export class SecuritySystem extends BaseService {
       this.State.level = message.value;
     } else if (message.state === 'disabledMove') { // State: disabledMove
       this.State.disabledMove = message.value;
-    } else { // State: armed
-      this.State.SecuritySystemTargetState = this.State.SecuritySystemCurrentState = message.value;
+    } else { // State: armed (Loxone reports a binary armed flag)
+      // Map onto the HomeKit enum: armed => AWAY_ARM (1, may be refined to
+      // NIGHT_ARM in updateAlarmState), disarmed => DISARMED/DISARM (3).
+      // The previous code assigned the raw flag, so disarmed (0) showed as
+      // STAY_ARM ('Armed, Home').
+      this.State.SecuritySystemTargetState = this.State.SecuritySystemCurrentState = message.value ? 1 : 3;
     }
     this.updateAlarmState();
   }

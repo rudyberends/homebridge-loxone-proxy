@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { AccessoryNameRegistry } = require('../dist/AccessoryNameRegistry');
 const {
@@ -591,4 +593,45 @@ test('Radio and LightControllerV2 group services use parent UUID command binding
   assert.equal(moodServices[0].commands.setOn.uuid, 'light-parent');
   assert.equal(command({ services: moodServices }, 'setOn', true), 'changeTo/7');
   assert.equal(command({ services: moodServices }, 'setOn', false), undefined);
+});
+
+// Source-scanning guard (independent of ESLint) for the layer-ownership rules
+// documented in ARCHITECTURE.md: HomeKit services and Loxone items must reach
+// the Miniserver only through the accessory plan, LoxoneCommandBus and
+// LoxoneStateRouter -- never the transport/handler directly.
+function collectTsFiles(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...collectTsFiles(full));
+    } else if (entry.name.endsWith('.ts')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+test('Items and HomeKit services never reach into the transport/handler directly', () => {
+  const roots = ['src/loxone/items', 'src/homekit'];
+  const offenders = [];
+
+  for (const root of roots) {
+    for (const file of collectTsFiles(path.join(__dirname, '..', root))) {
+      const source = fs.readFileSync(file, 'utf8');
+      const rel = path.relative(path.join(__dirname, '..'), file);
+
+      if (/\.registerListenerForUUID\s*\(/.test(source)) {
+        offenders.push(`${rel}: calls registerListenerForUUID() (use platform.stateRouter)`);
+      }
+      if (/\.sendCommand\s*\(/.test(source)) {
+        offenders.push(`${rel}: calls sendCommand() (use the command bus via the plan / executeCommand)`);
+      }
+      if (/from\s+['"][^'"]*\/(LoxoneHandler|LoxoneTransport|LoxoneTsApiTransport|LoxoneCommandBus)['"]/.test(source)) {
+        offenders.push(`${rel}: imports the transport/handler/command-bus directly`);
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], `Architecture layer-ownership violations:\n${offenders.join('\n')}`);
 });

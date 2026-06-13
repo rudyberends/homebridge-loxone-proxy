@@ -53,33 +53,50 @@ class LoxoneHandler {
   }
 
   private async start(): Promise<void> {
-    try {
-      const transport = this.transportFactory({
-        host: this.buildHost(),
-        username: this.username,
-        password: this.password,
-        useTls: this.tls,
-        clientOptions: {
-          autoReconnectEnabled: true,
-          keepAliveEnabled: true,
-          messageLogEnabled: false,
-          logAllEvents: false,
-          maintainLatestEvents: true,
-        },
-      });
+    // Keep retrying with capped backoff. Previously a failed initial connect
+    // (host down, bad credentials, transport import error) only logged once and
+    // left configReady unresolved forever, so waitForConfig() and LoxoneInit
+    // hung silently. Retrying makes startup self-healing and keeps logging.
+    let attempt = 0;
+    for (;;) {
+      attempt++;
+      try {
+        const transport = this.transportFactory({
+          host: this.buildHost(),
+          username: this.username,
+          password: this.password,
+          useTls: this.tls,
+          clientOptions: {
+            autoReconnectEnabled: true,
+            keepAliveEnabled: true,
+            messageLogEnabled: false,
+            logAllEvents: false,
+            maintainLatestEvents: true,
+          },
+        });
 
-      this.transport = transport;
-      this.wireTransportEvents(transport);
-      this.applyWatchList();
+        this.transport = transport;
+        this.wireTransportEvents(transport);
+        this.applyWatchList();
 
-      this.platform.log.info(
-        `Trying to connect to Miniserver at ${this.buildHost()} (TLS=${this.tls})`,
-      );
-      await transport.connect();
-      await this.loadStructureAndStartUpdates(transport);
-    } catch (error) {
-      this.platform.log.error(`Connection failed: ${this.formatError(error)}`);
+        this.platform.log.info(
+          `Trying to connect to Miniserver at ${this.buildHost()} (TLS=${this.tls}, attempt ${attempt})`,
+        );
+        await transport.connect();
+        await this.loadStructureAndStartUpdates(transport);
+        return;
+      } catch (error) {
+        const delayMs = Math.min(30000, 2000 * 2 ** Math.min(attempt - 1, 4));
+        this.platform.log.error(
+          `Connection attempt ${attempt} failed: ${this.formatError(error)}. Retrying in ${Math.round(delayMs / 1000)}s`,
+        );
+        await this.delay(delayMs);
+      }
     }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private wireTransportEvents(transport: LoxoneTransport): void {

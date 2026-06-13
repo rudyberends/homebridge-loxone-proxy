@@ -36,7 +36,7 @@ class LoxoneHandler {
   constructor(
     private readonly platform: LoxonePlatform,
     private readonly transportFactory: LoxoneTransportFactory =
-      (options) => new LoxoneTsApiTransport(options),
+    (options) => new LoxoneTsApiTransport(options),
   ) {
     assertValidLoxoneConnectionConfig(platform.config as LoxoneConnectionConfig);
 

@@ -154,6 +154,7 @@ export interface Control {
 export interface ControlDetails {
     format?: string;
     allOff?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     outputs?: any;
     animation?: string;
     deviceType?: number;

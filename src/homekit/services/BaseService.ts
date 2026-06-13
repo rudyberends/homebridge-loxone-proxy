@@ -10,6 +10,8 @@ import { HomeKitCommandExecutor } from '../HomeKitServiceFactory';
 export class BaseService {
   service: Service | undefined;
   device: Control;
+  // Generic state bag; each service subclass overrides this with a typed shape.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   State: { [key: string]: any } = {};
 
   /**

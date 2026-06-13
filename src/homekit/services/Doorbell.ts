@@ -12,6 +12,7 @@ export class Doorbell extends BaseService {
 
   private camera?: CameraService;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(platform: any, accessory: any) {
     super(platform, accessory);
     this.setupService();

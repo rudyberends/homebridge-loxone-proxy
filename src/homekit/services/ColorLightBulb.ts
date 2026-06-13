@@ -211,12 +211,6 @@ export class ColorLightBulb extends LightBulb {
   }
 }
 
-// transform Homekit color temperature (expressed 140-500 to Loxone values expressed in Kelvins 2700-6500k)
-function homekitToLoxoneColorTemperature(ct: number) {
-  const percent = 1 - ((ct - 153) / (500 - 153));
-  return Math.round(2700 + ((6500 - 2700) * percent));
-}
-
 // transform Loxone color temperature (expressed in Kelvins 2700-6500k to Homekit values 140-500)
 function loxoneToHomekitColorTemperature(ct: number) {
   const percent = 1 - ((ct - 2700) / (6500 - 2700));

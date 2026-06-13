@@ -34,6 +34,7 @@ export class Switch extends BaseService {
       .onGet(this.getOn.bind(this));
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getSwitchType(): any {
     return this.device.cat === 'lights'
       ? this.platform.Service.Lightbulb // This is a Lightbulb (no dimming)

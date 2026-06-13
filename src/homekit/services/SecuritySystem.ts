@@ -74,7 +74,7 @@ export class SecuritySystem extends BaseService {
       this.State.SecuritySystemCurrentState = value;
 
       this.service!.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
-      .updateValue(this.State.SecuritySystemTargetState);
+        .updateValue(this.State.SecuritySystemTargetState);
 
 
     } else {

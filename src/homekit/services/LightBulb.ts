@@ -21,6 +21,7 @@ export class LightBulb extends Switch {
       .onSet(this.setBrightness.bind(this));
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getSwitchType(): any {
     return this.platform.Service.Lightbulb;
   }

@@ -98,6 +98,7 @@ export class Valve {
    */
   public reset(): void {
     const { Characteristic } = this.platform;
+    this.stopTimerLoop();
     this.meta.startTime = null;
     this.valveService.updateCharacteristic(Characteristic.InUse, 0);
     this.valveService.updateCharacteristic(Characteristic.Active, 0);

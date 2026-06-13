@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 
 /**
  * GarageDoorOpener Service
@@ -38,10 +39,10 @@ export class GarageDoorOpener extends BaseService {
    * Updates the GarageDoorOpener service with the latest state.
    * @param message - The message containing the updated state and value.
    */
-  updateService(message: { state: string; value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] ${message.state} Callback state update for Gate: ${message.value}`);
 
-    (message.state) === 'active' ? this.State.Active = message.value : this.State.Position = message.value;
+    (message.state) === 'active' ? this.State.Active = Number(message.value) : this.State.Position = Number(message.value);
 
     switch (this.State.Active) {
       case -1: // closing

@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 
@@ -24,7 +25,7 @@ export class MotionSensor extends BaseService {
       .onGet(this.handleMotionDetectedGet.bind(this));
   }
 
-  updateService = (message: { value: number }) => {
+  updateService = (message: LoxoneUpdateMessage) => {
     if (message.value !== 0 && message.value !== 1) {
       this.platform.log.debug(`[${this.device.name}] Ignored message value: ${message.value}`);
       return;

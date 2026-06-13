@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { BaseService } from './BaseService';
 
 /**
@@ -27,7 +28,7 @@ export class LockMechanism extends BaseService {
       .onSet(this.handleLockTargetStateSet.bind(this));
   }
 
-  updateService = (message: { value: number }) => {
+  updateService = (message: LoxoneUpdateMessage) => {
 
     // If switch reversal is enabled, reverse the order of the switch
     if (this.platform.config.switchAlias?.ReverseLockSwitch) {
@@ -35,7 +36,7 @@ export class LockMechanism extends BaseService {
     }
 
     this.platform.log.debug(`[${this.device.name}] Callback state update for Lock: ${message.value}`);
-    this.State.LockTargetState = message.value;
+    this.State.LockTargetState = Number(message.value);
 
     // Also make sure this change is directly communicated to HomeKit
     this.service!
@@ -43,7 +44,7 @@ export class LockMechanism extends BaseService {
       .updateValue(this.State.LockTargetState);
 
     setTimeout(() => {
-      this.State.LockCurrentState = message.value;
+      this.State.LockCurrentState = Number(message.value);
 
       // Also make sure this change is directly communicated to HomeKit
       this.service!

@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 
 /**
  * HumiditySensor
@@ -25,9 +26,9 @@ export class HumiditySensor extends BaseService {
    * Updates the service with the new humidity value.
    * @param message - The message containing the new humidity value.
    */
-  updateService(message: { value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for Humidity Sensor: ${message.value}`);
-    this.State.CurrentRelativeHumidity = message.value;
+    this.State.CurrentRelativeHumidity = Number(message.value);
 
     // Also make sure this change is directly communicated to HomeKit
     this.service!

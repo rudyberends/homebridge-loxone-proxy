@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { BaseService } from './BaseService';
 
 /**
@@ -42,7 +43,7 @@ export class Thermostat extends BaseService {
     //.onSet(this.handleTemperatureDisplayUnitsSet.bind(this));
   }
 
-  updateService( message: { state: string; value: number} ) {
+  updateService( message: LoxoneUpdateMessage ) {
     this.platform.log.debug(`[${this.device.name}] Callback ${message.state} update for Thermostat: ${message.value}`);
 
     switch (message.state) {
@@ -66,7 +67,7 @@ export class Thermostat extends BaseService {
         break;
 
       case 'tempActual':
-        this.State.CurrentTemperature = this.limitHomeKitTemperature(message.value);
+        this.State.CurrentTemperature = this.limitHomeKitTemperature(Number(message.value));
         this.State.CurrentHeatingCoolingState = (this.State.CurrentTemperature < this.State.TargetTemperature) ? 1 : 0;
         this.service!.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
           .updateValue(this.State.CurrentTemperature);
@@ -74,7 +75,7 @@ export class Thermostat extends BaseService {
           .updateValue(this.State.CurrentHeatingCoolingState);
         break;
       case 'tempTarget':
-        this.State.TargetTemperature = this.limitHomeKitTemperature(message.value);
+        this.State.TargetTemperature = this.limitHomeKitTemperature(Number(message.value));
         this.State.CurrentHeatingCoolingState = (this.State.CurrentTemperature < this.State.TargetTemperature) ? 1 : 0;
         this.service!.getCharacteristic(this.platform.Characteristic.TargetTemperature)
           .updateValue(this.State.TargetTemperature);

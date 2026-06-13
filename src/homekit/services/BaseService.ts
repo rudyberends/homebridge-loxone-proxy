@@ -1,6 +1,7 @@
 import { Service, PlatformAccessory } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
 import { Control } from '../../loxone/StructureFile';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { HomeKitCommandExecutor } from '../HomeKitServiceFactory';
 
 /**
@@ -43,7 +44,7 @@ export class BaseService {
     // This is a placeholder method that can be overridden by the derived classes.
   }
 
-  updateService(_message: never): void {
+  updateService(_message: LoxoneUpdateMessage): void {
     // Services that react to Loxone state changes override this.
   }
 

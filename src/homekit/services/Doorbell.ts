@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { CameraService } from './Camera';
 
 /**
@@ -35,7 +36,7 @@ export class Doorbell extends BaseService {
     );
   }
 
-  updateService(message: { value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for Doorbell: ${message.value}`);
     if (message.value === 1) {
       this.triggerDoorbell();

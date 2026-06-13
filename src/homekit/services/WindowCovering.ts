@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { BaseService } from './BaseService';
 
 export class WindowCovering extends BaseService {
@@ -48,7 +49,7 @@ export class WindowCovering extends BaseService {
     }
   }
 
-  updateService = (message: { state: string; value: number }) => {
+  updateService = (message: LoxoneUpdateMessage) => {
     this.platform.log.debug(`[${this.device.name}] ${message.state} Callback update for Jalousie: ${message.value}`);
 
     switch (message.state) {
@@ -64,7 +65,7 @@ export class WindowCovering extends BaseService {
         break;
 
       case 'position':
-        this.State.TargetPosition = 100 - (message.value *=100); // reversed value
+        this.State.TargetPosition = 100 - Number(message.value) * 100; // reversed value
         this.State.TargetPosition = this.State.TargetPosition < 0 ? 0 : this.State.TargetPosition;
         this.State.TargetPosition = this.State.TargetPosition > 100 ? 100 : this.State.TargetPosition;
         this.State.CurrentPosition = this.State.TargetPosition;
@@ -73,7 +74,7 @@ export class WindowCovering extends BaseService {
         break;
 
       case 'shadePosition':
-        this.State.TargetHorizontalTiltAngle = message.value * 180 - 90;
+        this.State.TargetHorizontalTiltAngle = Number(message.value) * 180 - 90;
         this.State.TargetHorizontalTiltAngle = this.State.TargetHorizontalTiltAngle < -90 ? -90 : this.State.TargetHorizontalTiltAngle;
         this.State.TargetHorizontalTiltAngle = this.State.TargetHorizontalTiltAngle > 90 ? 90 : this.State.TargetHorizontalTiltAngle;
         this.State.CurrentHorizontalTiltAngle = this.State.TargetHorizontalTiltAngle;

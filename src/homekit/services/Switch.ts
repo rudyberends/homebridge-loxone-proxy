@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { BaseService } from './BaseService';
 
 export class Switch extends BaseService {
@@ -45,7 +46,7 @@ export class Switch extends BaseService {
    * Updates the service with the new switch state.
    * @param message - The message containing the new switch state.
    */
-  updateService(message: { value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for Switch: ${!!message.value}`);
     this.State.On = !!message.value;
 

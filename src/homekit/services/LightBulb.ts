@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { Switch } from './Switch';
 
 /**
@@ -30,7 +31,7 @@ export class LightBulb extends Switch {
    * Updates the service with the new brightness value.
    * @param message - The message containing the new brightness value.
    */
-  updateService(message: { value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     super.updateService(message);
     this.State.Brightness = message.value as number;
 

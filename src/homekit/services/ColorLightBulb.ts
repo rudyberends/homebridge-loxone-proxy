@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { LightBulb } from './LightBulb';
 
 /**
@@ -46,8 +47,7 @@ export class ColorLightBulb extends LightBulb {
    * Updates the service with the new value.
    * @param message - The message containing the new value.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  updateService(message: { value: any }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for ColorLightBulb: ${message.value}`);
 
     const hsvRegex = /^\W*hsv?\(([^)]*)\)\W*$/i;
@@ -92,8 +92,8 @@ export class ColorLightBulb extends LightBulb {
       }
     };
 
-    processHSV(message.value);
-    processTemp(message.value);
+    processHSV(String(message.value));
+    processTemp(String(message.value));
 
     this.service!.getCharacteristic(this.platform.Characteristic.Hue).updateValue(this.State.Hue);
     this.service!.getCharacteristic(this.platform.Characteristic.Saturation).updateValue(this.State.Saturation);

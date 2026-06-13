@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 
 /**
  * LightSensor
@@ -25,9 +26,9 @@ export class LightSensor extends BaseService {
    * Updates the service with the new light sensor state.
    * @param message - The message containing the new light sensor state.
    */
-  updateService(message: { value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for Light Sensor: ${message.value}`);
-    this.State.CurrentAmbientLightLevel = message.value > 0.0001 ? message.value : 0.0001;
+    this.State.CurrentAmbientLightLevel = Number(message.value) > 0.0001 ? Number(message.value) : 0.0001;
 
     // Also make sure this change is directly communicated to HomeKit
     this.service!

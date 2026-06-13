@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { BaseService } from './BaseService';
 
 export class ContactSensor extends BaseService {
@@ -24,9 +25,9 @@ export class ContactSensor extends BaseService {
    * Updates the service with the new contactsensor state.
    * @param message - The message containing the new contactsensor state.
    */
-  updateService(message: { uuid: string; value: string}): void {
+  updateService(message: LoxoneUpdateMessage): void {
     // The value contains the entries for all items in the WindowMonitor. We only need our own entry.
-    const valuesArray = message.value.split(',');
+    const valuesArray = String(message.value).split(',');
     const itemEntry = valuesArray[Number(this.device.cat)]; // We saved our ItemEntry index in CAT.
 
     this.platform.log.debug(`[${this.device.name}] Callback state update for ContactSensor: ${itemEntry}`);

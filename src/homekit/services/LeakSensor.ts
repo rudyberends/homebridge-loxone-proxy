@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 
 /**
  * Represents a Smoke Sensor accessory.
@@ -21,7 +22,7 @@ export class LeakSensor extends BaseService {
       .onGet(this.handleLeakDetectedGet.bind(this));
   }
 
-  updateService = (message: { value: boolean }) => {
+  updateService = (message: LoxoneUpdateMessage) => {
     this.platform.log.debug(`[${this.device.name}] Callback state update for LeakSensor: ${!!message.value}`);
     this.State.LeakDetected = !!message.value;
 

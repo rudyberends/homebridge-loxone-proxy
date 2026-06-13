@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 
 /**
  * Fanv2 Service
@@ -32,7 +33,7 @@ export class Fanv2 extends BaseService {
    * Updates the Fanv2 service with the latest state.
    * @param message - The message containing the updated state and value.
    */
-  updateService(message: { state: string; value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback ${message.state} update for Fan: ${message.value}`);
 
     switch (message.state) {
@@ -40,8 +41,8 @@ export class Fanv2 extends BaseService {
         // Handle mode update if needed
         break;
       case 'speed':
-        this.State.RotationSpeed = message.value;
-        this.State.Active = message.value > 0 ? 1 : 0;
+        this.State.RotationSpeed = Number(message.value);
+        this.State.Active = Number(message.value) > 0 ? 1 : 0;
         break;
     }
 

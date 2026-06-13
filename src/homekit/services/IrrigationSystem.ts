@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { Valve } from './Valve';
 
 interface ZoneDefinition {
@@ -32,7 +33,7 @@ export class IrrigationSystem extends BaseService {
    * Handles updates from Loxone, such as zone definitions or currently active zone.
    * @param message - Message object containing state and value from Loxone
    */
-  updateService(message: { state: string; value: any }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     switch (message.state) {
       case 'zones': {
         try {
@@ -55,7 +56,7 @@ export class IrrigationSystem extends BaseService {
 
       case 'currentZone': {
         const now = Date.now();
-        const currentId = message.value;
+        const currentId = Number(message.value);
 
         this.zoneValves.forEach((valve) => {
           valve.updateFromLoxone(currentId, now);

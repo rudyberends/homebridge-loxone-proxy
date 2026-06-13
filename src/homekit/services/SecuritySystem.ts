@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { CharacteristicValue } from 'homebridge';
 
 export class SecuritySystem extends BaseService {
@@ -38,13 +39,13 @@ export class SecuritySystem extends BaseService {
       .updateValue(this.State.SecuritySystemCurrentState);
   }
 
-  updateService(message: { state: string; value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for SecuritySystem: ${message.state}: ${message.value}`);
 
     if (message.state === 'level') { // State: level
-      this.State.level = message.value;
+      this.State.level = Number(message.value);
     } else if (message.state === 'disabledMove') { // State: disabledMove
-      this.State.disabledMove = message.value;
+      this.State.disabledMove = Number(message.value);
     } else { // State: armed (Loxone reports a binary armed flag)
       // Map onto the HomeKit enum: armed => AWAY_ARM (1, may be refined to
       // NIGHT_ARM in updateAlarmState), disarmed => DISARMED/DISARM (3).

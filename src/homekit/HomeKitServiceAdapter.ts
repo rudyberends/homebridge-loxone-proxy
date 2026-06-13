@@ -5,12 +5,12 @@ import type { LoxoneUpdateMessage } from '../loxone/LoxoneTypes';
 export interface HomeKitServiceAdapter {
   device?: Control;
   service?: Service;
-  updateService(message: never): void;
+  updateService(message: LoxoneUpdateMessage): void;
 }
 
 export function dispatchHomeKitUpdate(
   service: HomeKitServiceAdapter,
   message: LoxoneUpdateMessage,
 ): void {
-  service.updateService(message as never);
+  service.updateService(message);
 }

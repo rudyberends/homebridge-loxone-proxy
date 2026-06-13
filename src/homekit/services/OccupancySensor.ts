@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 
 /**
  * Represents an Occupancy Sensor accessory.
@@ -21,7 +22,7 @@ export class OccupancySensor extends BaseService {
       .onGet(this.handleOccupancyDetectedGet.bind(this));
   }
 
-  updateService(message: { value: boolean }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for OccupancySensor: ${!!message.value}`);
     this.State.OccupancyDetected = !!message.value;
 

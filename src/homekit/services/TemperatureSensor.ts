@@ -1,4 +1,5 @@
 import { BaseService } from './BaseService';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 
 /**
  * TemperatureSensor
@@ -25,9 +26,9 @@ export class TemperatureSensor extends BaseService {
    * Updates the service with the new temperature value.
    * @param message - The message containing the new temperature value.
    */
-  updateService(message: { value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Callback state update for Temperature Sensor: ${message.value}`);
-    this.State.CurrentTemperature = message.value;
+    this.State.CurrentTemperature = Number(message.value);
 
     // Also make sure this change is directly communicated to HomeKit
     this.service!

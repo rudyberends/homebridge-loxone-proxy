@@ -1,4 +1,5 @@
 import { CharacteristicValue } from 'homebridge';
+import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
 import { BaseService } from './BaseService';
 
 export class Window extends BaseService {
@@ -33,7 +34,7 @@ export class Window extends BaseService {
    * Updates the Window service with the latest state.
    * @param message - The message containing the updated state and value.
    */
-  updateService(message: { state: string; value: number }): void {
+  updateService(message: LoxoneUpdateMessage): void {
     this.platform.log.debug(`[${this.device.name}] Full Callback Message:`, message);
 
     switch (message.state) {
@@ -54,13 +55,13 @@ export class Window extends BaseService {
         break;
 
       case 'position':
-        this.State.CurrentPosition = Math.round(message.value * 100);
+        this.State.CurrentPosition = Math.round(Number(message.value) * 100);
         this.platform.log.debug(`[${this.device.name}] Updated CurrentPosition: ${this.State.CurrentPosition}`);
         this.service?.getCharacteristic(this.platform.Characteristic.CurrentPosition)?.updateValue(this.State.CurrentPosition);
         break;
 
       case 'targetPosition':
-        this.State.TargetPosition = Math.round(message.value * 100);
+        this.State.TargetPosition = Math.round(Number(message.value) * 100);
         this.platform.log.debug(`[${this.device.name}] Updated TargetPosition: ${this.State.TargetPosition}`);
         this.service?.getCharacteristic(this.platform.Characteristic.TargetPosition)?.updateValue(this.State.TargetPosition);
         break;

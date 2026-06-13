@@ -162,6 +162,12 @@ export interface ControlDetails {
     deviceUuid?: string;
     jLockable?: boolean;
     windows?: WindowDetails[];
+    /**
+     * Plugin-internal: index of this synthetic Contact within its parent
+     * WindowMonitor's comma-separated windowStates payload. Set by WindowMonitor
+     * when it splits a monitor into individual Contact accessories.
+     */
+    windowIndex?: number;
 }
 
 

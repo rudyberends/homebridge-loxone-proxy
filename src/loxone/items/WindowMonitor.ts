@@ -24,8 +24,7 @@ export class WindowMonitor extends LoxoneAccessory {
       const windowItem = { ...this.device };
       windowItem.name = window.name;
       windowItem.type = 'Contact';
-      windowItem.cat = String(index); // Store ID in CAT field
-      windowItem.details = {};
+      windowItem.details = { windowIndex: index };
       windowItem.uuidAction = windowItem.uuidAction + '/' + index;
 
       new Contact(this.platform, windowItem);

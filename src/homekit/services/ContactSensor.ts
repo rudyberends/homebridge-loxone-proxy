@@ -26,9 +26,10 @@ export class ContactSensor extends BaseService {
    * @param message - The message containing the new contactsensor state.
    */
   updateService(message: LoxoneUpdateMessage): void {
-    // The value contains the entries for all items in the WindowMonitor. We only need our own entry.
+    // windowStates carries one comma-separated entry per window in the parent
+    // WindowMonitor; pick the entry for this accessory's window index.
     const valuesArray = String(message.value).split(',');
-    const itemEntry = valuesArray[Number(this.device.cat)]; // We saved our ItemEntry index in CAT.
+    const itemEntry = valuesArray[this.device.details.windowIndex ?? 0];
 
     this.platform.log.debug(`[${this.device.name}] Callback state update for ContactSensor: ${itemEntry}`);
 

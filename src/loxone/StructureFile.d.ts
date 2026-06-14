@@ -162,6 +162,7 @@ export interface ControlDetails {
     deviceUuid?: string;
     jLockable?: boolean;
     windows?: WindowDetails[];
+    availableAlarms?: number; // SmokeAlarm bitmask: 0x01 Smoke, 0x02 Water, 0x04 Temp, 0x08 Arc
     /**
      * Plugin-internal: index of this synthetic Contact within its parent
      * WindowMonitor's comma-separated windowStates payload. Set by WindowMonitor

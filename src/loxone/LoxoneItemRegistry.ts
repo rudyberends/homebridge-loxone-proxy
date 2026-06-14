@@ -17,6 +17,7 @@ import { NfcCodeTouch } from './items/NfcCodeTouch';
 import { PresenceDetector } from './items/PresenceDetector';
 import { Pushbutton } from './items/Pushbutton';
 import { Radio } from './items/Radio';
+import { SmokeAlarm } from './items/SmokeAlarm';
 import { Switch } from './items/Switch';
 import { UpDownDigital } from './items/UpDownDigital';
 import { Ventilation } from './items/Ventilation';
@@ -42,6 +43,7 @@ const loxoneItemRegistry: Record<string, LoxoneItemConstructor> = {
   PresenceDetector,
   Pushbutton,
   Radio,
+  SmokeAlarm,
   Switch,
   UpDownDigital,
   Ventilation,

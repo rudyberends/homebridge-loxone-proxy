@@ -23,6 +23,7 @@ const { Radio } = require('../dist/loxone/items/Radio');
 const { LightControllerV2 } = require('../dist/loxone/items/LightControllerV2');
 const { Ventilation } = require('../dist/loxone/items/Ventilation');
 const { ContactSensor } = require('../dist/homekit/services/ContactSensor');
+const { SmokeAlarm } = require('../dist/loxone/items/SmokeAlarm');
 const crypto = require('node:crypto');
 const sdp = require('../dist/homekit/hksv/sdp');
 const rsa = require('../dist/homekit/hksv/rsa');
@@ -789,6 +790,35 @@ test('ContactSensor decodes the windowStates bitmask (not exact-string match)', 
   assert.equal(decode('0'), 9, 'offline keeps previous');
   // picks the correct CSV entry by window index
   assert.equal(decode('4,1,2', 1), 0, 'index 1 = closed');
+});
+
+test('SmokeAlarm builds smoke/leak services from availableAlarms and decodes the cause bitmask', () => {
+  // availableAlarms 3 = smoke|water -> both services
+  const both = planFor(SmokeAlarm, { type: 'SmokeAlarm', details: { availableAlarms: 3 }, states: { level: 'l', alarmCause: 'c' } });
+  assert.deepEqual(both.services.map((s) => s.kind).sort(), ['leak-sensor', 'smoke-sensor']);
+
+  // availableAlarms 1 = smoke only -> single smoke service
+  const smokeOnly = planFor(SmokeAlarm, { type: 'SmokeAlarm', details: { availableAlarms: 1 }, states: { level: 'l', alarmCause: 'c' } });
+  assert.deepEqual(smokeOnly.services.map((s) => s.kind), ['smoke-sensor']);
+
+  // Cause-bitmask decoding for a smoke+water device
+  const smoke = []; const water = [];
+  const inst = Object.create(SmokeAlarm.prototype);
+  inst.level = 0; inst.alarmCause = 0; inst.monitorsSmoke = true; inst.monitorsWater = true;
+  inst.Service = {
+    Smoke: { updateService: (m) => smoke.push(m.value) },
+    Water: { updateService: (m) => water.push(m.value) },
+  };
+  const send = (state, value) => inst.callBackHandler({ uuid: 'u', service: 'Smoke', state, value });
+
+  send('alarmCause', 1); // smoke cause but level 0 -> nothing
+  assert.equal(smoke.at(-1), 0); assert.equal(water.at(-1), 0);
+  send('level', 2); // main alarm + smoke cause -> smoke fires
+  assert.equal(smoke.at(-1), 1); assert.equal(water.at(-1), 0);
+  send('alarmCause', 2); // cause switches to water (smoke bit cleared)
+  assert.equal(smoke.at(-1), 0); assert.equal(water.at(-1), 1);
+  send('level', 0); // cleared
+  assert.equal(smoke.at(-1), 0); assert.equal(water.at(-1), 0);
 });
 
 test('Ventilation maps fan speed to a manual setTimer command and off to automatic', () => {

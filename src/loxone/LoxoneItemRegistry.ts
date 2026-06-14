@@ -19,7 +19,6 @@ import { Pushbutton } from './items/Pushbutton';
 import { Radio } from './items/Radio';
 import { SmokeAlarm } from './items/SmokeAlarm';
 import { Switch } from './items/Switch';
-import { UpDownDigital } from './items/UpDownDigital';
 import { Ventilation } from './items/Ventilation';
 import { Window } from './items/Window';
 import { WindowMonitor } from './items/WindowMonitor';
@@ -45,7 +44,6 @@ const loxoneItemRegistry: Record<string, LoxoneItemConstructor> = {
   Radio,
   SmokeAlarm,
   Switch,
-  UpDownDigital,
   Ventilation,
   Window,
   WindowMonitor,

@@ -1,5 +1,6 @@
 import {
   API,
+  APIEvent,
   DynamicPlatformPlugin,
   Logger,
   PlatformAccessory,
@@ -56,6 +57,12 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
 
     this.api.on('didFinishLaunching', async () => {
       await this.LoxoneInit();
+    });
+
+    // Release the Miniserver connection (websocket, keep-alive timers) and the
+    // handler's listener/cache maps when Homebridge shuts down.
+    this.api.on(APIEvent.SHUTDOWN, () => {
+      void this.LoxoneHandler?.disconnect();
     });
   }
 

@@ -31,6 +31,7 @@ export type LoxoneErrorListener = (error: Error) => void;
 
 export interface LoxoneTransport {
   connect(existingToken?: string): Promise<void>;
+  disconnect(): Promise<void>;
   getStructureFile(): Promise<StructureFile>;
   enableUpdates(): Promise<void>;
   sendCommand(

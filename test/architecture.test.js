@@ -128,11 +128,17 @@ class FakeTransport {
     this.commands = [];
     this.enabledUpdates = false;
     this.connected = false;
+    this.disconnected = false;
   }
 
   async connect(existingToken) {
     this.existingToken = existingToken;
     this.connected = true;
+  }
+
+  async disconnect() {
+    this.connected = false;
+    this.disconnected = true;
   }
 
   async getStructureFile() {
@@ -402,6 +408,30 @@ test('LoxoneHandler depends on the transport contract instead of the concrete AP
     timeoutOverride: 2000,
   });
   assert.equal(handler.getActiveCommunicationToken(), 'transport-token');
+});
+
+test('LoxoneHandler supports listener disposal and shutdown teardown', async () => {
+  const transport = new FakeTransport();
+  const handler = new LoxoneHandler(makePlatform(), () => transport);
+  await handler.waitForConfig();
+
+  const received = [];
+  const dispose = handler.registerListenerForUUID('state-a', (message) => received.push(message.value));
+
+  transport.emitValue('state-a', 5);
+  assert.deepEqual(received, [5]);
+
+  // Disposer returned by registerListenerForUUID removes the listener.
+  dispose();
+  transport.emitValue('state-a', 6);
+  assert.deepEqual(received, [5], 'disposed listener should no longer receive events');
+
+  // Cache still serves the latest value until shutdown clears it.
+  assert.equal(handler.getLastCachedValue('state-a'), 6);
+
+  await handler.disconnect();
+  assert.equal(transport.disconnected, true, 'transport.disconnect() should be called on shutdown');
+  assert.equal(handler.getLastCachedValue('state-a'), undefined, 'cache should be cleared on disconnect');
 });
 
 test('LoxoneTsApiTransport adapts the owned API client to the plugin transport contract', async () => {

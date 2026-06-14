@@ -149,7 +149,7 @@ class LoxoneHandler {
     return this.configReady;
   }
 
-  public registerListenerForUUID(uuid: string, callback: LoxoneEventCallback): void {
+  public registerListenerForUUID(uuid: string, callback: LoxoneEventCallback): () => void {
     if (Object.prototype.hasOwnProperty.call(this.uuidCallbacks, uuid)) {
       this.uuidCallbacks[uuid].push(callback);
     } else {
@@ -161,6 +161,47 @@ class LoxoneHandler {
 
     if (uuid in this.uuidCache) {
       callback(this.uuidCache[uuid]);
+    }
+
+    return () => this.unregisterListenerForUUID(uuid, callback);
+  }
+
+  public unregisterListenerForUUID(uuid: string, callback: LoxoneEventCallback): void {
+    const callbacks = this.uuidCallbacks[uuid];
+    if (!callbacks) {
+      return;
+    }
+
+    const index = callbacks.indexOf(callback);
+    if (index !== -1) {
+      callbacks.splice(index, 1);
+    }
+
+    if (callbacks.length === 0) {
+      delete this.uuidCallbacks[uuid];
+    }
+  }
+
+  /**
+   * Releases the Miniserver connection and clears all cached state. Called on
+   * Homebridge shutdown so the websocket, keep-alive timers and listener/cache
+   * maps do not outlive the plugin.
+   */
+  public async disconnect(): Promise<void> {
+    const transport = this.transport;
+    this.transport = undefined;
+    this.watchedUuids.clear();
+    for (const uuid of Object.keys(this.uuidCallbacks)) {
+      delete this.uuidCallbacks[uuid];
+    }
+    for (const uuid of Object.keys(this.uuidCache)) {
+      delete this.uuidCache[uuid];
+    }
+
+    try {
+      await transport?.disconnect();
+    } catch (error) {
+      this.platform.log.debug(`Error during disconnect: ${this.formatError(error)}`);
     }
   }
 

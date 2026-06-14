@@ -10,14 +10,19 @@ export interface LoxoneStateTarget {
 export class LoxoneStateRouter {
   constructor(private readonly platform: LoxonePlatform) {}
 
-  bind(target: LoxoneStateTarget, bindings: LoxoneItemStates): void {
+  bind(target: LoxoneStateTarget, bindings: LoxoneItemStates): () => void {
     this.platform.log.debug(`[${target.device.name}] Registering ${Object.keys(bindings).length} state bindings`);
 
+    const disposers: Array<() => void> = [];
     for (const uuid in bindings) {
-      this.platform.LoxoneHandler.registerListenerForUUID(uuid, (message) => {
-        this.route(target, message);
-      });
+      disposers.push(
+        this.platform.LoxoneHandler.registerListenerForUUID(uuid, (message) => {
+          this.route(target, message);
+        }),
+      );
     }
+
+    return () => disposers.forEach((dispose) => dispose());
   }
 
   /**
@@ -25,10 +30,11 @@ export class LoxoneStateRouter {
    * items and services never reach into LoxoneHandler directly. Use this for
    * dynamic subscriptions that are not part of an accessory's declared
    * ItemStates (e.g. LightControllerV2 moodList, IntercomV2 address and native
-   * motion). The router stays the single owner of state subscription.
+   * motion). The router stays the single owner of state subscription. Returns a
+   * disposer that removes the subscription.
    */
-  subscribe(uuid: string, handler: (message: LoxoneEventMessage) => void): void {
-    this.platform.LoxoneHandler.registerListenerForUUID(uuid, handler);
+  subscribe(uuid: string, handler: (message: LoxoneEventMessage) => void): () => void {
+    return this.platform.LoxoneHandler.registerListenerForUUID(uuid, handler);
   }
 
   replayCachedState(target: LoxoneStateTarget, uuid: string): void {

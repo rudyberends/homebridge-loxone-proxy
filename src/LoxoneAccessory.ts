@@ -15,6 +15,7 @@ export class LoxoneAccessory {
   Accessory: PlatformAccessory | undefined;
   Service: Record<string, HomeKitServiceAdapter> = {};
   ItemStates: LoxoneItemStates = {};
+  private unbind?: () => void;
 
   constructor(readonly platform: LoxonePlatform, readonly device: Control) {
     if (this.platform.AccessoryCount >= 149) {
@@ -219,7 +220,17 @@ export class LoxoneAccessory {
   }
 
   private setupListeners(): void {
-    this.platform.stateRouter.bind(this, this.ItemStates);
+    this.unbind = this.platform.stateRouter.bind(this, this.ItemStates);
+  }
+
+  /**
+   * Releases this accessory's Loxone state subscriptions. Call when the
+   * accessory is removed or the platform is rebuilding its accessory set so the
+   * handler's listener map does not grow unbounded.
+   */
+  public dispose(): void {
+    this.unbind?.();
+    this.unbind = undefined;
   }
 
   public callBackHandler(message: LoxoneUpdateMessage): void {

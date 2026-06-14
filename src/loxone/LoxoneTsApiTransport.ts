@@ -31,6 +31,7 @@ export interface LoxoneApiClient {
     };
   };
   connect(existingToken?: string): Promise<void>;
+  disconnect(preserveToken?: boolean): Promise<void>;
   getStructureFile(): Promise<StructureFile>;
   enableUpdates(): Promise<void>;
   control(uuid: string, command: string, timeoutOverride?: number): Promise<LoxoneTransportResponse>;
@@ -77,6 +78,12 @@ export class LoxoneTsApiTransport implements LoxoneTransport {
     const client = await this.getOrCreateClient();
     this.applyWatchList();
     await client.connect(existingToken);
+  }
+
+  async disconnect(): Promise<void> {
+    const client = this.client;
+    this.client = undefined;
+    await client?.disconnect();
   }
 
   async getStructureFile(): Promise<StructureFile> {

@@ -112,7 +112,8 @@ export class LightControllerV2 extends LoxoneAccessory {
     const moods = JSON.parse(rawMoodList) as { id: number; name: string }[];
 
     return moods
-      .filter(mood => mood.id !== 778) // ignore default "off" mood
+      // Spec: moodID 0 is always "off"; 778 is an additionally observed off id.
+      .filter(mood => mood.id !== 0 && mood.id !== 778)
       .map(mood => {
         const moodItem = {
           ...this.device,

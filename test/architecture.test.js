@@ -22,6 +22,7 @@ const { Irrigation } = require('../dist/loxone/items/Irrigation');
 const { Radio } = require('../dist/loxone/items/Radio');
 const { LightControllerV2 } = require('../dist/loxone/items/LightControllerV2');
 const { Ventilation } = require('../dist/loxone/items/Ventilation');
+const { ContactSensor } = require('../dist/homekit/services/ContactSensor');
 const crypto = require('node:crypto');
 const sdp = require('../dist/homekit/hksv/sdp');
 const rsa = require('../dist/homekit/hksv/rsa');
@@ -350,7 +351,7 @@ test('Climate and window fixture covers thermostat, window, and blind edge state
     'state-thermostat-target': { service: 'PrimaryService', state: 'tempTarget' },
     'state-thermostat-mode': { service: 'PrimaryService', state: 'operatingMode' },
   });
-  assert.match(command(thermostatPlan, 'setTargetTemperature', 19.5), /^override\/3\/\[\d+\]\/19.5$/);
+  assert.match(command(thermostatPlan, 'setTargetTemperature', 19.5), /^override\/3\/\d+\/19.5$/);
 
   const windowPlan = planForControl(Window, prepared.controls['ctrl-window']);
   assert.deepEqual(windowPlan.stateBindings, {
@@ -594,12 +595,14 @@ test('Covering, window, alarm, thermostat, and irrigation commands are declarati
   assert.equal(command(planFor(Window), 'setTargetPosition', 50), 'moveToPosition/50');
 
   const alarmPlan = planFor(Alarm);
-  assert.equal(command(alarmPlan, 'setTargetState', 0), 'off');
+  assert.equal(command(alarmPlan, 'setTargetState', 0), 'delayedon/1'); // STAY_ARM (home) arms, never disarms
   assert.equal(command(alarmPlan, 'setTargetState', 1), 'delayedon/1');
   assert.equal(command(alarmPlan, 'setTargetState', 2), 'delayedon/0');
+  assert.equal(command(alarmPlan, 'setTargetState', 3), 'off'); // only DISARM maps to off
 
+  // override's [..] are optional-param notation, not literal brackets
   const thermostatCommand = command(planFor(IRoomControllerV2), 'setTargetTemperature', 21);
-  assert.match(thermostatCommand, /^override\/3\/\[\d+\]\/21$/);
+  assert.match(thermostatCommand, /^override\/3\/\d+\/21$/);
 
   const irrigationPlan = planFor(Irrigation);
   assert.equal(command(irrigationPlan, 'selectZone', 3), 'select/3');
@@ -757,6 +760,35 @@ test('ffmpegArgs tokenizer honours quotes and extractHost parses URLs', () => {
   assert.equal(ffmpegArgs.extractHost('http://192.168.1.20:8080/mjpg/video.mjpg'), '192.168.1.20:8080');
   assert.equal(ffmpegArgs.extractHost('http://192.168.1.20:80/mjpg/video.mjpg'), '192.168.1.20'); // default port stripped
   assert.equal(ffmpegArgs.extractHost('not a url'), null);
+});
+
+test('ContactSensor decodes the windowStates bitmask (not exact-string match)', () => {
+  const makeSensor = (windowIndex) => {
+    const sensor = Object.create(ContactSensor.prototype);
+    const captured = [];
+    sensor.State = { ContactSensorState: 9 }; // sentinel != 0/1
+    sensor.device = { name: 'Door', details: { windowIndex } };
+    sensor.platform = { log: { debug() {} }, Characteristic: { ContactSensorState: 'CS' } };
+    sensor.service = { getCharacteristic: () => ({ updateValue: (v) => captured.push(v) }) };
+    return { sensor, captured };
+  };
+  const decode = (value, windowIndex = 0) => {
+    const { sensor, captured } = makeSensor(windowIndex);
+    sensor.updateService({ value });
+    return captured.length ? captured[captured.length - 1] : sensor.State.ContactSensorState;
+  };
+
+  // 0 = CONTACT_DETECTED (closed), 1 = open
+  assert.equal(decode('1'), 0, 'closed');
+  assert.equal(decode('9'), 0, 'closed + locked');
+  assert.equal(decode('17'), 0, 'closed + unlocked');
+  assert.equal(decode('4'), 1, 'open');
+  assert.equal(decode('2'), 1, 'tilted');
+  assert.equal(decode('20'), 1, 'open + unlocked');
+  // offline/unknown (0) keeps the previous state (no update pushed)
+  assert.equal(decode('0'), 9, 'offline keeps previous');
+  // picks the correct CSV entry by window index
+  assert.equal(decode('4,1,2', 1), 0, 'index 1 = closed');
 });
 
 test('Ventilation maps fan speed to a manual setTimer command and off to automatic', () => {

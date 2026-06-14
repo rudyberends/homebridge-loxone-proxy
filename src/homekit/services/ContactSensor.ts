@@ -33,24 +33,20 @@ export class ContactSensor extends BaseService {
 
     this.platform.log.debug(`[${this.device.name}] Callback state update for ContactSensor: ${itemEntry}`);
 
-    /*
-      Each state is a integer value that represents a bitmask where the individual bits correspond to the following states:
-      none → state unknown / sensor offline
-      1→ closed
-      2→ tilted
-      4→ open
-      8→ locked
-      16→ unlocked
-    */
-
-    switch (itemEntry) {
-      case '1':
-      case '8':
-        this.State.ContactSensorState = 0; // Closed
-        break;
-      default:
-        this.State.ContactSensorState = 1; // Open
+    // windowStates is a bitmask, not an exact value:
+    //   0 = offline/unknown, 1 = closed, 2 = tilted, 4 = open, 8 = locked, 16 = unlocked.
+    // A door can therefore report e.g. 9 (closed+locked) or 17 (closed+unlocked);
+    // matching exact '1'/'8' wrongly reported those as Open.
+    const bits = Number(itemEntry) || 0;
+    if (bits === 0) {
+      this.platform.log.debug(`[${this.device.name}] windowStates offline/unknown; keeping previous contact state`);
+      return;
     }
+
+    // Closed only when the closed bit is set and neither tilted nor open; the
+    // lock bits (8/16) are ignored for the contact state.
+    const isClosed = (bits & 1) !== 0 && (bits & (2 | 4)) === 0;
+    this.State.ContactSensorState = isClosed ? 0 : 1; // 0 = CONTACT_DETECTED (closed), 1 = open
 
     // Also make sure this change is directly communicated to HomeKit
     this.service!.getCharacteristic(this.platform.Characteristic.ContactSensorState).updateValue(this.State.ContactSensorState);

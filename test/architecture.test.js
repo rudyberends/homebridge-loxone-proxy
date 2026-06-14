@@ -21,6 +21,7 @@ const { IRoomControllerV2 } = require('../dist/loxone/items/IRoomControllerV2');
 const { Irrigation } = require('../dist/loxone/items/Irrigation');
 const { Radio } = require('../dist/loxone/items/Radio');
 const { LightControllerV2 } = require('../dist/loxone/items/LightControllerV2');
+const sdp = require('../dist/homekit/hksv/sdp');
 const structureFixture = require('./fixtures/structure-file.basic.json');
 const lightingFixture = require('./fixtures/structure-file.lighting.json');
 const climateWindowFixture = require('./fixtures/structure-file.climate-window.json');
@@ -678,4 +679,46 @@ test('Items and HomeKit services never reach into the transport/handler directly
   }
 
   assert.deepEqual(offenders, [], `Architecture layer-ownership violations:\n${offenders.join('\n')}`);
+});
+
+const OFFER_SDP = [
+  'v=0', 'o=- 1 1 IN IP4 0.0.0.0', 's=-', 't=0 0',
+  'a=group:BUNDLE 0 1',
+  'm=audio 9 UDP/TLS/RTP/SAVPF 111', 'a=mid:0',
+  'm=video 9 UDP/TLS/RTP/SAVPF 96', 'a=mid:1', '',
+].join('\r\n');
+
+const ANSWER_SDP_SWAPPED = [
+  'v=0', 'o=- 2 2 IN IP4 0.0.0.0', 's=-', 't=0 0',
+  'a=group:BUNDLE 1 0',
+  'm=video 9 UDP/TLS/RTP/SAVPF 96', 'a=mid:1',
+  'm=audio 9 UDP/TLS/RTP/SAVPF 111', 'a=mid:0', '',
+].join('\r\n');
+
+test('sdp helpers split, describe, and permute media sections', () => {
+  assert.equal(sdp.splitSdpSections('no media here'), undefined);
+
+  const parts = sdp.splitSdpSections(OFFER_SDP);
+  assert.equal(parts.mediaSections.length, 2);
+  assert.equal(sdp.describeSdpMlineOrder(OFFER_SDP), 'audio:0,video:1');
+  assert.equal(sdp.describeSdpMlineOrder(ANSWER_SDP_SWAPPED), 'video:1,audio:0');
+
+  assert.equal(sdp.permuteSections(['a']).length, 1);
+  assert.equal(sdp.permuteSections(['a', 'b']).length, 2);
+  assert.equal(sdp.permuteSections(['a', 'b', 'c']).length, 6);
+  assert.equal(sdp.permuteSections(['a', 'b', 'c', 'd', 'e']).length, 0); // capped
+});
+
+test('sdp reordering produces an answer whose m-lines match the offer order', () => {
+  const candidates = sdp.buildReorderedAnswerCandidates(OFFER_SDP, ANSWER_SDP_SWAPPED);
+  assert.ok(candidates.length > 0, 'expected at least one reordered candidate');
+
+  // At least one candidate must match the offer's m-line order (audio then video)
+  // with the BUNDLE group rewritten to the new order.
+  const matching = candidates.find((c) => sdp.describeSdpMlineOrder(c) === 'audio:0,video:1');
+  assert.ok(matching, 'expected a candidate reordered to the offer m-line order');
+  assert.match(matching, /a=group:BUNDLE 0 1/);
+
+  // Mismatched section counts yield no candidates.
+  assert.deepEqual(sdp.buildReorderedAnswerCandidates(OFFER_SDP, 'v=0\r\nm=audio 9 RTP 111\r\na=mid:0\r\n'), []);
 });

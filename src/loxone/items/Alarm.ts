@@ -13,15 +13,19 @@ export class Alarm extends LoxoneAccessory {
       commands: {
         setTargetState: {
           action: (value: unknown) => {
+            // HAP SecuritySystemTargetState: 0=STAY_ARM(home), 1=AWAY_ARM,
+            // 2=NIGHT_ARM, 3=DISARM. Only DISARM may map to 'off' -- the previous
+            // code disarmed the alarm when the user picked 'Home'. Loxone arms via
+            // delayedon/{1 with movement, 0 without}.
             const target = Number(value);
-            if (target === 0 || target === 3) {
+            if (target === 3) {
               return 'off';
             }
-            if (target === 1) {
-              return 'delayedon/1';
+            if (target === 0 || target === 1) {
+              return 'delayedon/1'; // home / away -> arm with movement
             }
             if (target === 2) {
-              return 'delayedon/0';
+              return 'delayedon/0'; // night -> arm without movement
             }
             return undefined;
           },

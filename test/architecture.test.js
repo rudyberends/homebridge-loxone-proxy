@@ -21,7 +21,9 @@ const { IRoomControllerV2 } = require('../dist/loxone/items/IRoomControllerV2');
 const { Irrigation } = require('../dist/loxone/items/Irrigation');
 const { Radio } = require('../dist/loxone/items/Radio');
 const { LightControllerV2 } = require('../dist/loxone/items/LightControllerV2');
+const crypto = require('node:crypto');
 const sdp = require('../dist/homekit/hksv/sdp');
+const rsa = require('../dist/homekit/hksv/rsa');
 const structureFixture = require('./fixtures/structure-file.basic.json');
 const lightingFixture = require('./fixtures/structure-file.lighting.json');
 const climateWindowFixture = require('./fixtures/structure-file.climate-window.json');
@@ -721,4 +723,23 @@ test('sdp reordering produces an answer whose m-lines match the offer order', ()
 
   // Mismatched section counts yield no candidates.
   assert.deepEqual(sdp.buildReorderedAnswerCandidates(OFFER_SDP, 'v=0\r\nm=audio 9 RTP 111\r\na=mid:0\r\n'), []);
+});
+
+test('rsa.createRsaPublicKey parses PEM, JWK components, and hex DER', () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwk = publicKey.export({ format: 'jwk' });
+  const pem = publicKey.export({ type: 'spki', format: 'pem' });
+  const der = publicKey.export({ type: 'spki', format: 'der' });
+
+  const roundTrip = (key) => {
+    const enc = crypto.publicEncrypt({ key, padding: crypto.constants.RSA_PKCS1_PADDING }, Buffer.from('hello'));
+    const dec = crypto.privateDecrypt({ key: privateKey, padding: crypto.constants.RSA_PKCS1_PADDING }, enc);
+    return dec.toString('utf8');
+  };
+
+  assert.equal(roundTrip(rsa.createRsaPublicKey(undefined, undefined, pem)), 'hello', 'PEM text');
+  assert.equal(roundTrip(rsa.createRsaPublicKey(jwk.n, jwk.e, undefined)), 'hello', 'JWK n/e components');
+  assert.equal(roundTrip(rsa.createRsaPublicKey(undefined, undefined, der.toString('hex'))), 'hello', 'hex DER');
+
+  assert.throws(() => rsa.createRsaPublicKey(undefined, undefined, undefined));
 });

@@ -142,10 +142,14 @@ export class Valve {
    * @param now - Current timestamp
    */
   public updateFromLoxone(currentZoneId: number, now: number): void {
-    if (currentZoneId === -1 || currentZoneId !== this.meta.id) {
-      this.reset();
-    } else {
+    // Loxone currentZone: -1 = off, 0..7 = that single zone active, 8 = all zones
+    // active. Previously only an exact zone-id match activated, so currentZone 8
+    // left every valve showing off.
+    const active = currentZoneId === 8 || currentZoneId === this.meta.id;
+    if (active) {
       this.activate(now);
+    } else {
+      this.reset();
     }
   }
 

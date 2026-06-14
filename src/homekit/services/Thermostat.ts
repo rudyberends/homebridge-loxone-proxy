@@ -48,7 +48,13 @@ export class Thermostat extends BaseService {
 
     switch (message.state) {
       case 'operatingMode':
+        // Loxone operatingMode: -1=Off, 0=AutoH+C, 1=AutoHeat, 2=AutoCool,
+        // 3=ManualH+C, 4=ManualHeat, 5=ManualCool -> HAP TargetHeatingCoolingState
+        // (0=Off, 1=Heat, 2=Cool, 3=Auto).
         switch (message.value) {
+          case -1:
+            this.State.TargetHeatingCoolingState = 0; // Off
+            break;
           case 0:
           case 3:
             this.State.TargetHeatingCoolingState = 3;

@@ -17,8 +17,11 @@ export class LoxoneControlMapper {
     const controls: Controls = {};
 
     for (const [uuid, control] of Object.entries(config.controls)) {
+      // Deep-clone so planning owns its data: items mutate controls (and their
+      // subControls/details) in place, so sharing references with the source
+      // Structure File would mutate it and make a re-map non-idempotent.
       controls[uuid] = {
-        ...control,
+        ...structuredClone(control),
         room: rooms[control.room]?.name ?? 'undefined',
         catIcon: cats[control.cat]?.image ?? 'undefined',
         cat: cats[control.cat]?.type ?? 'undefined',

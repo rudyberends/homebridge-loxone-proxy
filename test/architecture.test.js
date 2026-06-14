@@ -248,6 +248,20 @@ test('LoxoneControlMapper prepares room and category metadata without mutating s
   assert.equal(sourceControl.room, 'room-1');
 });
 
+test('LoxoneControlMapper.prepare deep-clones nested control data so planning cannot mutate the source', () => {
+  const mapper = new LoxoneControlMapper(makePlatform());
+  const before = JSON.stringify(lightingFixture);
+  const prepared = mapper.prepare(lightingFixture);
+
+  // Mutate nested structures the way item planning does (name/details/subControls).
+  const child = prepared.controls['ctrl-light-controller'].subControls['ctrl-light-dimmer'];
+  child.name = 'MUTATED';
+  child.details = { serviceType: 'outlet' };
+
+  // With a shallow clone these refs were shared and the source would change.
+  assert.equal(JSON.stringify(lightingFixture), before, 'source Structure File must not be mutated');
+});
+
 test('Structure File fixture plans keep command and state boundaries explicit', () => {
   const mapper = new LoxoneControlMapper(makePlatform());
   const prepared = mapper.prepare(structureFixture);

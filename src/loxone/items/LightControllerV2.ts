@@ -6,6 +6,7 @@ import { Dimmer } from './Dimmer';
 import { Switch } from './Switch';
 import { LoxoneEventValue, LoxoneUpdateMessage } from '../LoxoneTypes';
 import { dispatchHomeKitUpdate } from '../../homekit/HomeKitServiceAdapter';
+import { Control } from '../StructureFile';
 
 const typeClassMap = {
   'ColorPickerV2': ColorPickerV2,
@@ -156,13 +157,15 @@ export class LightControllerV2 extends LoxoneAccessory {
     }
 
     for (const childUuid in this.device.subControls) {
-      const lightItem = this.device.subControls[childUuid];
-      if (!lightItem) {
+      const source = this.device.subControls[childUuid];
+      if (!source) {
         continue;
       }
 
-      // Ensure we never crash when accessing details
-      lightItem.details = lightItem.details || {};
+      // Clone the subcontrol before mutating: planning rewrites name/room/cat/
+      // details, and mutating the shared structure object in place would make a
+      // re-map non-idempotent.
+      const lightItem: Control = { ...source, details: { ...(source.details ?? {}) } };
 
       // Skip master entries (we only want actual channels)
       if (

@@ -42,6 +42,7 @@ import type { TwoWayAudioContext } from '../services/Camera';
 import { FfmpegStreamingProcess, StreamingDelegate as FfmpegStreamingDelegate } from './FfmpegStreamingProcess';
 import { LoxoneTalkbackSession } from './LoxoneTalkback';
 import { RecordingDelegate } from './RecordingDelegate';
+import { extractHost, tokenizeFfmpegArgs } from './ffmpegArgs';
 
   interface SessionInfo {
       address: string; // address of the HAP controller
@@ -1050,7 +1051,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       return [];
     }
 
-    const cameraHost = this.extractHost(this.streamUrl);
+    const cameraHost = extractHost(this.streamUrl);
     const expanded = raw
       .replace(/{camera_host}/g, cameraHost ?? '')
       .replace(/{stream_url}/g, this.streamUrl);
@@ -1058,24 +1059,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     const withTemplateVars = Object.entries(this.twoWayAudioTemplateVars ?? {})
       .reduce((acc, [key, value]) => acc.replace(new RegExp(`\\{${key}\\}`, 'g'), value), expanded);
 
-    return this.tokenizeFfmpegArgs(withTemplateVars);
+    return tokenizeFfmpegArgs(withTemplateVars);
   }
 
-  private extractHost(url: string): string | null {
-    try {
-      return new URL(url).host;
-    } catch {
-      return null;
-    }
-  }
-
-  private tokenizeFfmpegArgs(command: string): string[] {
-    const args: string[] = [];
-    const re = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(command)) !== null) {
-      args.push(match[1] ?? match[2] ?? match[0]);
-    }
-    return args;
-  }
 }

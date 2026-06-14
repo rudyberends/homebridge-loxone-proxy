@@ -24,6 +24,7 @@ const { LightControllerV2 } = require('../dist/loxone/items/LightControllerV2');
 const crypto = require('node:crypto');
 const sdp = require('../dist/homekit/hksv/sdp');
 const rsa = require('../dist/homekit/hksv/rsa');
+const ffmpegArgs = require('../dist/homekit/hksv/ffmpegArgs');
 const structureFixture = require('./fixtures/structure-file.basic.json');
 const lightingFixture = require('./fixtures/structure-file.lighting.json');
 const climateWindowFixture = require('./fixtures/structure-file.climate-window.json');
@@ -742,4 +743,17 @@ test('rsa.createRsaPublicKey parses PEM, JWK components, and hex DER', () => {
   assert.equal(roundTrip(rsa.createRsaPublicKey(undefined, undefined, der.toString('hex'))), 'hello', 'hex DER');
 
   assert.throws(() => rsa.createRsaPublicKey(undefined, undefined, undefined));
+});
+
+test('ffmpegArgs tokenizer honours quotes and extractHost parses URLs', () => {
+  assert.deepEqual(
+    ffmpegArgs.tokenizeFfmpegArgs('-i rtsp://cam/stream -af "volume=2.0" -f s16le'),
+    ['-i', 'rtsp://cam/stream', '-af', 'volume=2.0', '-f', 's16le'],
+  );
+  assert.deepEqual(ffmpegArgs.tokenizeFfmpegArgs("-x 'a b c'"), ['-x', 'a b c']);
+  assert.deepEqual(ffmpegArgs.tokenizeFfmpegArgs(''), []);
+
+  assert.equal(ffmpegArgs.extractHost('http://192.168.1.20:8080/mjpg/video.mjpg'), '192.168.1.20:8080');
+  assert.equal(ffmpegArgs.extractHost('http://192.168.1.20:80/mjpg/video.mjpg'), '192.168.1.20'); // default port stripped
+  assert.equal(ffmpegArgs.extractHost('not a url'), null);
 });

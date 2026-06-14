@@ -150,6 +150,14 @@ class LoxoneHandler {
   }
 
   public registerListenerForUUID(uuid: string, callback: LoxoneEventCallback): () => void {
+    // Guard against item plans that bind a non-existent state (the key becomes
+    // the string 'undefined'), which would register a dead listener for a UUID
+    // that never updates.
+    if (!uuid || uuid === 'undefined') {
+      this.platform.log.warn('[LoxoneHandler] Ignoring state subscription for an undefined UUID (item bound a missing state)');
+      return () => undefined;
+    }
+
     if (Object.prototype.hasOwnProperty.call(this.uuidCallbacks, uuid)) {
       this.uuidCallbacks[uuid].push(callback);
     } else {

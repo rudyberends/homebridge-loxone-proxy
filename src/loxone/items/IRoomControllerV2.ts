@@ -29,7 +29,9 @@ export class IRoomControllerV2 extends LoxoneAccessory {
               0,
             );
             const secondsDifference = (nextDayAtMidnight.getTime() / 1000) - (new Date('2009-01-01T00:00:00Z').getTime() / 1000);
-            return `override/3/[${secondsDifference}]/${value}`;
+            // Spec: override/{modeId}/[{until}]/[{temp}] -- the [..] denote OPTIONAL
+            // params in the spec notation, not literal characters. modeId 3 = Manual.
+            return `override/3/${Math.round(secondsDifference)}/${value}`;
           },
         },
       },

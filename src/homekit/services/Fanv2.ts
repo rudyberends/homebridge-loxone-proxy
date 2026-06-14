@@ -9,6 +9,8 @@ export class Fanv2 extends BaseService {
   State = {
     Active: 0, // 0 = INACTIVE, 1 = ACTIVE (derived from the Loxone speed state)
     RotationSpeed: 0,
+    mode: 0, // id of the active Loxone ventilation mode, needed to build setTimer
+    lastOnSpeed: 100, // remembered speed so toggling Active on restores it
   };
 
   /**
@@ -20,13 +22,13 @@ export class Fanv2 extends BaseService {
       this.accessory.getService(this.platform.Service.Fanv2) ||
       this.accessory.addService(this.platform.Service.Fanv2);
 
-    // Create handlers for the required characteristics
     this.service.getCharacteristic(this.platform.Characteristic.Active)
       .onGet(() => this.handleActiveGet())
       .onSet((value) => this.handleActiveSet(value as number));
 
     this.service.getCharacteristic(this.platform.Characteristic.RotationSpeed)
-      .onGet(() => this.handleRotationSpeedGet());
+      .onGet(() => this.handleRotationSpeedGet())
+      .onSet((value) => this.handleRotationSpeedSet(value as number));
   }
 
   /**
@@ -38,12 +40,17 @@ export class Fanv2 extends BaseService {
 
     switch (message.state) {
       case 'mode':
-        // Handle mode update if needed
+        this.State.mode = Number(message.value);
         break;
-      case 'speed':
-        this.State.RotationSpeed = Number(message.value);
-        this.State.Active = Number(message.value) > 0 ? 1 : 0;
+      case 'speed': {
+        const speed = Number(message.value);
+        this.State.RotationSpeed = speed;
+        this.State.Active = speed > 0 ? 1 : 0;
+        if (speed > 0) {
+          this.State.lastOnSpeed = speed;
+        }
         break;
+      }
     }
 
     // Make sure the changes are communicated to HomeKit
@@ -63,19 +70,18 @@ export class Fanv2 extends BaseService {
   /**
    * Handles the SET event for the Active characteristic.
    *
-   * The Loxone Ventilation block does not expose a verified on/off command in
-   * the Structure File, so the fan cannot be driven from HomeKit. Rather than
-   * report a phantom success (the old no-op left HomeKit showing the requested
-   * state forever), re-assert the real device state so the toggle snaps back.
-   * @param value - The requested value of the Active characteristic.
+   * Loxone Ventilation has no hard on/off: "off" returns control to the
+   * Miniserver's automatic mode (setTimer/0), "on" starts a manual override at
+   * the last known speed. See Ventilation item for the command strings.
    */
   handleActiveSet(value: number): void {
-    this.platform.log.warn(
-      `[${this.device.name}] Ventilation on/off is not controllable from HomeKit (requested ${value}); reflecting device state`,
-    );
-    setTimeout(() => {
-      this.service?.getCharacteristic(this.platform.Characteristic.Active)?.updateValue(this.State.Active);
-    }, 0);
+    this.platform.log.debug(`[${this.device.name}] Triggered SET Active: ${value}`);
+    if (value === 0) {
+      this.executeCommand('setVentilationAuto');
+    } else {
+      const speed = this.State.RotationSpeed > 0 ? this.State.RotationSpeed : this.State.lastOnSpeed;
+      this.executeCommand('setRotationSpeed', { speed, modeId: this.State.mode });
+    }
   }
 
   /**
@@ -85,5 +91,19 @@ export class Fanv2 extends BaseService {
   handleRotationSpeedGet(): number {
     this.platform.log.debug('Triggered GET RotationSpeed');
     return this.State.RotationSpeed;
+  }
+
+  /**
+   * Handles the SET event for the RotationSpeed characteristic by starting a
+   * manual ventilation timer at the requested speed in the current mode.
+   */
+  handleRotationSpeedSet(value: number): void {
+    this.platform.log.debug(`[${this.device.name}] Triggered SET RotationSpeed: ${value}`);
+    if (value <= 0) {
+      this.executeCommand('setVentilationAuto');
+      return;
+    }
+    this.State.lastOnSpeed = value;
+    this.executeCommand('setRotationSpeed', { speed: value, modeId: this.State.mode });
   }
 }

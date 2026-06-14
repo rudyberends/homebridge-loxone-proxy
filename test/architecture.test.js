@@ -21,6 +21,7 @@ const { IRoomControllerV2 } = require('../dist/loxone/items/IRoomControllerV2');
 const { Irrigation } = require('../dist/loxone/items/Irrigation');
 const { Radio } = require('../dist/loxone/items/Radio');
 const { LightControllerV2 } = require('../dist/loxone/items/LightControllerV2');
+const { Ventilation } = require('../dist/loxone/items/Ventilation');
 const crypto = require('node:crypto');
 const sdp = require('../dist/homekit/hksv/sdp');
 const rsa = require('../dist/homekit/hksv/rsa');
@@ -756,4 +757,20 @@ test('ffmpegArgs tokenizer honours quotes and extractHost parses URLs', () => {
   assert.equal(ffmpegArgs.extractHost('http://192.168.1.20:8080/mjpg/video.mjpg'), '192.168.1.20:8080');
   assert.equal(ffmpegArgs.extractHost('http://192.168.1.20:80/mjpg/video.mjpg'), '192.168.1.20'); // default port stripped
   assert.equal(ffmpegArgs.extractHost('not a url'), null);
+});
+
+test('Ventilation maps fan speed to a manual setTimer command and off to automatic', () => {
+  const states = { mode: 's-mode', speed: 's-speed' };
+  const plan = planFor(Ventilation, { type: 'Ventilation', states });
+  assert.equal(plan.services[0].kind, 'fanv2');
+
+  // Manual override: setTimer/{interval}/{speed}/{modeId}/-1 (default interval 3600s).
+  assert.equal(command(plan, 'setRotationSpeed', { speed: 42, modeId: 1 }), 'setTimer/3600/42/1/-1');
+  assert.equal(command(plan, 'setRotationSpeed', { speed: 150, modeId: 0 }), 'setTimer/3600/100/0/-1'); // clamped to 100
+  assert.equal(command(plan, 'setVentilationAuto'), 'setTimer/0');
+
+  // Interval is configurable via Advanced.VentilationManualSeconds.
+  const plan2 = planFor(Ventilation, { type: 'Ventilation', states },
+    { config: { Advanced: { VentilationManualSeconds: 7200 } } });
+  assert.equal(command(plan2, 'setRotationSpeed', { speed: 30, modeId: 2 }), 'setTimer/7200/30/2/-1');
 });

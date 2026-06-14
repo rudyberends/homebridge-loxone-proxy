@@ -21,6 +21,8 @@ export type LoxoneCommandId =
   | 'setTargetDoorState'
   | 'setTargetState'
   | 'setTargetTemperature'
+  | 'setRotationSpeed'
+  | 'setVentilationAuto'
   | 'selectZone'
   | 'setZoneDuration';
 

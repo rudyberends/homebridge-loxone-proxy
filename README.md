@@ -42,6 +42,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |loxone Item |HomeKit Accessory |Mapping |Note
 |--- |--- |--- |--- |
 | `Alarm` | SecuritySystem | Auto
+|`AudioZoneV2` | SmartSpeaker | Auto | Loxone Audioserver zone → play/pause/stop + volume. HomeKit has no source/playlist/track controls, and Home-app support for SmartSpeaker is limited.
 |`Brightness` | LightSensor | Auto | InfoOnlyAnalog Item. Tries to map based on its format. Can be overridden with a mapping.
 | `ColorPickerV2` | Lightbulb | Auto | Individual ColorPickers, or items parsed from LightControllerV2.
 | `Dimmer, EIBDimmer` | Lightbulb | Auto | Individual Dimmers, or items parsed from LightControllerV2.

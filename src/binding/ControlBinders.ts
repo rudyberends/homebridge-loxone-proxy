@@ -1,6 +1,7 @@
 import type { PlatformAccessory, Service, WithUUID } from 'homebridge';
 import type {
   AlarmControl,
+  AudioZoneV2Control,
   ColorPickerV2Control,
   ControlHandle,
   DimmerControl,
@@ -32,6 +33,7 @@ import { bindIrrigation } from './binders/irrigationBinder';
 import { bindNfcCodeTouch } from './binders/nfcCodeTouchBinder';
 import { resolveAnalogSensor, resolveDigitalSensor, resolveSwitchService } from './ServiceResolver';
 import { alarmBindings } from './tables/alarmBindings';
+import { audioBindings } from './tables/audioBindings';
 import { contactBindings } from './tables/contactBindings';
 import { gateBindings, jalousieBindings, windowBindings } from './tables/coveringBindings';
 import { fanBindings } from './tables/fanBindings';
@@ -197,6 +199,15 @@ const ventilationBinder: ControlBinder = (platform, handle) => {
   }];
 };
 
+// AudioZoneV2 (Audioserver zone) → SmartSpeaker: transport (play/pause/stop) + volume.
+const audioZoneBinder: ControlBinder = (platform, handle) => {
+  const audio = handle as AudioZoneV2Control;
+  return [{
+    kind: platform.Service.SmartSpeaker,
+    bindTo: (service) => bindCharacteristics(platform, service, audio, audioBindings),
+  }];
+};
+
 const pushbuttonBinder: ControlBinder = (platform, handle) => {
   const button = handle as PushbuttonControl;
   return [{
@@ -294,6 +305,7 @@ export const CONTROL_BINDERS: Readonly<Record<string, ControlBinder>> = {
   ColorPickerV2: colorPickerBinder,
   IRoomControllerV2: thermostatBinder,
   Alarm: alarmBinder,
+  AudioZoneV2: audioZoneBinder,
   Ventilation: ventilationBinder,
   Pushbutton: pushbuttonBinder,
   NfcCodeTouch: nfcCodeTouchBinder,

@@ -95,6 +95,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   private cachedSnapshot: Buffer | null = null;
   private cachedAt = 0;
   private readonly cacheTtlMs = 5000;
+  private snapshotInFlight?: Promise<Buffer | null>;
   private isShuttingDown = false;
 
   //private readonly camera;
@@ -328,18 +329,50 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       return this.cachedSnapshot;
     }
 
-    return new Promise((resolve) => {
-      this.handleSnapshotRequest({ width: 640, height: 360 }, (err, buffer) => {
-        if (err || !buffer) {
-          this.platform.log.warn(`[${this.cameraName}] Snapshot request failed`);
-          return resolve(null);
-        }
+    return this.coalescedSnapshot(640, 360);
+  }
 
-        this.cachedSnapshot = buffer;
-        this.cachedAt = Date.now();
-        resolve(buffer);
-      });
-    });
+  /** Coalesces concurrent snapshot requests onto a single in-flight fetch. */
+  private coalescedSnapshot(width: number, height: number): Promise<Buffer | null> {
+    if (!this.snapshotInFlight) {
+      this.snapshotInFlight = this.produceSnapshot(width, height)
+        .finally(() => {
+          this.snapshotInFlight = undefined;
+        });
+    }
+    return this.snapshotInFlight;
+  }
+
+  /** Fetches a fresh snapshot: HTTP JPEG first (fast for MJPEG cameras), FFmpeg fallback. Updates the cache. */
+  private async produceSnapshot(width: number, height: number): Promise<Buffer | null> {
+    if (this.snapshotUrl) {
+      try {
+        const snapshot = await this.getSnapshotViaHTTP();
+        if (snapshot) {
+          this.cachedSnapshot = snapshot;
+          this.cachedAt = Date.now();
+          this.platform.log.debug(`[${this.cameraName}] Captured snapshot via HTTP`);
+          return snapshot;
+        }
+      } catch (error) {
+        this.platform.log.debug(
+          `[${this.cameraName}] HTTP snapshot failed, falling back to FFmpeg: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    try {
+      const snapshot = await this.fetchSnapshot(width, height);
+      this.cachedSnapshot = snapshot;
+      this.cachedAt = Date.now();
+      this.platform.log.debug(`[${this.cameraName}] Captured snapshot via FFmpeg at ${width}x${height}`);
+      return snapshot;
+    } catch (error) {
+      this.platform.log.debug(
+        `[${this.cameraName}] FFmpeg snapshot failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -413,33 +446,20 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     this.platform.log.debug(`[${this.cameraName}] Snapshot requested: ${request.width} x ${request.height}`);
 
     try {
-      // Try HTTP snapshot first (faster than FFmpeg)
-      let snapshot: Buffer | null = null;
-      if (this.snapshotUrl) {
-        try {
-          snapshot = await this.getSnapshotViaHTTP();
-          if (snapshot) {
-            // Update cache for next request
-            this.cachedSnapshot = snapshot;
-            this.cachedAt = Date.now();
-            this.platform.log.debug(`[${this.cameraName}] Successfully captured snapshot via HTTP at ${request.width}x${request.height}`);
-            callback(undefined, snapshot);
-            return;
-          }
-        } catch (error) {
-          this.platform.log.debug(
-            `[${this.cameraName}] HTTP snapshot failed, falling back to FFmpeg: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
+      const snapshot = await this.coalescedSnapshot(request.width, request.height);
+      if (snapshot) {
+        callback(undefined, snapshot);
+        return;
       }
 
-      // Fallback to FFmpeg if HTTP failed or snapshotUrl not available
-      snapshot = await this.fetchSnapshot(request.width, request.height);
-      // Update cache for next request
-      this.cachedSnapshot = snapshot;
-      this.cachedAt = Date.now();
-      this.platform.log.debug(`[${this.cameraName}] Successfully captured snapshot via FFmpeg at ${request.width}x${request.height}`);
-      callback(undefined, snapshot);
+      // Fall back to the last good frame rather than failing the request outright.
+      if (this.cachedSnapshot) {
+        this.platform.log.debug(`[${this.cameraName}] Snapshot failed; serving last cached frame`);
+        callback(undefined, this.cachedSnapshot);
+        return;
+      }
+
+      callback(new Error('Snapshot unavailable'));
     } catch (error) {
       this.platform.log.error(`[${this.cameraName}] Snapshot error: ${error instanceof Error ? error.message : String(error)}`);
       callback(error instanceof Error ? error : new Error(String(error)));

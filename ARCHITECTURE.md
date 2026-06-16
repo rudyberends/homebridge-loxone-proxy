@@ -4,41 +4,40 @@ This plugin has one product boundary: Loxone <-> HomeKit. The architecture is op
 
 ## Layers
 
-| Layer | Owns | Must not own |
-| --- | --- | --- |
-| `LoxoneTransport` | The plugin-owned communication contract. | HomeKit concepts or item mapping. |
-| `LoxoneTsApiTransport` | Adapting `@rudyberends/loxone-ts-api` to `LoxoneTransport`. | Loxone item semantics or HomeKit behavior. |
-| `LoxoneHandler` | Connection orchestration, Structure File loading, command dispatch, state callback cache. | Concrete `loxone-ts-api` client details. |
-| `LoxoneControlMapper` | Structure File normalization, room/category metadata, filtering. | Creating HomeKit services directly. |
-| Item classes | Declarative accessory/service plans, command bindings, state bindings. | Sending commands directly to Loxone. |
-| `LoxoneCommandBus` | Executing resolved command bindings. | Inventing command strings. |
-| `LoxoneStateRouter` | Routing Loxone state UUID updates to accessories. | Parsing HomeKit service behavior. |
-| HomeKit services | Binding characteristics to command IDs and state IDs. | Talking to Loxone transport directly. |
-| `AccessoryReconciler` | Homebridge accessory cache reconciliation. | Loxone command/state semantics. |
+| Layer | Module(s) | Owns | Must not own |
+| --- | --- | --- | --- |
+| Platform | `LoxonePlatform`, `index.ts` | Homebridge lifecycle, the accessory cache list, the name registry, exposing HAP `Service`/`Characteristic`. | Loxone protocol details or item semantics. |
+| Loxone transport | [`loxone-ts-client`](https://www.npmjs.com/package/loxone-ts-client) (external dependency) | All Miniserver communication: websocket, token auth, Structure File parsing, encrypted commands, state subscriptions, and the typed room/control model. | HomeKit concepts. |
+| Binding coordinator | `LoxoneBindingCoordinator` | Connection orchestration, per-room control discovery, accessory planning, reconciliation (create/update/restore/remove), routing accessories to the main or a per-room bridge, room/type filtering, central-room handling. | HAP characteristic specifics — it delegates those. |
+| Control routing | `ControlBinders` (`CONTROL_BINDERS`, `COMPOSITE_BINDERS`) | Mapping each Loxone control `type` to a `PlannedAccessory` (which HomeKit service(s) and which bindings). | Talking to the Miniserver. |
+| Binding tables | `binding/tables/*Bindings.ts` | Declarative characteristic ⇄ state/command bindings per control family (lighting, covering, fan, sensor, thermostat, alarm, radio, switch, pushbutton, mood, contact, smoke). | Imperative service construction. |
+| Binding engine | `BindingEngine.bindCharacteristics`, `CharacteristicBinding`, `ServiceResolver` | Applying a binding: wiring a HAP characteristic to a control's Loxone state (`handle.onState`) and command (`handle.send`). | Inventing command strings or reaching past the typed handle. |
+| Complex binders | `binding/binders/*` | Imperative wiring for controls that are not a simple table: `intercom` (+ HKSV), `nfcCodeTouch`, `irrigation`, `color`. | Generic command/state rules where a table suffices. |
+| Per-room publishing | `RoomBridgePublisher` | One HAP `Bridge` per room, deterministic pairing identity, and the manifest the config UI reads. | Loxone semantics. |
+| Naming | `AccessoryNameRegistry` | Clean, unique, HAP-safe, UUID-stable accessory names. | — |
+| Media | `homekit/hksv/*`, `homekit/services/*` | Camera streaming, HKSV recording + prebuffer, doorbell, motion, WebRTC talkback. | Generic command/state routing. |
 
 ## Command And State Rules
 
-- Loxone command strings belong in item plans.
-- HomeKit services refer to command IDs, not raw Loxone command strings.
-- Loxone state UUIDs belong in item state bindings.
-- Runtime command execution goes through `LoxoneCommandBus`.
-- Runtime state updates go through `LoxoneStateRouter`.
-- Item classes must not call `LoxoneHandler.sendCommand()` directly.
-- HomeKit service classes must not call `LoxoneHandler` or `LoxoneTransport` directly.
+- A control's HomeKit shape, its Loxone state UUIDs, and its commands live in the declarative binding tables (or in a binder, for complex controls).
+- Bindings reach the Miniserver only through the typed `ControlHandle` from `loxone-ts-client`: read state via `handle.state(...)` / `handle.onState(...)`, send via `handle.send(...)`.
+- The plugin has no hand-rolled command bus or state router; the library's typed handles own subscription and dispatch. Do not re-implement that layer.
+- Binders and tables must not reach into the raw `loxone-ts-client` client/transport directly — go through the control handle.
+- HomeKit service code must not talk to the transport directly.
 
 ## Transport Boundary
 
-`@rudyberends/loxone-ts-api` is maintained together with this plugin, so the adapter is intentionally thin. The boundary still matters because it gives the plugin a stable internal contract:
+`loxone-ts-client` is a separately published, independently versioned npm package. It owns every Loxone protocol concern and exposes typed control handles, a room view, and Miniserver discovery. This plugin depends on it and adds only the HomeKit binding layer, which keeps the boundary clean:
 
 - tests can run without a Miniserver;
-- `LoxoneHandler` stays independent from concrete client event shapes;
-- transport behavior can evolve in `loxone-ts-api` without leaking into HomeKit mapping code.
+- the binding coordinator stays independent of concrete protocol event shapes;
+- transport behavior can evolve in `loxone-ts-client` without leaking into HomeKit mapping code.
 
-## Intercom Boundary
+## Intercom & Media Boundary
 
-Intercom and IntercomV2 are intentionally treated as a separate bounded context. They include HKSV, signaling, prebuffering, talkback, camera streams, and token use. Those flows are not the same as normal command/state accessories.
+Intercom and IntercomV2 are intentionally a separate bounded context. They include HKSV, WebRTC signaling, prebuffering, talkback, camera streams, and Miniserver token use — flows that are not the same as normal command/state accessories. They live in `homekit/hksv/*` and `homekit/services/*`, wired up by `binding/binders/intercomBinder.ts`.
 
-The command/state architecture should keep supporting regular Intercom accessory planning where useful, but Intercom-specific media and signaling code should remain isolated from the generic command bus and state router rules.
+The command/state architecture still plans the regular Doorbell/Camera/MotionSensor accessory where useful, but the media and signaling code stays isolated from the generic binding tables and the `ControlHandle` command/state rules.
 
 ## Release Rules
 
@@ -50,12 +49,12 @@ Versioning is owned by semantic-release. Use conventional commits:
 | `feat: ...` | minor |
 | `refactor!: ...` plus `BREAKING CHANGE: ...` footer | major |
 
-For breaking beta refactors, prefer:
+Example of a breaking footer:
 
 ```text
-refactor!: migrate Loxone communication to loxone-ts-api
+refactor!: rebuild on a declarative binding engine over loxone-ts-client
 
-BREAKING CHANGE: requires Node.js 20 and replaces lxcommunicator with @rudyberends/loxone-ts-api.
+BREAKING CHANGE: requires Node.js 22 and replaces lxcommunicator with loxone-ts-client.
 ```
 
 The `beta` branch publishes prereleases. The `master` branch publishes stable releases.

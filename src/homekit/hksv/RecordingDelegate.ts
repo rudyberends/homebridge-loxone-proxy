@@ -2,6 +2,7 @@ import {
   APIEvent,
   CameraRecordingConfiguration,
   CameraRecordingDelegate,
+  H264Level,
   H264Profile,
   HAP,
   HDSProtocolSpecificErrorReason,
@@ -30,6 +31,15 @@ export interface FFMpegFragmentedMP4Session {
 }
 
 export const PREBUFFER_LENGTH = 4000;
+
+/**
+ * FFmpeg stderr lines that are expected during normal HKSV start/stop (a recording
+ * being torn down mid-fragment, the prebuffer pipe closing, a brief MJPEG hiccup).
+ * These are logged at debug instead of as errors so the log isn't spammed.
+ */
+export const KNOWN_BENIGN_FFMPEG_ERROR =
+  // eslint-disable-next-line max-len
+  /moov atom not found|Cannot determine format of input stream|Broken pipe|Invalid data found when processing input|Error splitting the input into NAL units|Immediate exit requested|partial file|End of file/i;
 
 export async function listenServer(server: Server, log: Logger): Promise<number> {
   let isListening = false;
@@ -462,8 +472,8 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     if (cp.stderr) {
       cp.stderr.on('data', data => {
         const msg = data.toString();
-        if (intentionallyKilled && /Immediate exit requested/i.test(msg)) {
-          this.log.debug(`[${this.cameraName}] [FFmpeg stderr]: ${msg.trim()} (intentional stop)`);
+        if (intentionallyKilled || KNOWN_BENIGN_FFMPEG_ERROR.test(msg)) {
+          this.log.debug(`[${this.cameraName}] [FFmpeg stderr]: ${msg.trim()} (benign)`);
           return;
         }
         if (msg.includes('moov') || msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed')) {
@@ -535,10 +545,14 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     const fps = this.clamp(Math.round(rawFps || 25), 2, 30);
     const bitrateKbps = this.normalizeBitrateKbps(config.videoCodec.parameters.bitRate);
     const profile = this.mapH264Profile(config.videoCodec.parameters.profile);
+    const level = this.mapH264Level(config.videoCodec.parameters.level);
 
     const args = [...base];
     if (profile) {
       args.push('-profile:v', profile);
+    }
+    if (level) {
+      args.push('-level:v', level);
     }
     if (bitrateKbps) {
       args.push('-b:v', `${bitrateKbps}k`, '-maxrate', `${bitrateKbps}k`, '-bufsize', `${bitrateKbps * 2}k`);
@@ -575,6 +589,24 @@ export class RecordingDelegate implements CameraRecordingDelegate {
         return 'main';
       case H264Profile.HIGH:
         return 'high';
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Maps the negotiated HKSV level to a libx264 `-level:v` string. Safe to pin
+   * because HomeKit only ever pairs a level with a resolution it permits, and we
+   * clamp the encoder to <=1080p — all within level 4.0.
+   */
+  private mapH264Level(level: H264Level): string | undefined {
+    switch (level) {
+      case H264Level.LEVEL3_1:
+        return '3.1';
+      case H264Level.LEVEL3_2:
+        return '3.2';
+      case H264Level.LEVEL4_0:
+        return '4.0';
       default:
         return undefined;
     }

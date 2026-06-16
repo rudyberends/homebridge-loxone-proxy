@@ -2,7 +2,7 @@
 import { ChildProcess, spawn, StdioNull, StdioPipe } from 'child_process';
 import EventEmitter from 'events';
 import { createServer, Server } from 'net';
-import { listenServer, MP4Atom, parseFragmentedMP4 } from './RecordingDelegate';
+import { KNOWN_BENIGN_FFMPEG_ERROR, listenServer, MP4Atom, parseFragmentedMP4 } from './RecordingDelegate';
 import type { Logger } from 'homebridge';
 
 interface PrebufferFmp4 {
@@ -147,8 +147,10 @@ export class PreBuffer {
     if (cp.stderr) {
       cp.stderr.on('data', data => {
         const output = data.toString();
-        // Only log actual errors, not warnings or info messages
-        if (output.toLowerCase().includes('error') && !output.toLowerCase().includes('deprecated')) {
+        // Only log actual errors, not warnings, info, or expected start/stop noise.
+        if (KNOWN_BENIGN_FFMPEG_ERROR.test(output)) {
+          this.log.debug(`[${this.cameraName}] [PreBuffer] FFmpeg (benign): ${output.trim()}`);
+        } else if (output.toLowerCase().includes('error') && !output.toLowerCase().includes('deprecated')) {
           this.log.error(`[${this.cameraName}] [PreBuffer] FFmpeg error: ${output.trim()}`);
         }
       });
@@ -170,7 +172,26 @@ export class PreBuffer {
 
     const server = new Server(socket => {
       server.close();
-      const writeAtom = (atom: MP4Atom) => socket.write(Buffer.concat([atom.header, atom.data]));
+
+      // Drain-aware writer: honour socket backpressure so the initial ring flush
+      // (and a slow downstream FFmpeg) can't balloon Node's write buffer.
+      const queue: Buffer[] = [];
+      let writable = true;
+      const flush = () => {
+        while (writable && queue.length) {
+          writable = socket.write(queue.shift()!);
+        }
+        if (!writable) {
+          socket.once('drain', () => {
+            writable = true;
+            flush();
+          });
+        }
+      };
+      const writeAtom = (atom: MP4Atom) => {
+        queue.push(Buffer.concat([atom.header, atom.data]));
+        flush();
+      };
 
       if (this.ftyp) {
         writeAtom(this.ftyp);
@@ -196,6 +217,7 @@ export class PreBuffer {
       this.events.on('atom', writeAtom);
 
       const cleanup = () => {
+        queue.length = 0;
         this.events.removeListener('atom', writeAtom);
         this.events.removeListener('killed', cleanup);
         socket.removeAllListeners();

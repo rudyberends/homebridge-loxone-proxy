@@ -2,6 +2,7 @@
   "pluginAlias": "LoxonePlatform",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
   "headerDisplay": "Homebridge Proxy which exposes a Loxone System to Homekit",
   "footerDisplay": "For setup information, bug reports and feature requests please visit the [Plugin Homepage](https://github.com/rudyberends/homebridge-loxone-proxy).",
   "schema": {
@@ -37,6 +38,7 @@
         "title": "Options",
         "properties": {
           "MoodSwitches": {
+            "title": "Mood switches",
             "type": "string",
             "default": "enabled",
             "enum": [
@@ -51,6 +53,7 @@
         "title": "Advanced",
         "properties": {
           "NfcCodeTouchMapping": {
+            "title": "NFC Code Touch mapping",
             "type": "string",
             "default": "DoorBell",
             "enum": [
@@ -69,6 +72,12 @@
             "description": "Adjust motion detection baseline when cameras prepend variable JPEG metadata.",
             "default": 623
           },
+          "VentilationManualSeconds": {
+            "type": "integer",
+            "title": "Ventilation manual-override duration (seconds)",
+            "description": "How long a manual fan speed set from HomeKit runs before the Loxone Ventilation block returns to automatic.",
+            "default": 3600
+          },
           "EnableTwoWayAudio": {
             "type": "boolean",
             "title": "Enable Two-Way Audio (experimental)",
@@ -85,6 +94,11 @@
       "Exclusions": {
         "type": "string",
         "title": "Excluded ItemTypes"
+      },
+      "rooms": {
+        "type": "object",
+        "title": "Per-room settings",
+        "description": "Managed by the Room filter tab in the custom UI: which rooms are exposed to HomeKit and which get their own bridge."
       },
       "roomfilter": {
         "type": "object",
@@ -169,49 +183,18 @@
   "layout": [
     {
       "type": "fieldset",
-      "title": "Required Settings",
-      "items": [
-        {
-          "type": "flex",
-          "flex-flow": "row wrap",
-          "items": ["host", "port"]
-        },
-        {
-          "type": "flex",
-          "flex-flow": "row wrap",
-          "items": [
-            "username",
-            {
-              "key": "password",
-              "type": "password"
-            }
-          ]
-        },
-        {
-          "type": "flex",
-          "flex-flow": "row wrap",
-          "items": ["TLS"]
-        }
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Filters",
-      "description": "Select what to expose to HomeKit.",
-      "expandable": true,
-      "expanded": false,
+      "title": "Options",
+      "description": "General plugin behaviour.",
       "items": [
         "options.MoodSwitches",
-        "Exclusions",
-        "roomfilter.type",
-        "roomfilter.list"
+        "Advanced.VentilationManualSeconds"
       ]
     },
     {
       "type": "fieldset",
       "expandable": true,
       "title": "SwitchItem Mappings",
-      "description": "Map Switch items using an Alias",
+      "description": "Optional. Switches are already classified from their Loxone category/icon (e.g. lights → Lightbulb). Use an alias only to override that — typically to expose a generic switch as an Outlet or Lock. Matches on the item name.",
       "items": [
         "switchAlias.Outlet",
         "switchAlias.Lock",
@@ -222,7 +205,7 @@
       "type": "fieldset",
       "expandable": true,
       "title": "InfoOnlyAnalog Mappings",
-      "description": "Map InfoOnlyAnalog items using an Alias",
+      "description": "Rarely needed. Analog sensors are auto-classified from their unit (°C → temperature, lux → light, % → humidity). Use an alias only to force a sensor with an ambiguous unit to a specific type.",
       "items": [
         "InfoOnlyAnalogAlias.Brightness",
         "InfoOnlyAnalogAlias.Humidity",
@@ -233,7 +216,7 @@
       "type": "fieldset",
       "expandable": true,
       "title": "InfoOnlyDigital Mappings",
-      "description": "Map InfoOnlyDigital items using an Alias",
+      "description": "Required to expose digital sensors — they are not auto-classified, so a name alias is the only way to surface them as Motion, Smoke or Leak.",
       "items": [
         "InfoOnlyDigitalAlias.Motion",
         "InfoOnlyDigitalAlias.Smoke",
@@ -245,22 +228,22 @@
       "type": "fieldset",
       "expandable": true,
       "title": "HomeKit Secure Video (HKSV)",
-      "description": "Enable or disable HKSV recording features. Requires iCloud+ and a compatible HomeKit Hub.",
+      "description": "HomeKit Secure Video, camera motion detection and two-way audio. HKSV recording requires iCloud+ and a compatible HomeKit Hub.",
       "items": [
         "enableHKSV",
-        "Advanced.MotionTriggersDoorbell"
+        "Advanced.MotionTriggersDoorbell",
+        "Advanced.JpegHeaderSize",
+        "Advanced.EnableTwoWayAudio",
+        "Advanced.TwoWayAudioOutputArgs"
       ]
     },
     {
       "type": "fieldset",
       "expandable": true,
-      "title": "Advanced",
-      "description": "",
+      "title": "NFC Code Touch",
+      "description": "How an NFC Code Touch appears in HomeKit — as a doorbell or a motion sensor.",
       "items": [
-        "Advanced.NfcCodeTouchMapping",
-        "Advanced.JpegHeaderSize",
-        "Advanced.EnableTwoWayAudio",
-        "Advanced.TwoWayAudioOutputArgs"
+        "Advanced.NfcCodeTouchMapping"
       ]
     }
   ]

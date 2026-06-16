@@ -1,0 +1,890 @@
+<style>
+  /* config-ui-x's dark theme renders .text-muted nearly invisible — inherit the
+     readable foreground colour instead so it works on both light and dark. */
+  #lox .text-muted { color: inherit !important; opacity: .66; }
+  #lox .lox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); gap: .1rem .9rem; }
+  #lox .lox-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  #lox .lox-title { display: flex; align-items: center; gap: .5rem; }
+  #lox .lox-tools { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+  #lox .lox-pills { display: flex; flex-wrap: wrap; gap: .35rem; }
+  #lox .lox-ico { width: 1em; height: 1em; vertical-align: -.125em; flex: 0 0 auto; }
+  #lox label.lox-fld { font-size: .8rem; margin-bottom: .15rem; opacity: .75; }
+  /* Self-styled checkbox row — independent of Bootstrap custom-control CSS. */
+  #lox .lox-check { display: flex; align-items: center; gap: .55rem; margin: 0; padding: .22rem 0; font-weight: 400; cursor: pointer; }
+  #lox .lox-check input { width: 1rem; height: 1rem; margin: 0; flex: 0 0 auto; cursor: pointer; accent-color: #6f42c1; }
+  #lox .lox-check span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #lox .lox-check .lox-count { margin-left: auto; padding-left: .5rem; font-size: .76rem; opacity: .5; }
+  #lox .lox-dot { display: inline-block; width: .62rem; height: .62rem; border-radius: 50%; margin-right: .45rem; vertical-align: middle; background: #9aa0a6; transition: background .2s; }
+  #lox .lox-dot.connecting { background: #e0a800; }
+  #lox .lox-dot.ok { background: #28a745; }
+  #lox .lox-dot.err { background: #dc3545; }
+  #lox .lox-stat-ico { opacity: .45; }
+  #lox .lox-stat-ico svg { width: 1.5rem; height: 1.5rem; }
+  #lox .lox-stat { font-size: 1.45rem; font-weight: 600; line-height: 1.05; }
+  #lox .lox-stats { display: flex; flex-wrap: wrap; gap: .75rem; }
+  #lox .lox-stats > .card { flex: 1 1 150px; margin: 0; }
+  #lox .lox-search { position: relative; }
+  #lox .lox-search .lox-search-ico { position: absolute; left: .65rem; top: 50%; transform: translateY(-50%); width: .95rem; height: .95rem; opacity: .5; pointer-events: none; }
+  #lox .lox-search input { padding-left: 2.1rem; }
+  /* Keep standalone inputs readable; the connection grid fills its row instead. */
+  #lox .lox-search input, #lox .lox-opt-field .form-control { max-width: 30rem; }
+  /* Own flexbox for the connection row — config-ui-x's Bootstrap col-md grid
+     does not lay out side-by-side inside the iframe, so don't depend on it. */
+  #lox .lox-conn-grid { display: flex; flex-wrap: wrap; gap: .35rem .75rem; align-items: flex-end; }
+  #lox .lox-conn-grid > div { flex: 1 1 160px; }
+  #lox .lox-conn-grid > .lox-f-host { flex: 0 1 200px; }
+  #lox .lox-conn-grid > .lox-f-port { flex: 0 1 90px; }
+  #lox .lox-conn-grid input { width: 100%; max-width: none; }
+  /* Tab bar (self-styled — config-ui-x's nav-tabs aren't reliable in the iframe). */
+  #lox .lox-tabs { display: flex; flex-wrap: wrap; gap: .15rem; border-bottom: 1px solid rgba(128,128,128,.25); margin: 0 0 1rem; }
+  #lox .lox-tab { padding: .5rem .95rem; cursor: pointer; border: none; background: none; color: inherit; opacity: .55; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  #lox .lox-tab:hover { opacity: .85; }
+  #lox .lox-tab.active { opacity: 1; border-bottom-color: #6f42c1; }
+  /* Toggle switch (for single boolean settings — not the multi-select lists). */
+  #lox .lox-switch-row { display: flex; align-items: center; gap: .65rem; margin: 0; cursor: pointer; font-weight: 400; }
+  #lox .lox-switch { position: relative; display: inline-block; width: 2.4rem; height: 1.3rem; flex: 0 0 auto; }
+  #lox .lox-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  #lox .lox-switch .lox-slider { position: absolute; inset: 0; background: rgba(128,128,128,.45); border-radius: 1rem; transition: background .2s; pointer-events: none; }
+  #lox .lox-switch .lox-slider::before { content: ''; position: absolute; width: 1rem; height: 1rem; left: .15rem; top: .15rem; background: #fff; border-radius: 50%; transition: transform .2s; }
+  #lox .lox-switch input:checked + .lox-slider { background: #6f42c1; }
+  #lox .lox-switch input:checked + .lox-slider::before { transform: translateX(1.1rem); }
+  /* Per-room table: name grows, two fixed toggle columns. */
+  #lox #lox-rooms { max-width: 820px; }
+  #lox .lox-room-row { display: flex; align-items: center; gap: .75rem; padding: .42rem .4rem; border-radius: .3rem; }
+  #lox .lox-room-row:not(.lox-room-head) { border-bottom: 1px solid rgba(128,128,128,.12); }
+  #lox .lox-room-row:not(.lox-room-head):hover { background: rgba(128,128,128,.07); }
+  #lox .lox-room-row .lox-room-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .15s; }
+  #lox .lox-room-row.lox-room-hidden .lox-room-name { opacity: .4; }
+  #lox .lox-room-row .lox-room-toggle { flex: 0 0 5.5rem; display: flex; justify-content: center; }
+  #lox .lox-room-head { border-bottom: 1px solid rgba(128,128,128,.3); margin-bottom: .15rem; }
+  #lox .lox-room-toggle label { margin: 0; }
+  #lox .lox-room-row .lox-room-code { flex: 0 0 7rem; text-align: right; white-space: nowrap; }
+  #lox .lox-room-code code { font-size: .8rem; color: inherit; background: rgba(128,128,128,.16); padding: .12rem .45rem; border-radius: .3rem; }
+  #lox .lox-switch input:disabled + .lox-slider { opacity: .4; cursor: default; }
+  #lox hr { opacity: .25; }
+  /* Collapsible card header + chevron (shared by all sections). */
+  #lox .lox-collapse-head { cursor: pointer; }
+  #lox .lox-chev { opacity: .5; transition: transform .2s; }
+  #lox .lox-collapse.open .lox-chev { transform: rotate(90deg); }
+  #lox .lox-opt-field { margin-bottom: .85rem; }
+  #lox .lox-opt-field:last-child { margin-bottom: 0; }
+  #lox .lox-opt-field .lox-desc { display: block; margin-top: .15rem; font-size: .78rem; opacity: .6; }
+  /* Option-card header: title/description grows, chevron stays pinned top-right. */
+  #lox .lox-opt-head { display: flex; align-items: flex-start; gap: .75rem; }
+  #lox .lox-opt-head .lox-opt-titles { flex: 1 1 auto; min-width: 0; }
+  #lox .lox-opt-head .lox-chev { flex: 0 0 auto; margin-top: .2rem; }
+</style>
+
+<div id="lox">
+  <div id="lox-conn-card" class="card mb-3 lox-collapse open">
+    <div class="card-body">
+      <div id="lox-conn-head" class="lox-head lox-collapse-head">
+        <div class="lox-title">
+          <svg class="lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg>
+          <div>
+            <h5 class="card-title mb-0">Loxone Miniserver</h5>
+            <div><span id="lox-dot" class="lox-dot"></span><span id="lox-status">Not connected</span></div>
+          </div>
+        </div>
+        <div class="lox-title">
+          <button id="lox-discover" type="button" class="btn btn-primary"></button>
+          <svg class="lox-chev lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+      </div>
+
+      <div id="lox-conn-fields" class="mt-3">
+        <div class="mb-2">
+          <button id="lox-scan-btn" type="button" class="btn btn-sm btn-outline-secondary lox-title">
+            <svg class="lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            Scan network
+          </button>
+          <div id="lox-scan" class="mt-2"></div>
+        </div>
+        <div class="lox-conn-grid">
+          <div class="lox-f-host">
+            <label class="lox-fld d-block" for="lox-host">Host / IP address</label>
+            <input id="lox-host" type="text" class="form-control form-control-sm" placeholder="192.168.1.10" autocomplete="off">
+          </div>
+          <div class="lox-f-port">
+            <label class="lox-fld d-block" for="lox-port">Port</label>
+            <input id="lox-port" type="number" class="form-control form-control-sm" placeholder="80" autocomplete="off">
+          </div>
+          <div>
+            <label class="lox-fld d-block" for="lox-username">Username</label>
+            <input id="lox-username" type="text" class="form-control form-control-sm" autocomplete="username">
+          </div>
+          <div>
+            <label class="lox-fld d-block" for="lox-password">Password</label>
+            <input id="lox-password" type="password" class="form-control form-control-sm" autocomplete="current-password">
+          </div>
+        </div>
+        <div class="mt-2">
+          <label class="lox-switch-row"><span class="lox-switch"><input id="lox-tls" type="checkbox"><span class="lox-slider"></span></span><span>Use TLS (wss)</span></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lox-summary" class="lox-stats mb-3" style="display:none;">
+    <div class="card"><div class="card-body py-2 d-flex align-items-center">
+      <span class="lox-stat-ico mr-2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
+      <div><div id="lox-stat-rooms" class="lox-stat">–</div><small class="text-muted">Rooms</small></div>
+    </div></div>
+    <div class="card"><div class="card-body py-2 d-flex align-items-center">
+      <span class="lox-stat-ico mr-2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
+      <div><div id="lox-stat-controls" class="lox-stat">–</div><small class="text-muted">Controls</small></div>
+    </div></div>
+    <div class="card"><div class="card-body py-2 d-flex align-items-center">
+      <span class="lox-stat-ico mr-2 text-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></span>
+      <div><div id="lox-stat-mapped" class="lox-stat text-success">–</div><small class="text-muted">In HomeKit</small></div>
+    </div></div>
+  </div>
+
+  <div id="lox-results" style="display:none;">
+    <div class="lox-tabs">
+      <button type="button" class="lox-tab active" data-tab="rooms">Room filter</button>
+      <button type="button" class="lox-tab" data-tab="types">Control types</button>
+      <button type="button" class="lox-tab" data-tab="options">Options</button>
+      <button type="button" class="lox-tab" data-tab="mappings">Mappings</button>
+      <button type="button" class="lox-tab" data-tab="hksv">HKSV</button>
+    </div>
+
+    <div class="lox-pane" data-pane="rooms">
+    <div id="lox-rooms-card" class="card mb-3 lox-collapse open">
+      <div class="card-body">
+        <div id="lox-rooms-head" class="lox-head lox-collapse-head">
+          <h6 class="lox-title mb-0">
+            <svg class="lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+            Room filter
+          </h6>
+          <svg class="lox-chev lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+        <div id="lox-rooms-body" class="mt-3">
+          <small class="text-muted d-block mb-2">Per room: switch it off to hide it from HomeKit, or give it its own bridge — paired once in the Home app, and all its accessories land in that room.</small>
+          <div class="lox-search mb-2">
+            <svg class="lox-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="search" class="form-control form-control-sm" placeholder="Search rooms…" data-search="lox-rooms">
+          </div>
+          <div id="lox-rooms"></div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div class="lox-pane" data-pane="types" style="display:none;">
+    <div id="lox-types-card" class="card mb-3 lox-collapse open">
+      <div class="card-body">
+        <div id="lox-types-head" class="lox-head lox-collapse-head">
+          <h6 class="lox-title mb-0">
+            <svg class="lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Exclude control types <span id="lox-types-count" class="badge badge-pill badge-secondary">0</span>
+          </h6>
+          <svg class="lox-chev lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+        <div id="lox-types-body" class="mt-3">
+          <small class="text-muted d-block mb-2">Checked types are not exposed to HomeKit.</small>
+          <div class="lox-search mb-2">
+            <svg class="lox-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="search" class="form-control form-control-sm" placeholder="Search types…" data-search="lox-types">
+          </div>
+          <div class="lox-tools mb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-none="lox-types">Clear all</button>
+          </div>
+          <div id="lox-types" class="lox-grid"></div>
+          <div id="lox-unsupported" class="mt-3" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div class="lox-pane" data-pane="options" style="display:none;">
+      <div id="lox-options"></div>
+    </div>
+
+    <div class="lox-pane" data-pane="mappings" style="display:none;">
+      <div id="lox-mappings"></div>
+    </div>
+
+    <div class="lox-pane" data-pane="hksv" style="display:none;">
+      <div id="lox-hksv"></div>
+    </div>
+  </div>
+
+  <p class="text-muted mt-3 mb-0"><small>Changes are applied when you press <strong>Save</strong> at the bottom of this window.</small></p>
+</div>
+
+<script>
+  (async () => {
+    const $ = (id) => document.getElementById(id);
+    const splitList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const getConfig = async () => ((await homebridge.getPluginConfig())[0]) || {};
+
+    // config-ui-x has no modal-width API, but it serves this iframe same-origin
+    // (sandbox allows it) inside a Bootstrap .modal-dialog — so widen that.
+    try {
+      const dialog = window.frameElement && window.frameElement.closest('.modal-dialog');
+      if (dialog) {
+        dialog.style.maxWidth = 'min(1140px, 94vw)';
+      }
+    } catch (e) { /* sandboxed / not framed — keep the default width */ }
+
+    const SVG = {
+      zap: '<svg class="lox-ico mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>',
+      refresh: '<svg class="lox-ico mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
+      spinner: '<span class="spinner-border spinner-border-sm mr-1"></span>',
+    };
+
+    const withTimeout = (promise, ms) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(
+        new Error(`Timed out after ${Math.round(ms / 1000)}s — check host, port and the TLS setting, and that the Miniserver is reachable.`)), ms)),
+    ]);
+
+    // Generic collapsible-card wiring. ignoreSel = clicks inside it don't toggle.
+    const wireCollapse = (cardId, headId, bodyId, ignoreSel) => {
+      const card = $(cardId);
+      const head = $(headId);
+      const body = $(bodyId);
+      head.addEventListener('click', (e) => {
+        if (ignoreSel && e.target.closest(ignoreSel)) {
+          return;
+        }
+        body.style.display = card.classList.toggle('open') ? '' : 'none';
+      });
+    };
+
+    let discovered = false;
+
+    const readConn = () => ({
+      host: $('lox-host').value.trim(),
+      port: $('lox-port').value ? Number($('lox-port').value) : 80,
+      tls: $('lox-tls').checked,
+      username: $('lox-username').value,
+      password: $('lox-password').value,
+    });
+
+    const setStatus = (state, text) => {
+      $('lox-dot').className = 'lox-dot' + (state ? ' ' + state : '');
+      $('lox-status').textContent = text;
+    };
+
+    const setButton = (state) => {
+      const btn = $('lox-discover');
+      if (state === 'connecting') {
+        btn.disabled = true;
+        btn.innerHTML = SVG.spinner + 'Connecting…';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = discovered ? SVG.refresh + 'Refresh' : SVG.zap + 'Connect &amp; Discover';
+      }
+    };
+
+    const setConnCollapsed = (collapsed) => {
+      $('lox-conn-card').classList.toggle('open', !collapsed);
+      $('lox-conn-fields').style.display = collapsed ? 'none' : '';
+    };
+
+    // Every edit only STAGES into the config; config-ui-x's own Save button (at the
+    // bottom of the modal) persists it. No per-section Apply / manual save needed.
+    const stageConfig = async (mutator) => {
+      const cfg = await getConfig();
+      cfg.platform = cfg.platform || 'LoxonePlatform';
+      mutator(cfg);
+      await homebridge.updatePluginConfig([cfg]);
+    };
+
+    const updateCount = (container) => {
+      const badge = $(container.id + '-count');
+      if (badge) {
+        badge.textContent = container.querySelectorAll('input[type="checkbox"]:checked').length;
+      }
+    };
+
+    const checkedValues = (container) =>
+      [...container.querySelectorAll('input[type="checkbox"]:checked')].map((c) => c.value);
+
+    const stageExclusions = () => stageConfig((cfg) => {
+      cfg.Exclusions = checkedValues($('lox-types')).join(', ');
+    }).catch(() => undefined);
+    // Per-room setting: cfg.rooms[room] = { excluded?: true, bridge?: true } (empty entry removed).
+    const stageRoom = (room, key, value) => stageConfig((cfg) => {
+      const rooms = (cfg.rooms && typeof cfg.rooms === 'object') ? Object.assign({}, cfg.rooms) : {};
+      const entry = Object.assign({}, rooms[room]);
+      if (value === undefined) {
+        delete entry[key];
+      } else {
+        entry[key] = value;
+      }
+      if (Object.keys(entry).length === 0) {
+        delete rooms[room];
+      } else {
+        rooms[room] = entry;
+      }
+      cfg.rooms = rooms;
+    }).catch(() => undefined);
+    const stageConnection = () => stageConfig((cfg) => {
+      const c = readConn();
+      cfg.host = c.host;
+      cfg.port = c.port;
+      cfg.TLS = c.tls;
+      cfg.username = c.username;
+      cfg.password = c.password;
+    }).catch(() => undefined);
+
+    const scanNetwork = async () => {
+      const box = $('lox-scan');
+      const btn = $('lox-scan-btn');
+      btn.disabled = true;
+      box.innerHTML = '<small class="text-muted"><span class="spinner-border spinner-border-sm mr-1"></span>Scanning the local network…</small>';
+      let servers = [];
+      try {
+        const res = await homebridge.request('/scan');
+        servers = (res && res.servers) || [];
+      } catch (error) {
+        servers = [];
+      } finally {
+        btn.disabled = false;
+      }
+      if (!servers.length) {
+        box.innerHTML = '<small class="text-muted">No Miniservers found on this network — enter the address manually below.</small>';
+        return;
+      }
+      box.innerHTML = '';
+      const label = document.createElement('small');
+      label.className = 'lox-fld d-block';
+      label.textContent = 'Discovered on your network — click to use:';
+      const list = document.createElement('div');
+      list.className = 'lox-pills';
+      for (const ms of servers) {
+        const btnEl = document.createElement('button');
+        btnEl.type = 'button';
+        btnEl.className = 'btn btn-sm btn-outline-secondary';
+        btnEl.textContent = `${ms.name} · ${ms.host}` + (ms.firmware ? ` · v${ms.firmware}` : '');
+        btnEl.addEventListener('click', () => {
+          $('lox-host').value = ms.host;
+          $('lox-port').value = ms.port || 80;
+          stageConnection();
+          ($('lox-username').value ? $('lox-password') : $('lox-username')).focus();
+        });
+        list.appendChild(btnEl);
+      }
+      box.appendChild(label);
+      box.appendChild(list);
+    };
+
+    const renderChecks = (container, items, preselected) => {
+      const pre = new Set(preselected.map((v) => v.toLowerCase()));
+      container.innerHTML = '';
+      if (!items.length) {
+        container.innerHTML = '<span class="text-muted">(none found)</span>';
+        return;
+      }
+      for (const item of items) {
+        const row = document.createElement('label');
+        row.className = 'lox-check';
+        row.dataset.name = String(item.label).toLowerCase();
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = item.value;
+        input.checked = pre.has(item.value.toLowerCase());
+        input.addEventListener('change', () => { updateCount(container); stageExclusions(); });
+
+        const name = document.createElement('span');
+        name.textContent = item.label;
+
+        row.appendChild(input);
+        row.appendChild(name);
+        if (item.count != null) {
+          const count = document.createElement('span');
+          count.className = 'lox-count';
+          count.textContent = item.count;
+          row.appendChild(count);
+        }
+        container.appendChild(row);
+      }
+      updateCount(container);
+    };
+
+    const renderUnsupported = (container, types) => {
+      container.innerHTML = '';
+      if (!types.length) {
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = '';
+      const head = document.createElement('div');
+      head.className = 'text-muted mb-1';
+      head.innerHTML = '<small>No HomeKit mapping — always skipped:</small>';
+      const pills = document.createElement('div');
+      pills.className = 'lox-pills';
+      for (const t of types) {
+        const pill = document.createElement('span');
+        pill.className = 'badge badge-light';
+        pill.textContent = `${t.type} · ${t.count}`;
+        pills.appendChild(pill);
+      }
+      container.appendChild(head);
+      container.appendChild(pills);
+    };
+
+    const setAll = (containerId, value) => {
+      const container = $(containerId);
+      for (const row of container.children) {
+        if (row.style.display === 'none') {
+          continue; // respect the search filter — only toggle what's visible
+        }
+        const input = row.querySelector('input[type="checkbox"]');
+        if (input) {
+          input.checked = value;
+        }
+      }
+      updateCount(container);
+      stageExclusions();
+    };
+
+    const roomToggleCell = (checked, onChange) => {
+      const cell = document.createElement('span');
+      cell.className = 'lox-room-toggle';
+      const label = document.createElement('label');
+      label.className = 'lox-switch';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = checked;
+      input.addEventListener('change', () => onChange(input.checked));
+      const slider = document.createElement('span');
+      slider.className = 'lox-slider';
+      label.appendChild(input);
+      label.appendChild(slider);
+      cell.appendChild(label);
+      return cell;
+    };
+
+    // Pairing codes the plugin published, keyed by room (manifest written on publish).
+    const fetchRoomCodes = async () => {
+      const map = new Map();
+      try {
+        const res = await homebridge.request('/room-bridges');
+        for (const bridge of (res && res.bridges) || []) {
+          map.set(bridge.room, bridge.pincode);
+        }
+      } catch (error) {
+        // no manifest yet — codes appear once the bridges are published
+      }
+      return map;
+    };
+
+    const renderRoomTable = (rooms, cfg, codes) => {
+      const container = $('lox-rooms');
+      container.innerHTML = '';
+      const settings = (cfg.rooms && typeof cfg.rooms === 'object') ? cfg.rooms : {};
+
+      const head = document.createElement('div');
+      head.className = 'lox-room-row lox-room-head';
+      head.innerHTML =
+        '<span class="lox-room-name text-muted"><small>Room</small></span>' +
+        '<span class="lox-room-toggle text-muted"><small>Exposed</small></span>' +
+        '<span class="lox-room-toggle text-muted"><small>Own bridge</small></span>' +
+        '<span class="lox-room-code text-muted"><small>Code</small></span>';
+      container.appendChild(head);
+
+      if (!rooms.length) {
+        const empty = document.createElement('div');
+        empty.className = 'text-muted';
+        empty.innerHTML = '<small>(no rooms found)</small>';
+        container.appendChild(empty);
+        return;
+      }
+
+      for (const room of rooms) {
+        const current = settings[room.name] || {};
+        const row = document.createElement('div');
+        row.className = 'lox-room-row';
+        row.dataset.name = String(room.name).toLowerCase();
+
+        const name = document.createElement('span');
+        name.className = 'lox-room-name';
+        name.textContent = room.count != null ? `${room.name} (${room.count})` : room.name;
+        if (room.central) {
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-light ml-2';
+          badge.textContent = 'central';
+          name.appendChild(badge);
+        }
+
+        const codeCell = document.createElement('span');
+        codeCell.className = 'lox-room-code';
+        const showCode = (bridged) => {
+          codeCell.textContent = '';
+          if (!bridged) {
+            return;
+          }
+          const code = codes.get(room.name);
+          const el = document.createElement(code ? 'code' : 'small');
+          if (!code) {
+            el.className = 'text-muted';
+          }
+          el.textContent = code || 'save & restart';
+          codeCell.appendChild(el);
+        };
+
+        const bridgeCell = roomToggleCell(current.bridge === true, (on) => {
+          stageRoom(room.name, 'bridge', on ? true : undefined);
+          showCode(on);
+        });
+        const bridgeInput = bridgeCell.querySelector('input');
+
+        // A hidden room can't have its own bridge; central (whole-house) functions
+        // always stay on the main bridge — dim the row and lock the bridge toggle.
+        const applyExposed = (on) => {
+          row.classList.toggle('lox-room-hidden', !on);
+          bridgeInput.disabled = !on || Boolean(room.central);
+        };
+        const exposedCell = roomToggleCell(current.excluded !== true, (on) => {
+          stageRoom(room.name, 'excluded', on ? undefined : true);
+          applyExposed(on);
+        });
+
+        applyExposed(current.excluded !== true);
+        showCode(current.bridge === true);
+
+        row.appendChild(name);
+        row.appendChild(exposedCell);
+        row.appendChild(bridgeCell);
+        row.appendChild(codeCell);
+        container.appendChild(row);
+      }
+    };
+
+    const filter = (containerId, query) => {
+      const q = query.trim().toLowerCase();
+      for (const row of $(containerId).children) {
+        if (!row.dataset || row.dataset.name === undefined) {
+          continue;
+        }
+        row.style.display = !q || row.dataset.name.includes(q) ? '' : 'none';
+      }
+    };
+
+    // ---- "Device mapping & advanced" options, rendered from the live schema ----
+    const getPath = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+    const setPath = (obj, path, value) => {
+      const parts = path.split('.');
+      let node = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (node[parts[i]] == null || typeof node[parts[i]] !== 'object') {
+          node[parts[i]] = {};
+        }
+        node = node[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (value === undefined || value === '') {
+        delete node[last];
+      } else {
+        node[last] = value;
+      }
+    };
+    const prettify = (key) => key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+    const stageOption = (path, value) => stageConfig((cfg) => setPath(cfg, path, value)).catch(() => undefined);
+
+    const chevron = () => {
+      const span = document.createElement('span');
+      span.className = 'lox-chev';
+      span.innerHTML = '<svg class="lox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+      return span;
+    };
+
+    const buildOptionField = (path, prop, value) => {
+      const field = document.createElement('div');
+      field.className = 'lox-opt-field';
+      const title = prop.title || prettify(path.split('.').pop());
+      const id = 'opt-' + path.replace(/[^a-z0-9]/gi, '-');
+
+      const enabledDisabled = Array.isArray(prop.enum) && prop.enum.length === 2
+        && prop.enum.map((v) => String(v).toLowerCase()).sort().join() === 'disabled,enabled';
+
+      if (prop.type === 'boolean' || enabledDisabled) {
+        const row = document.createElement('label');
+        row.className = 'lox-switch-row';
+        const sw = document.createElement('span');
+        sw.className = 'lox-switch';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = id;
+        const current = value != null ? value : prop.default;
+        input.checked = enabledDisabled ? String(current).toLowerCase() === 'enabled' : Boolean(current);
+        input.addEventListener('change', () => {
+          stageOption(path, enabledDisabled ? (input.checked ? 'enabled' : 'disabled') : input.checked);
+        });
+        const slider = document.createElement('span');
+        slider.className = 'lox-slider';
+        sw.appendChild(input);
+        sw.appendChild(slider);
+        const span = document.createElement('span');
+        span.textContent = title;
+        row.appendChild(sw);
+        row.appendChild(span);
+        field.appendChild(row);
+      } else {
+        const label = document.createElement('label');
+        label.className = 'lox-fld d-block';
+        label.htmlFor = id;
+        label.textContent = title;
+        field.appendChild(label);
+
+        if (Array.isArray(prop.enum)) {
+          const select = document.createElement('select');
+          select.className = 'form-control form-control-sm';
+          select.id = id;
+          for (const option of prop.enum) {
+            const o = document.createElement('option');
+            o.value = String(option);
+            o.textContent = String(option);
+            select.appendChild(o);
+          }
+          select.value = value != null ? String(value)
+            : (prop.default != null ? String(prop.default) : String(prop.enum[0]));
+          select.addEventListener('change', () => { stageOption(path, select.value); });
+          field.appendChild(select);
+        } else {
+          const numeric = prop.type === 'integer' || prop.type === 'number';
+          const input = document.createElement('input');
+          input.type = numeric ? 'number' : 'text';
+          input.className = 'form-control form-control-sm';
+          input.id = id;
+          if (prop.default != null) {
+            input.placeholder = String(prop.default);
+          }
+          if (value != null) {
+            input.value = value;
+          }
+          input.addEventListener('change', () => {
+            const raw = input.value === '' ? undefined : (numeric ? Number(input.value) : input.value);
+            stageOption(path, raw);
+          });
+          field.appendChild(input);
+        }
+      }
+
+      if (prop.description) {
+        const desc = document.createElement('small');
+        desc.className = 'lox-desc';
+        desc.textContent = prop.description;
+        field.appendChild(desc);
+      }
+      return field;
+    };
+
+    const renderOptions = async (cfg) => {
+      const optRoot = $('lox-options');
+      const mapRoot = $('lox-mappings');
+      const hksvRoot = $('lox-hksv');
+      let wrap;
+      try {
+        wrap = await homebridge.getPluginConfigSchema();
+      } catch (error) {
+        optRoot.innerHTML = '<small class="text-muted">Could not load the settings schema.</small>';
+        return;
+      }
+      const props = (wrap && wrap.schema && wrap.schema.properties) || (wrap && wrap.properties) || {};
+      const layout = (wrap && wrap.layout) || [];
+      const resolveProp = (path) => {
+        const parts = path.split('.');
+        let node = props[parts[0]];
+        for (let i = 1; i < parts.length && node; i++) {
+          node = node.properties && node.properties[parts[i]];
+        }
+        return node;
+      };
+
+      optRoot.innerHTML = '';
+      mapRoot.innerHTML = '';
+      hksvRoot.innerHTML = '';
+      let index = 0;
+      for (const entry of layout) {
+        if (!entry || entry.type !== 'fieldset' || !Array.isArray(entry.items)) {
+          continue;
+        }
+        const fields = [];
+        for (const item of entry.items) {
+          const path = typeof item === 'string' ? item : (item && item.key);
+          if (!path) {
+            continue;
+          }
+          const prop = resolveProp(path);
+          if (prop) {
+            fields.push(buildOptionField(path, prop, getPath(cfg, path)));
+          }
+        }
+        if (!fields.length) {
+          continue;
+        }
+        const title = entry.title || '';
+        if (/hksv|secure video/i.test(title)) {
+          // Dedicated HKSV tab — plain card, no collapsible header (not a "dropdown"),
+          // but keep the fieldset's explanatory description text.
+          const card = document.createElement('div');
+          card.className = 'card mb-3';
+          const body = document.createElement('div');
+          body.className = 'card-body';
+          if (entry.description) {
+            const p = document.createElement('p');
+            p.className = 'text-muted mb-3';
+            const small = document.createElement('small');
+            small.textContent = entry.description;
+            p.appendChild(small);
+            body.appendChild(p);
+          }
+          for (const f of fields) {
+            body.appendChild(f);
+          }
+          card.appendChild(body);
+          hksvRoot.appendChild(card);
+          continue;
+        }
+        index += 1;
+
+        const collapsible = entry.expandable === true;
+        const open = !collapsible || entry.expanded === true;
+        const cardId = `lox-optcard-${index}`;
+        const headId = `lox-opthead-${index}`;
+        const bodyId = `lox-optbody-${index}`;
+
+        const card = document.createElement('div');
+        card.className = 'card mb-3 lox-collapse' + (open ? ' open' : '');
+        card.id = cardId;
+        const body = document.createElement('div');
+        body.className = 'card-body';
+
+        const head = document.createElement('div');
+        head.className = 'lox-opt-head';
+        head.id = headId;
+        const titleWrap = document.createElement('div');
+        titleWrap.className = 'lox-opt-titles';
+        const h = document.createElement('h6');
+        h.className = 'mb-0';
+        h.textContent = entry.title || 'Settings';
+        titleWrap.appendChild(h);
+        if (entry.description) {
+          const sub = document.createElement('small');
+          sub.className = 'text-muted';
+          sub.textContent = entry.description;
+          titleWrap.appendChild(sub);
+        }
+        head.appendChild(titleWrap);
+
+        const content = document.createElement('div');
+        content.className = 'mt-3';
+        content.id = bodyId;
+        content.style.display = open ? '' : 'none';
+        for (const f of fields) {
+          content.appendChild(f);
+        }
+
+        if (collapsible) {
+          head.classList.add('lox-collapse-head');
+          head.appendChild(chevron());
+        }
+
+        body.appendChild(head);
+        body.appendChild(content);
+        card.appendChild(body);
+        const root = /^options$/i.test(title) ? optRoot : mapRoot;
+        root.appendChild(card);
+
+        if (collapsible) {
+          wireCollapse(cardId, headId, bodyId);
+        }
+      }
+    };
+
+    // ---- wiring ----
+    document.querySelectorAll('[data-all]').forEach((b) => b.addEventListener('click', () => setAll(b.dataset.all, true)));
+    document.querySelectorAll('[data-none]').forEach((b) => b.addEventListener('click', () => setAll(b.dataset.none, false)));
+    document.querySelectorAll('[data-search]').forEach((inp) =>
+      inp.addEventListener('input', (e) => filter(inp.dataset.search, e.target.value)));
+    ['lox-host', 'lox-port', 'lox-tls', 'lox-username', 'lox-password'].forEach((id) =>
+      $(id).addEventListener('change', stageConnection));
+    $('lox-scan-btn').addEventListener('click', scanNetwork);
+
+    wireCollapse('lox-conn-card', 'lox-conn-head', 'lox-conn-fields', '#lox-discover');
+    wireCollapse('lox-rooms-card', 'lox-rooms-head', 'lox-rooms-body');
+    wireCollapse('lox-types-card', 'lox-types-head', 'lox-types-body');
+
+    document.querySelectorAll('.lox-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const name = tab.dataset.tab;
+        document.querySelectorAll('.lox-tab').forEach((t) => t.classList.toggle('active', t === tab));
+        document.querySelectorAll('.lox-pane').forEach((p) => { p.style.display = p.dataset.pane === name ? '' : 'none'; });
+      });
+    });
+
+    const runDiscover = async () => {
+      const c = readConn();
+      if (!c.host || !c.username || !c.password) {
+        homebridge.toast.error('Enter host, username and password first.', 'Loxone');
+        return;
+      }
+      setButton('connecting');
+      setStatus('connecting', `Connecting to ${c.host}…`);
+      try {
+        const res = await withTimeout(homebridge.request('/discover', {
+          host: c.host, port: c.port, tls: c.tls, username: c.username, password: c.password,
+        }), 25000);
+
+        $('lox-stat-rooms').textContent = res.summary.rooms;
+        $('lox-stat-controls').textContent = res.summary.totalControls;
+        $('lox-stat-mapped').textContent = res.summary.mappedControls;
+        $('lox-summary').style.display = '';
+
+        const cfg = await getConfig();
+        const supported = res.types.filter((t) => t.supported).map((t) => ({ value: t.type, label: t.type, count: t.count }));
+        const unsupported = res.types.filter((t) => !t.supported);
+
+        renderRoomTable(res.rooms, cfg, await fetchRoomCodes());
+        renderChecks($('lox-types'), supported, splitList(cfg.Exclusions));
+        renderUnsupported($('lox-unsupported'), unsupported);
+
+        document.querySelectorAll('[data-search]').forEach((inp) => { inp.value = ''; });
+        filter('lox-rooms', '');
+        filter('lox-types', '');
+        $('lox-results').style.display = '';
+        discovered = true;
+
+        const fw = res.info && res.info.version ? ` · firmware ${res.info.version}` : '';
+        const sn = res.info && res.info.serial ? ` · SN ${res.info.serial}` : '';
+        setStatus('ok', `Connected${fw}${sn}`);
+        setConnCollapsed(true);
+      } catch (error) {
+        setStatus('err', 'Connection failed');
+        setConnCollapsed(false); // keep the fields visible so the user can fix it
+        homebridge.toast.error(String((error && error.message) || error), 'Loxone');
+      } finally {
+        setButton('idle');
+      }
+    };
+
+    $('lox-discover').addEventListener('click', runDiscover);
+
+    // Prefill connection from the saved config, render the remaining options in
+    // our own card style (no schema form), then auto-connect.
+    const cfg = await getConfig();
+    $('lox-host').value = cfg.host || '';
+    $('lox-port').value = cfg.port || '';
+    $('lox-tls').checked = Boolean(cfg.TLS);
+    $('lox-username').value = cfg.username || '';
+    $('lox-password').value = cfg.password || '';
+
+    setButton('idle');
+    await renderOptions(cfg);
+
+    if (cfg.host && cfg.username && cfg.password) {
+      runDiscover();
+    } else {
+      setStatus('', 'Enter your connection details and click Connect & Discover.');
+      if (!cfg.host) {
+        scanNetwork(); // fresh setup — show Miniservers found on the LAN
+      }
+    }
+  })();
+</script>

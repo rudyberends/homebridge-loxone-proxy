@@ -36,18 +36,6 @@ The Loxone transport is also explicit. All Miniserver communication (websocket, 
 
 The detailed architecture rules and release commit conventions are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-# Breaking Changes
-
-The refactor that migrates communication from `lxcommunicator` to [`loxone-ts-client`](https://www.npmjs.com/package/loxone-ts-client) is a breaking beta release. Existing Homebridge configuration values are kept where possible, but the runtime requirement is now Node.js 22 or newer.
-
-Before publishing the beta:
-
-- Bump the plugin with a breaking version number.
-- Publish and verify `loxone-ts-client` before publishing this plugin.
-- Run `npm run lint`, `npm test`, and a real Homebridge smoke test against a Miniserver.
-- Call out Node.js 22+ in the release notes.
-- Tell beta users that Homebridge cached accessories may need review if names, rooms, or exposed controls changed.
-
 # Mapped Items
 The following list displays all supported itemtypes supported by this plugin.
 

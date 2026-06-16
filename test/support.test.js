@@ -17,6 +17,12 @@ test('AccessoryNameRegistry sanitizes names and keeps duplicates unique', () => 
   assert.equal(registry.generate('Living (A)', 'Lamp #1', 'uuid-1'), 'Living A Lamp 1');
   assert.equal(registry.generate('Living (A)', 'Lamp #1', 'uuid-2'), 'Living A Lamp 1 1');
   assert.equal(registry.generate('Living (A)', 'Lamp #1', 'uuid-1'), 'Living A Lamp 1');
+
+  // Own-bridge rooms (prefixRoom=false): no room prefix, and a baked-in room prefix is stripped.
+  assert.equal(registry.generate('Woonkamer', 'Tafellamp', 'b-1', false, false), 'Tafellamp');
+  assert.equal(registry.generate('Woonkamer', 'Woonkamer Spots', 'b-2', false, false), 'Spots');
+  // A control named exactly after its room keeps its name (e.g. the room controller).
+  assert.equal(registry.generate('Woonkamer', 'Woonkamer', 'b-3', false, false), 'Woonkamer');
 });
 
 test('sanitizeName strips HAP-invalid characters so names start/end with a letter or number', () => {

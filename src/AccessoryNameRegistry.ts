@@ -22,9 +22,18 @@ export class AccessoryNameRegistry {
   private readonly usedNames = new Set<string>();
   private readonly accessoryNameMap = new Map<string, string>();
 
-  generate(room: string, base: string, uuid?: string, isSubItem = false): string {
+  generate(room: string, base: string, uuid?: string, isSubItem = false, prefixRoom = true): string {
     const cleanRoom = this.clean(room || 'Unknown');
     const cleanBase = this.clean(base || 'Unnamed');
+
+    // Own-bridge rooms: the HomeKit room already gives the context, so don't add a
+    // room prefix — and strip one baked into the Loxone name ("Woonkamer Spots" → "Spots").
+    if (!prefixRoom) {
+      const lead = cleanRoom.toLowerCase() + ' ';
+      return cleanBase.toLowerCase().startsWith(lead)
+        ? cleanBase.slice(cleanRoom.length).trim() || cleanBase
+        : cleanBase;
+    }
 
     const alreadyPrefixed =
       cleanBase.toLowerCase().startsWith(cleanRoom.toLowerCase()) ||

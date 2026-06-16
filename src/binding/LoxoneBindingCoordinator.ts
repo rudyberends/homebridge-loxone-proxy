@@ -227,8 +227,9 @@ export class LoxoneBindingCoordinator {
 
   /** Finds the cached accessory (or creates + registers it) and refreshes its AccessoryInformation. */
   private reconcile(accessoryUuid: string, planned: PlannedAccessory): PlatformAccessory {
-    const displayName = this.platform.generateUniqueName(planned.room, planned.name, accessoryUuid);
     const useBridge = this.usesBridge(planned.room);
+    // On its own room bridge the HomeKit room provides context, so drop the room prefix.
+    const displayName = this.platform.generateUniqueName(planned.room, planned.name, accessoryUuid, false, !useBridge);
     const { accessory, isNew } = this.upsertAccessory(accessoryUuid, displayName, useBridge);
     if (isNew) {
       this.platform.log.debug(`[BindingEngine] Added accessory: ${displayName} (${planned.type})`);

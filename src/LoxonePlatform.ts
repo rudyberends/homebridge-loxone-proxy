@@ -52,8 +52,8 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   }
 
   /** Clean + unique + HAP-safe + UUID-stable name builder. */
-  generateUniqueName(room: string, base: string, uuid?: string, isSubItem = false): string {
-    return this.nameRegistry.generate(room, base, uuid, isSubItem);
+  generateUniqueName(room: string, base: string, uuid?: string, isSubItem = false, prefixRoom = true): string {
+    return this.nameRegistry.generate(room, base, uuid, isSubItem, prefixRoom);
   }
 
   /** The active Miniserver communication token (used by intercom talkback). */

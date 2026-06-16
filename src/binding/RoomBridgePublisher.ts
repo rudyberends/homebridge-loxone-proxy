@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { PlatformAccessory } from 'homebridge';
 import type { Accessory, Bridge } from 'hap-nodejs';
 import type { LoxonePlatform } from '../LoxonePlatform';
+import { sanitizeName } from '../AccessoryNameRegistry';
 
 /** Manifest of published room bridges, read by the custom config UI to show pairing codes. */
 export const ROOM_BRIDGE_MANIFEST = 'loxone-room-bridges.json';
@@ -142,7 +143,14 @@ export class RoomBridgePublisher {
     let entry = this.bridges.get(key);
     if (!entry) {
       const uuid = this.platform.api.hap.uuid.generate(`loxone:room-bridge:${key}`);
-      const bridge = new this.platform.api.hap.Bridge(`Loxone ${key}`, uuid);
+      // Name the bridge after the room itself ("Woonkamer"), not "Loxone Woonkamer" —
+      // it's paired into that room, so the prefix just doubled up. Provenance lives in Manufacturer.
+      const name = sanitizeName(key) || 'Loxone Room';
+      const bridge = new this.platform.api.hap.Bridge(name, uuid);
+      bridge.getService(this.platform.Service.AccessoryInformation)
+        ?.setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
+        .setCharacteristic(this.platform.Characteristic.Model, 'Room Bridge')
+        .setCharacteristic(this.platform.Characteristic.Name, name);
       entry = { bridge, members: new Set(), published: false };
       this.bridges.set(key, entry);
     }

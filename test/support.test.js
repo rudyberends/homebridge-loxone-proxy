@@ -101,9 +101,12 @@ test('rsa.createRsaPublicKey parses PEM, JWK components, and hex DER', () => {
   const pem = publicKey.export({ type: 'spki', format: 'pem' });
   const der = publicKey.export({ type: 'spki', format: 'der' });
 
+  // OAEP round-trip: only verifies the parsed public key is usable. (PKCS1 private
+  // decryption is disabled on modern Node — CVE-2023-46809 — and the real talkback
+  // path only ever publicEncrypts, which is unaffected.)
   const roundTrip = (key) => {
-    const enc = crypto.publicEncrypt({ key, padding: crypto.constants.RSA_PKCS1_PADDING }, Buffer.from('hello'));
-    const dec = crypto.privateDecrypt({ key: privateKey, padding: crypto.constants.RSA_PKCS1_PADDING }, enc);
+    const enc = crypto.publicEncrypt({ key, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING }, Buffer.from('hello'));
+    const dec = crypto.privateDecrypt({ key: privateKey, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING }, enc);
     return dec.toString('utf8');
   };
 

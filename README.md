@@ -8,14 +8,14 @@
 
 Homebridge Dynamic Platform Plugin which exposes a Loxone System to Homekit.
 
-The plugin uses [`@rudyberends/loxone-ts-api`](https://www.npmjs.com/package/@rudyberends/loxone-ts-api) to set up and maintain the connection to a Loxone Miniserver.
+The plugin uses [`loxone-ts-client`](https://www.npmjs.com/package/loxone-ts-client) to set up and maintain the connection to a Loxone Miniserver.
 It retrieves the Loxone [Structure-File](https://www.loxone.com/wp-content/uploads/datasheets/StructureFile.pdf) and maps supported controls to HomeKit accessories. The connection allows realtime two-way updates between Loxone and HomeKit.
 
 # Requirements
 
 | Requirement | Version |
 | --- | --- |
-| Node.js | 20 or newer |
+| Node.js | 22 or newer |
 | Homebridge | 1.7.0 or newer, including Homebridge 2 beta |
 
 # Architecture
@@ -24,7 +24,7 @@ This plugin is intentionally focused on one integration path: Loxone <-> HomeKit
 
 | Layer | Responsibility |
 | --- | --- |
-| Loxone communication | Connects to the Miniserver through `@rudyberends/loxone-ts-api`, loads the Structure File, subscribes to state updates, and sends commands. |
+| Loxone communication | Connects to the Miniserver through `loxone-ts-client`, loads the Structure File, subscribes to state updates, and sends commands. |
 | Control mapping | Normalizes Loxone rooms, categories, controls, states, and command bindings into plugin-owned types. |
 | Accessory planning | Converts each supported Loxone control into a declarative HomeKit accessory plan. |
 | HomeKit reconciliation | Creates, updates, restores, and removes Homebridge platform accessories from those plans. |
@@ -32,20 +32,20 @@ This plugin is intentionally focused on one integration path: Loxone <-> HomeKit
 
 Commands and states are kept separate on purpose. Item implementations describe what HomeKit should expose, which Loxone state UUIDs feed it, and which Loxone command should be executed for each HomeKit action. Runtime code then routes state updates and command execution through shared infrastructure instead of letting each item talk to the Miniserver directly.
 
-The Loxone transport is also explicit. The plugin depends on a small internal transport contract, while the concrete implementation lives in the `@rudyberends/loxone-ts-api` adapter. Because that package is maintained together with this plugin, the adapter is intentionally thin: it keeps ownership boundaries clear without duplicating Loxone communication logic.
+The Loxone transport is also explicit. All Miniserver communication (websocket, token authentication, Structure File parsing, encrypted commands, state subscriptions) lives in the standalone [`loxone-ts-client`](https://www.npmjs.com/package/loxone-ts-client) package. This plugin depends on it and adds only the HomeKit binding layer on top, so the ownership boundary between "talking to Loxone" and "exposing it to HomeKit" stays clear.
 
 The detailed architecture rules and release commit conventions are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 # Breaking Changes
 
-The refactor that migrates communication from `lxcommunicator` to `@rudyberends/loxone-ts-api` is intended for a breaking beta release. Existing Homebridge configuration values are kept where possible, but the runtime requirement is now Node.js 20 or newer.
+The refactor that migrates communication from `lxcommunicator` to [`loxone-ts-client`](https://www.npmjs.com/package/loxone-ts-client) is a breaking beta release. Existing Homebridge configuration values are kept where possible, but the runtime requirement is now Node.js 22 or newer.
 
 Before publishing the beta:
 
 - Bump the plugin with a breaking version number.
-- Publish and verify `@rudyberends/loxone-ts-api` before publishing this plugin.
+- Publish and verify `loxone-ts-client` before publishing this plugin.
 - Run `npm run lint`, `npm test`, and a real Homebridge smoke test against a Miniserver.
-- Call out Node.js 20+ in the release notes.
+- Call out Node.js 22+ in the release notes.
 - Tell beta users that Homebridge cached accessories may need review if names, rooms, or exposed controls changed.
 
 # Mapped Items
@@ -83,49 +83,69 @@ For the plugin to recognize the items, the item needs to be visible in the user 
 <img width="408" alt="useinuserinterface" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/b422015b-4a5d-411e-b98c-42ef86cf8d58">
 
 # Configuration
-Configuration of the plugin can be done using the Homebridge UI without having to manually edit the Homebridge config.json file.
 
-## Required Settings
-At a minimum, the plugin requires these settings to connect to the miniserver.
+The plugin ships a **custom configuration UI** for the Homebridge UI — there is no need to edit `config.json` by hand. Open the plugin settings in Homebridge and you get a tabbed interface:
+
+- **Connection** — Miniserver host, port, credentials and TLS. The plugin can auto-discover Miniservers on your network, so you can pick one instead of typing the IP.
+- **Room filter** — per-room control over what is exposed and how (see [Per-room bridges](#per-room-bridges)).
+- **Control types** — exclude whole item types from being mapped.
+- **Options** — general behaviour (mood switches, ventilation override, …).
+- **Mappings** — aliases for items that need manual mapping.
+- **HomeKit Secure Video** — enable HKSV and two-way audio.
+
+## Connection
+At a minimum the plugin needs these to connect to the Miniserver:
 
 | Parameter | Note |
 | --- | --- |
-| `host` | IP of your loxone miniserver |
-| `port` | optional, port of your miniserver (default: 80) |
-| `username` | loxone username |
-| `password` | loxone password |
-| `TLS` | use a secure connection |
+| `host` | IP/hostname of your Loxone Miniserver (without `http://`) |
+| `port` | Miniserver port (default: 80) |
+| `username` | Loxone username |
+| `password` | Loxone password |
+| `TLS` | Use a secure (TLS) connection |
 
-If you create a dedicated user for the plugin, you can filter items by only assigning rights to items you want to expose to HomeBridge.
+If you create a dedicated Loxone user for the plugin, you can filter items by only granting that user rights to the items you want to expose to HomeKit.
 
-## Filters
-Filters allow you to select what to expose to HomeKit.
+## Control types (exclusions)
+To stop whole item types from being mapped, exclude them on the **Control types** tab (stored as the `Exclusions` list). Matching is case-sensitive; the item type names are listed in the [Mapped Items](#mapped-items) table.
 
-### Moodswitches
-When enabled, all LightControllerV2 moods are mapped to a homekit switch. All Switches from  the same LightController will be grouped together. In homeKit this works as a radio switch, so only one switch (mood) can be active at the same time. Mixing moods is not possible. 
+## Room filter & per-room bridges
+The **Room filter** tab lists every Loxone room and lets you choose, per room:
 
-### Exclusions
-To exclude Itemtypes from being mapped, add them to the Exclusions section in the config as a comma-separated list. Matching is case-sensitive — the case of the item type names is considered when comparing entries.
+- **Expose** — whether the room's controls are mapped to HomeKit at all.
+- **Own bridge** — publish that room as its own HomeKit bridge (see below).
 
-<img width="748" alt="filters" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/c61daa1b-83aa-467b-a258-8b648a6f575e">
+Central functions (Loxone's *central* room type, e.g. "Woning"/"Home") are always kept on the main bridge — they aren't a physical room. The legacy `roomfilter` inclusion/exclusion list is still honored for older configs.
 
-The itemtype name can be found in the "mapped items" table.
+### Per-room bridges
+HomeKit's biggest quirk with a single bridge is that **all** of that bridge's accessories land in whichever HomeKit room you assign the bridge to — Loxone's room layout is lost. To fix that, you can give a room its **own HomeKit bridge** straight from this plugin (no separate child-bridge process is needed). Each room bridge:
 
-### Room Filter
-The roomfilter List can fuction as a filter for certain rooms. Add room names in lowercase (matching is performed against lowercase names). Use a comma-seperated list for multiple rooms. Depending on the roomfilter Type, this serves as an inclusion, or exclusion list.
+- Is named after the room (e.g. "Woonkamer").
+- Has its own pairing code, shown inline in the Room filter tab.
+- Keeps its pairing across restarts (its identity is derived from the room name).
 
-## Manual mapping
-Some items cannot be mapped automatically and require a naming convention to be recognized. For example, giving all Brightness sensors the convention "MH0'XX'" in Loxone Config 
+**Pairing workflow** — this is what makes the room assignment stick: in the Home app, first open the **target room**, then tap **Add Accessory → More options…**, pick the room's bridge and enter the code shown in the UI. HomeKit drops the freshly-paired accessories into the room you had open.
+
+## Mood switches
+When enabled (Options tab), all LightControllerV2 moods are mapped to HomeKit switches, grouped per LightController. In HomeKit this behaves like a radio group: only one mood can be active at a time, and mixing moods is not possible.
+
+## Manual mapping (aliases)
+Some items cannot be classified automatically and need a naming convention. For example, give all Brightness sensors the convention `MH0'XX'` in Loxone Config
 
 <img width="408" alt="mapping2" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/4fd61eaf-4080-41aa-bdc0-363b5ca0fcb1">
 
-and then setting the alias "MH0" in the plugin will result in all InfoOnlyAnalog items with "MH0" in the name being recognized as LightSensors.
+and set the alias `MH0` on the **Mappings** tab; every InfoOnlyAnalog item whose name starts with `MH0` is then exposed as a LightSensor.
 
-<img width="748" alt="filters" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/4ed2ce2b-4003-41bb-930c-f9eee7df517a">
+<img width="748" alt="alias example" src="https://github.com/rudyberends/homebridge-loxone-proxy/assets/75836217/4ed2ce2b-4003-41bb-930c-f9eee7df517a">
 
-Items that require an alias are listed in the "mapped items" table.
+Items that require an alias are listed in the [Mapped Items](#mapped-items) table.
 
-**NOTE:** When the "description" field is set in Loxone Config, then this field is exposed to the plugin instead of the "name" field. For the mapping to work, the description field needst to be empty, or it needs to contain the correct convention. 
+**NOTE:** When the "description" field is set in Loxone Config, that field is exposed to the plugin instead of the "name" field. For the mapping to work, the description field must be empty or contain the correct convention.
+
+# HomeKit Secure Video & Intercom
+Loxone `Intercom` and `IntercomV2` controls are exposed as a Doorbell + Camera (and, for IntercomV2, a motion sensor). Enable **HomeKit Secure Video** on the HKSV tab (`enableHKSV`) to add motion/doorbell-triggered recording with a rolling prebuffer, so the seconds *before* an event are captured too. Recordings follow the resolution, frame rate and bitrate HomeKit negotiates.
+
+**Two-way audio (experimental).** Enable *Two-Way Audio* under Advanced. Loxone Intercom V2 uses automatic WebRTC talkback, so no extra configuration is needed. For non-Loxone cameras you can supply FFmpeg return-audio output args (`TwoWayAudioOutputArgs`) using the `{camera_host}`, `{stream_url}`, `{audio_host}`, `{audio_user}` and `{audio_pass}` placeholders.
 
 # Limitations
-Apple does not allow more than 150 items per bridge. This plugin will not map more than 150 items, but if you have other plugins activated, you might still hit this limit. To prevent this you can run this plugin as a child bridge. Another way to solve it is to use a dedicated loxone user for the plugin and only expose the items that you want to use in HomeKit.
+Apple does not allow more than 150 accessories per bridge. This plugin will not map more than 150 items on a single bridge, but if you have other plugins active you might still hit the limit. Ways to stay under it: split rooms onto their [own bridges](#per-room-bridges), run this plugin as a child bridge, or use a dedicated Loxone user and only expose the items you actually want in HomeKit.

@@ -32,6 +32,11 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      # A re-run / cached checkout won't pull a force-moved tag; make sure the
+      # runner has the current tags so semantic-release computes the right version.
+      - name: Refresh tags
+        run: git fetch --tags --force
+
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

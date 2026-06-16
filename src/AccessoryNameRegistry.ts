@@ -1,14 +1,26 @@
 /**
- * Keeps HomeKit accessory names clean, unique, and stable during one mapping run.
+ * Strips a Loxone name down to what HAP accepts on a `Name`/`ConfiguredName`
+ * characteristic: parentheses are unwrapped (keeping their content) and any
+ * character that isn't a letter, number, space or apostrophe is removed, so the
+ * result starts and ends with a letter/number. May return '' for an all-symbol
+ * input — callers should fall back to a default.
+ */
+export function sanitizeName(value: string): string {
+  return value
+    .replace(/\((.*?)\)/g, '$1')
+    .replace(/[^\p{L}\p{N}\s']/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Keeps HomeKit accessory names clean, unique, and stable across the session: a
+ * given control UUID always maps to the same generated name, and collisions get a
+ * numeric suffix.
  */
 export class AccessoryNameRegistry {
-  private usedNames = new Set<string>();
-  private accessoryNameMap = new Map<string, string>();
-
-  reset(): void {
-    this.usedNames.clear();
-    this.accessoryNameMap.clear();
-  }
+  private readonly usedNames = new Set<string>();
+  private readonly accessoryNameMap = new Map<string, string>();
 
   generate(room: string, base: string, uuid?: string, isSubItem = false): string {
     const cleanRoom = this.clean(room || 'Unknown');
@@ -47,10 +59,6 @@ export class AccessoryNameRegistry {
   }
 
   private clean(value: string): string {
-    return value
-      .replace(/\((.*?)\)/g, '$1')
-      .replace(/[^\p{L}\p{N}\s']/gu, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    return sanitizeName(value);
   }
 }

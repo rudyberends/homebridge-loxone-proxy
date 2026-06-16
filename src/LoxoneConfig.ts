@@ -52,13 +52,6 @@ export function validateLoxoneConnectionConfig(config: LoxoneConnectionConfig): 
   return errors;
 }
 
-export function assertValidLoxoneConnectionConfig(config: LoxoneConnectionConfig): void {
-  const errors = validateLoxoneConnectionConfig(config);
-  if (errors.length > 0) {
-    throw new Error(`Invalid Loxone configuration: ${errors.join(', ')}`);
-  }
-}
-
 function parseList(value?: string): string[] {
   return value?.split(',').map(item => item.trim()).filter(Boolean) ?? [];
 }

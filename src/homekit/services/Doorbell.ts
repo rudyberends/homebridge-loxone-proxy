@@ -1,50 +1,33 @@
-import { BaseService } from './BaseService';
-import { LoxoneUpdateMessage } from '../../loxone/LoxoneTypes';
-import { CameraService } from './Camera';
+import type { PlatformAccessory, Service } from 'homebridge';
+import type { LoxonePlatform } from '../../LoxonePlatform';
 
 /**
- * Doorbell Service
- * Represents a doorbell accessory in HomeKit.
+ * A standalone HomeKit Doorbell service. `triggerDoorbell()` fires a single-press
+ * ProgrammableSwitchEvent (called by the intercom binder on the `bell` state and
+ * by snapshot motion). Kept as camera-side glue — driven by the binding engine.
  */
-export class Doorbell extends BaseService {
-  State = {
-    ProgrammableSwitchEvent: 0,
-  };
+export class Doorbell {
+  service?: Service;
+  private programmableSwitchEvent = 0;
 
-  private camera?: CameraService;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(platform: any, accessory: any) {
-    super(platform, accessory);
-    this.setupService();
-  }
-
-  setupService(): void {
-    this.service = this.accessory.getService(this.platform.Service.Doorbell) ||
+  constructor(
+    private readonly platform: LoxonePlatform,
+    private readonly accessory: PlatformAccessory,
+  ) {
+    this.service =
+      this.accessory.getService(this.platform.Service.Doorbell) ??
       this.accessory.addService(this.platform.Service.Doorbell);
-
-    this.service.getCharacteristic(this.platform.Characteristic.ProgrammableSwitchEvent)
-      .onGet(() => this.handleProgrammableSwitchEventGet());
+    this.service
+      .getCharacteristic(this.platform.Characteristic.ProgrammableSwitchEvent)
+      .onGet(() => this.programmableSwitchEvent);
   }
 
-  public triggerDoorbell(): void {
-    this.platform.log.info(`[${this.device.name}] 🔔 Doorbell event triggered`);
-    this.State.ProgrammableSwitchEvent = this.platform.Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS;
+  triggerDoorbell(): void {
+    this.platform.log.info(`[${this.accessory.displayName}] 🔔 Doorbell event triggered`);
+    this.programmableSwitchEvent = this.platform.Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS;
     this.service?.updateCharacteristic(
       this.platform.Characteristic.ProgrammableSwitchEvent,
-      this.State.ProgrammableSwitchEvent,
+      this.programmableSwitchEvent,
     );
-  }
-
-  updateService(message: LoxoneUpdateMessage): void {
-    this.platform.log.debug(`[${this.device.name}] Callback state update for Doorbell: ${message.value}`);
-    if (message.value === 1) {
-      this.triggerDoorbell();
-    }
-  }
-
-  handleProgrammableSwitchEventGet(): number {
-    this.platform.log.debug('Triggered GET ProgrammableSwitchEvent');
-    return this.State.ProgrammableSwitchEvent;
   }
 }

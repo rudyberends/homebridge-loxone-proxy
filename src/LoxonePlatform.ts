@@ -1,48 +1,31 @@
 import {
   API,
   APIEvent,
+  Characteristic,
   DynamicPlatformPlugin,
   Logger,
   PlatformAccessory,
   PlatformConfig,
   Service,
-  Characteristic,
 } from 'homebridge';
 
-import {
-  StructureFile,
-  Controls,
-  MSInfo,
-  Control,
-} from './loxone/StructureFile';
-
-import LoxoneHandler from './loxone/LoxoneHandler';
 import { AccessoryNameRegistry } from './AccessoryNameRegistry';
-import { LoxoneControlMapper } from './loxone/LoxoneControlMapper';
-import { AccessoryReconciler } from './platform/AccessoryReconciler';
-import { LoxoneCommandBus } from './loxone/LoxoneCommandBus';
-import { LoxoneStateRouter } from './loxone/LoxoneStateRouter';
+import { LoxoneBindingCoordinator } from './binding/LoxoneBindingCoordinator';
 
 /**
- * LoxonePlatform
- * Main plugin class
+ * LoxonePlatform — the Homebridge dynamic platform. It connects to the Miniserver
+ * via loxone-ts-client (the {@link LoxoneBindingCoordinator}) and exposes every
+ * control to HomeKit through the binding engine. The reconciler and name registry
+ * are the only remaining HomeKit-side glue.
  */
 export class LoxonePlatform implements DynamicPlatformPlugin {
-  public LoxoneHandler!: LoxoneHandler;
-  public AccessoryCount = 1;
-  public msInfo: MSInfo = {} as MSInfo;
-  public LoxoneItems: Controls = {} as Controls;
-
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
 
   public readonly accessories: PlatformAccessory[] = [];
-  public readonly accessoryReconciler: AccessoryReconciler;
-  public readonly commandBus: LoxoneCommandBus;
-  public readonly stateRouter: LoxoneStateRouter;
 
   private readonly nameRegistry: AccessoryNameRegistry;
-  private readonly controlMapper: LoxoneControlMapper;
+  private readonly bindingCoordinator: LoxoneBindingCoordinator;
 
   constructor(
     public readonly log: Logger,
@@ -50,84 +33,36 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     public readonly api: API,
   ) {
     this.nameRegistry = new AccessoryNameRegistry();
-    this.controlMapper = new LoxoneControlMapper(this);
-    this.accessoryReconciler = new AccessoryReconciler(this);
-    this.commandBus = new LoxoneCommandBus(this);
-    this.stateRouter = new LoxoneStateRouter(this);
+    this.bindingCoordinator = new LoxoneBindingCoordinator(this);
 
-    this.api.on('didFinishLaunching', async () => {
-      await this.LoxoneInit();
+    this.api.on('didFinishLaunching', () => {
+      void this.bindingCoordinator.start();
     });
 
-    // Release the Miniserver connection (websocket, keep-alive timers) and the
-    // handler's listener/cache maps when Homebridge shuts down.
+    // Release the Miniserver connection (websocket, keep-alive timers) on shutdown.
     this.api.on(APIEvent.SHUTDOWN, () => {
-      void this.LoxoneHandler?.disconnect();
+      void this.bindingCoordinator.stop();
     });
   }
 
-  /**
-   * Initial startup
-   */
-  async LoxoneInit(): Promise<void> {
-    this.nameRegistry.reset();
-
-    this.LoxoneHandler = new LoxoneHandler(this);
-
-    await this.waitForLoxoneConfig();
-    this.log.debug(
-      `[LoxoneInit] Got Structure File; Modified: ${this.LoxoneHandler.loxdata.lastModified}`,
-    );
-
-    this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
-    this.log.info('[LoxoneInit] Loxone Platform initialized');
+  /** Homebridge restores cached accessories through this on startup. */
+  configureAccessory(accessory: PlatformAccessory): void {
+    this.log.debug('Loaded from cache:', accessory.displayName);
+    this.accessories.push(accessory);
   }
 
-  waitForLoxoneConfig(): Promise<void> {
-    return this.LoxoneHandler.waitForConfig();
-  }
-
-  /**
-   * Parse structure file
-   */
-  parseLoxoneConfig(config: StructureFile): void {
-    this.msInfo = config.msInfo;
-
-    const prepared = this.controlMapper.prepare(config);
-    this.LoxoneItems = prepared.controls;
-    this.accessoryReconciler.beginRun();
-    this.mapLoxoneItems(prepared.items);
-    this.removeUnmappedAccessories();
-  }
-
-  /**
-   * Map items → accessories
-   */
-  mapLoxoneItems(items: Control[]): void {
-    this.controlMapper.map(items);
-  }
-
-  /**
-   * Remove unused cached accessories
-   */
-  removeUnmappedAccessories(): void {
-    this.accessoryReconciler.removeUnmapped();
-  }
-
-  configureAccessory(acc: PlatformAccessory): void {
-    this.log.debug('Loaded from cache:', acc.displayName);
-    this.accessories.push(acc);
-  }
-
-  /**
-   * Clean + unique + HAP-safe + UUID-stable name builder
-   */
-  generateUniqueName(
-    room: string,
-    base: string,
-    uuid?: string,
-    isSubItem = false,
-  ): string {
+  /** Clean + unique + HAP-safe + UUID-stable name builder. */
+  generateUniqueName(room: string, base: string, uuid?: string, isSubItem = false): string {
     return this.nameRegistry.generate(room, base, uuid, isSubItem);
+  }
+
+  /** The active Miniserver communication token (used by intercom talkback). */
+  getCommunicationToken(): string | undefined {
+    return this.bindingCoordinator.token;
+  }
+
+  /** Miniserver temperature display unit (0 = Celsius, 1 = Fahrenheit), for the thermostat binding. */
+  getTemperatureDisplayUnit(): number {
+    return this.bindingCoordinator.temperatureUnit;
   }
 }

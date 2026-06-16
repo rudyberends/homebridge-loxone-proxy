@@ -817,7 +817,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
           cameraName: this.cameraName,
           signalingBaseUrl,
           username: this.platform.config.username,
-          getToken: () => this.platform.LoxoneHandler?.getActiveCommunicationToken(),
+          getToken: () => this.platform.getCommunicationToken(),
           onIncomingPcm: (chunk: Buffer) => this.feedHomeKitIncomingAudio(activeSession, chunk),
         });
 

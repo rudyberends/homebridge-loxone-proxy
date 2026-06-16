@@ -31,12 +31,14 @@ export class PreBuffer {
   private readonly ffmpegInput: string[];
   private readonly cameraName: string;
   private readonly ffmpegPath: string;
+  private readonly encoderArgs?: string[];
 
-  constructor(ffmpegInput: string[], cameraName: string, videoProcessor: string, log: Logger) {
+  constructor(ffmpegInput: string[], cameraName: string, videoProcessor: string, log: Logger, encoderArgs?: string[]) {
     this.ffmpegInput = ffmpegInput;
     this.cameraName = cameraName;
     this.ffmpegPath = videoProcessor;
     this.log = log;
+    this.encoderArgs = encoderArgs;
   }
 
   async startPreBuffer(): Promise<Mp4Session> {
@@ -44,7 +46,10 @@ export class PreBuffer {
       return this.prebufferSession;
     }
 
-    const vcodec = [
+    // The recording delegate derives these from the negotiated HKSV configuration
+    // (resolution/fps/bitrate/profile). Fall back to a safe 720p/CRF default when
+    // none were supplied (e.g. prebuffer warmed before the config arrived).
+    const vcodec = this.encoderArgs ?? [
       '-vcodec', 'libx264',
       '-color_range', 'pc',
       '-colorspace', 'bt470bg',

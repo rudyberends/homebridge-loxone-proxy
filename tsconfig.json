@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
-    "target": "ES2018", // ~node10
+    "target": "ES2022", // Node 22
     "module": "commonjs",
+    "moduleResolution": "node",
+    // Bumping `target` to ES2022 would default this to `true`, changing class-field
+    // init order (breaks the BaseService "constructor calls overridable setupService,
+    // subclass declares `State = {...}`" pattern). Keep the pre-ES2022 semantics.
+    "useDefineForClassFields": false,
     "removeComments": true,
     "lib": [
-      "es2015",
-      "es2016",
-      "es2017",
-      "es2018"
+      "ES2022"
     ],
     "declaration": true,
     "declarationMap": true,

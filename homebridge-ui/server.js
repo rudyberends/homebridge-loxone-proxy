@@ -14,7 +14,7 @@ const ROOM_BRIDGE_MANIFEST = 'loxone-room-bridges.json';
 // test/binding.test.js). Used only to label discovery results.
 const SUPPORTED_TYPES = new Set([
   'Switch', 'InfoOnlyAnalog', 'InfoOnlyDigital', 'PresenceDetector', 'Jalousie', 'Window', 'Gate',
-  'Dimmer', 'EIBDimmer', 'ColorPickerV2', 'IRoomControllerV2', 'Alarm', 'AudioZoneV2', 'Ventilation', 'Pushbutton',
+  'Dimmer', 'EIBDimmer', 'ColorPickerV2', 'IRoomControllerV2', 'Alarm', 'Ventilation', 'Pushbutton',
   'NfcCodeTouch', 'Radio', 'SmokeAlarm', 'WindowMonitor', 'LightControllerV2', 'Intercom', 'IntercomV2', 'Irrigation',
 ]);
 

@@ -17,7 +17,6 @@ const colorMath = require('../dist/binding/colorMath');
 const { bindColorPicker } = require('../dist/binding/binders/colorBinder');
 const { thermostatBindings } = require('../dist/binding/tables/thermostatBindings');
 const { alarmBindings } = require('../dist/binding/tables/alarmBindings');
-const { audioBindings } = require('../dist/binding/tables/audioBindings');
 const { fanBindings } = require('../dist/binding/tables/fanBindings');
 const { pushbuttonBindings } = require('../dist/binding/tables/pushbuttonBindings');
 const { bindNfcCodeTouch } = require('../dist/binding/binders/nfcCodeTouchBinder');
@@ -412,36 +411,6 @@ test('alarmBindings maps armed/level/disabledMove to HAP states and arms/disarms
   await target.set(alarm, 0); // home → with movement
   await target.set(alarm, 2); // night → without movement
   assert.deepEqual(calls, ['off', ['arm', true], ['arm', false]]);
-});
-
-test('audioBindings maps AudioZoneV2 playState to media state and drives play/pause + volume', async () => {
-  const cur = row(audioBindings, 'CurrentMediaState');
-  assert.equal(cur.subscribeTo, 'playState');
-  assert.equal(cur.get({ playState: 2 }), 0, 'playing → PLAY');
-  assert.equal(cur.get({ playState: 1 }), 1, 'paused → PAUSE');
-  assert.equal(cur.get({ playState: 0 }), 2, 'stopped → STOP');
-  assert.equal(cur.get({ playState: -1 }), 2, 'unknown → STOP');
-  assert.equal(cur.set, undefined, 'current media state is read-only');
-
-  const calls = [];
-  const zone = {
-    play: () => { calls.push('play'); return Promise.resolve(); },
-    pause: () => { calls.push('pause'); return Promise.resolve(); },
-    setVolume: (n) => { calls.push(['vol', n]); return Promise.resolve(); },
-  };
-
-  const target = row(audioBindings, 'TargetMediaState');
-  await target.set(zone, 0); // PLAY
-  await target.set(zone, 1); // PAUSE
-  await target.set(zone, 2); // STOP → pause (no stop verb)
-  assert.deepEqual(calls, ['play', 'pause', 'pause']);
-
-  const vol = row(audioBindings, 'Volume');
-  assert.equal(vol.get({ volume: 42 }), 42);
-  assert.equal(vol.get({ volume: undefined }), 0);
-  assert.equal(vol.get({ volume: 150 }), 100, 'clamped to 100');
-  await vol.set(zone, 55);
-  assert.deepEqual(calls.at(-1), ['vol', 55]);
 });
 
 test('fanBindings derives Active/Speed and restores last speed on a bare on', async () => {

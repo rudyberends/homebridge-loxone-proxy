@@ -516,6 +516,8 @@ export class RecordingDelegate implements CameraRecordingDelegate {
 
     const base = [
       '-vcodec', 'libx264',
+      // MJPEG sources decode to yuvj422p; baseline/main only accept 4:2:0 (#162).
+      '-pix_fmt', 'yuv420p',
       '-color_range', 'pc',
       '-colorspace', 'bt470bg',
       '-color_primaries', 'smpte170m',

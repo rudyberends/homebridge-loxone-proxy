@@ -115,7 +115,7 @@ HomeKit's biggest quirk with a single bridge is that **all** of that bridge's ac
 **Pairing workflow** — this is what makes the room assignment stick: in the Home app, first open the **target room**, then tap **Add Accessory → More options…**, pick the room's bridge and enter the code shown in the UI. HomeKit drops the freshly-paired accessories into the room you had open.
 
 ## Mood switches
-When enabled (Options tab), all LightControllerV2 moods are mapped to HomeKit switches, grouped per LightController. In HomeKit this behaves like a radio group: only one mood can be active at a time, and mixing moods is not possible.
+Set on the Options tab. **Grouped** (default) puts all moods of a LightControllerV2 as switches in one Moods accessory per light controller. **Separate** gives every mood its own Switch accessory, so each mood can be placed on its own (e.g. in Control Center). **Disabled** exposes no moods. In HomeKit this behaves like a radio group: only one mood can be active at a time, and mixing moods is not possible.
 
 ## Manual mapping (aliases)
 Some items cannot be classified automatically and need a naming convention. For example, give all Brightness sensors the convention `MH0'XX'` in Loxone Config

@@ -642,4 +642,20 @@ test('LightControllerV2 composite plans a Moods accessory + per-lamp accessories
   assert.ok(lamp, 'the lamp sub-control becomes its own accessory');
   assert.equal(lamp.type, 'Dimmer');
   assert.ok(!planned.some((p) => p.uuidSource === 'master'), 'the master dimmer is excluded');
+
+  // 'separate': one accessory per real mood instead of the grouped Moods accessory.
+  platform.config.options.MoodSwitches = 'separate';
+  const separate = COMPOSITE_BINDERS.LightControllerV2(platform, lc, client);
+  assert.ok(!separate.some((p) => p.name === 'Moods'), 'no grouped Moods accessory');
+  const dinner = separate.find((p) => p.uuidSource === 'lc1/mood/7');
+  assert.ok(dinner, 'the mood gets its own accessory');
+  assert.equal(dinner.name, 'Dinner');
+  assert.equal(dinner.services.length, 1);
+  assert.equal(separate.filter((p) => p.uuidSource.startsWith('lc1/mood/')).length, 1, 'Off/AllOff filtered');
+
+  // 'disabled': no mood accessories at all, lamps still planned.
+  platform.config.options.MoodSwitches = 'disabled';
+  const disabled = COMPOSITE_BINDERS.LightControllerV2(platform, lc, client);
+  assert.ok(!disabled.some((p) => p.name === 'Moods' || p.uuidSource.includes('/mood/')));
+  assert.ok(disabled.some((p) => p.uuidSource === 'sub-dim'));
 });

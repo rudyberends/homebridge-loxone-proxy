@@ -39,11 +39,13 @@
         "properties": {
           "MoodSwitches": {
             "title": "Mood switches",
+            "description": "How LightControllerV2 moods appear in HomeKit: grouped as switches in one Moods accessory per light controller, or as a separate accessory per mood.",
             "type": "string",
             "default": "enabled",
-            "enum": [
-              "enabled",
-              "disabled"
+            "oneOf": [
+              { "title": "Grouped (one Moods accessory per light controller)", "enum": ["enabled"] },
+              { "title": "Separate accessory per mood", "enum": ["separate"] },
+              { "title": "Disabled", "enum": ["disabled"] }
             ]
           }
         }

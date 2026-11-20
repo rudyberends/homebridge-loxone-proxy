@@ -302,31 +302,45 @@ export const CONTROL_BINDERS: Readonly<Record<string, ControlBinder>> = {
   WindowMonitor: windowMonitorBinder,
 };
 
-// LightControllerV2 → a "Moods" accessory (mood switches) plus one accessory per
-// lamp sub-control (master excluded), reusing the scalar binders for the lamps.
+// LightControllerV2 → mood switches (one grouped Moods accessory, or one accessory
+// per mood) plus one accessory per lamp sub-control (master excluded), reusing
+// the scalar binders for the lamps.
 const lightControllerComposite: CompositeBinder = (platform, handle, client) => {
   const lc = handle as LightControllerV2Control;
   const room = lc.roomName ?? 'Unassigned';
   const planned: PlannedAccessory[] = [];
 
-  // Mood switches on the controller's own accessory (gated by config, like the legacy item).
-  if (platform.config.options?.MoodSwitches === 'enabled') {
-    // moodId 0 and 778 are the "all off" moods, not real scenes.
-    const moods = (lc.moods ?? []).filter((mood) => mood.id !== 0 && mood.id !== 778);
-    if (moods.length > 0) {
+  // Mood switches (gated by config): 'enabled' groups them on one Moods accessory,
+  // 'separate' gives every mood its own accessory.
+  const moodMode = platform.config.options?.MoodSwitches;
+  // moodId 0 and 778 are the "all off" moods, not real scenes.
+  const moods = (lc.moods ?? []).filter((mood) => mood.id !== 0 && mood.id !== 778);
+  if (moodMode === 'separate') {
+    for (const mood of moods) {
       planned.push({
-        uuidSource: lc.uuid,
+        uuidSource: `${lc.uuid}/mood/${mood.id}`,
         type: 'LightControllerV2',
-        name: 'Moods',
+        name: String(mood.name),
         room,
-        services: moods.map((mood) => ({
+        services: [{
           kind: platform.Service.Switch,
-          subtype: `mood:${mood.id}`,
-          name: String(mood.name),
           bindTo: (service) => bindCharacteristics(platform, service, lc, moodBindings(mood.id)),
-        })),
+        }],
       });
     }
+  } else if (moodMode === 'enabled' && moods.length > 0) {
+    planned.push({
+      uuidSource: lc.uuid,
+      type: 'LightControllerV2',
+      name: 'Moods',
+      room,
+      services: moods.map((mood) => ({
+        kind: platform.Service.Switch,
+        subtype: `mood:${mood.id}`,
+        name: String(mood.name),
+        bindTo: (service) => bindCharacteristics(platform, service, lc, moodBindings(mood.id)),
+      })),
+    });
   }
 
   // Each lamp sub-control becomes its own accessory via the scalar binders (master excluded).

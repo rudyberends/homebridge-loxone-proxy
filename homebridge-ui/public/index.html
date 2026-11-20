@@ -632,18 +632,26 @@
         label.textContent = title;
         field.appendChild(label);
 
-        if (Array.isArray(prop.enum)) {
+        // A plain `enum`, or a titled `oneOf: [{ title, enum: [value] }]`.
+        const choices = Array.isArray(prop.enum)
+          ? prop.enum.map((v) => ({ value: String(v), label: String(v) }))
+          : Array.isArray(prop.oneOf)
+            ? prop.oneOf
+              .filter((c) => Array.isArray(c.enum) && c.enum.length > 0)
+              .map((c) => ({ value: String(c.enum[0]), label: c.title || String(c.enum[0]) }))
+            : null;
+        if (choices && choices.length > 0) {
           const select = document.createElement('select');
           select.className = 'form-control form-control-sm';
           select.id = id;
-          for (const option of prop.enum) {
+          for (const choice of choices) {
             const o = document.createElement('option');
-            o.value = String(option);
-            o.textContent = String(option);
+            o.value = choice.value;
+            o.textContent = choice.label;
             select.appendChild(o);
           }
           select.value = value != null ? String(value)
-            : (prop.default != null ? String(prop.default) : String(prop.enum[0]));
+            : (prop.default != null ? String(prop.default) : choices[0].value);
           select.addEventListener('change', () => { stageOption(path, select.value); });
           field.appendChild(select);
         } else {

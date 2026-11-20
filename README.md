@@ -133,6 +133,8 @@ Items that require an alias are listed in the [Mapped Items](#mapped-items) tabl
 # HomeKit Secure Video & Intercom
 Loxone `Intercom` and `IntercomV2` controls are exposed as a Doorbell + Camera (and, for IntercomV2, a motion sensor). Enable **HomeKit Secure Video** on the HKSV tab (`enableHKSV`) to add motion/doorbell-triggered recording with a rolling prebuffer, so the seconds *before* an event are captured too. Recordings follow the resolution, frame rate and bitrate HomeKit negotiates.
 
+**Intercom V2 credentials.** The plugin opens the IntercomV2 video stream with the Miniserver `username`/`password` from the plugin config. That account needs enough rights in Loxone Config to access the intercom; otherwise the stream and snapshots fail with `401 Unauthorized`.
+
 **Two-way audio (experimental).** Enable *Two-Way Audio* under Advanced. Loxone Intercom V2 uses automatic WebRTC talkback, so no extra configuration is needed. For non-Loxone cameras you can supply FFmpeg return-audio output args (`TwoWayAudioOutputArgs`) using the `{camera_host}`, `{stream_url}`, `{audio_host}`, `{audio_user}` and `{audio_pass}` placeholders.
 
 # Limitations

@@ -29,10 +29,45 @@
     "no-multi-spaces": ["warn", { "ignoreEOLComments": true }],
     "no-trailing-spaces": ["warn"],
     "lines-between-class-members": ["warn", "always", {"exceptAfterSingleLine": true}],
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "@typescript-eslint/explicit-function-return-type": "off",
     "@typescript-eslint/no-non-null-assertion": "off",
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/semi": ["warn"],
     "@typescript-eslint/member-delimiter-style": ["warn"]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/loxone/items/**/*.ts", "src/homekit/**/*.ts"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "CallExpression[callee.property.name='registerListenerForUUID']",
+            "message": "Subscribe to Loxone state via platform.stateRouter.subscribe()/bind(), never LoxoneHandler.registerListenerForUUID() directly."
+          },
+          {
+            "selector": "CallExpression[callee.property.name='sendCommand']",
+            "message": "Do not send Loxone commands directly. Items declare command bindings in their AccessoryPlan; services call BaseService.executeCommand() (run by LoxoneCommandBus)."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/loxone/LoxoneHandler",
+                  "**/loxone/LoxoneTransport",
+                  "**/loxone/LoxoneTsApiTransport",
+                  "**/loxone/LoxoneCommandBus"
+                ],
+                "message": "HomeKit services and Loxone items must not depend on the transport/handler/command-bus directly; go through the accessory plan, command bus and state router."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

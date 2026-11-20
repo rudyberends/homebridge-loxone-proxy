@@ -1,13 +1,13 @@
-import { PlatformAccessory, APIEvent } from 'homebridge';
+import { PlatformAccessory, APIEvent, Service } from 'homebridge';
 import { LoxonePlatform } from '../../LoxonePlatform';
-import { BaseService } from './BaseService';
 import { CameraService } from './Camera';
 
 /**
  * CameraMotionSensor performs motion detection by analyzing
- * changes in JPEG snapshot size over time.
+ * changes in JPEG snapshot size over time. Standalone camera-side glue.
  */
-export class CameraMotionSensor extends BaseService {
+export class CameraMotionSensor {
+  private service?: Service;
   private readonly intervalMs = 1000;
   private readonly minThreshold = 0.04;
   private readonly maxThreshold = 0.30;
@@ -30,12 +30,11 @@ export class CameraMotionSensor extends BaseService {
   private state = { MotionDetected: false };
 
   constructor(
-    platform: LoxonePlatform,
-    accessory: PlatformAccessory,
+    private readonly platform: LoxonePlatform,
+    private readonly accessory: PlatformAccessory,
     private readonly camera: CameraService,
     private readonly doorbellService?: { triggerDoorbell: () => void },
   ) {
-    super(platform, accessory);
     this.jpegHeaderSize = platform.config?.Advanced?.JpegHeaderSize ?? 623;
 
     this.setupService();

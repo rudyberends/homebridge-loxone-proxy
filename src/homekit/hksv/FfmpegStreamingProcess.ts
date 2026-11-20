@@ -1,5 +1,5 @@
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
-import { StreamRequestCallback, StreamSessionIdentifier } from 'homebridge';
+import { Logger, StreamRequestCallback, StreamSessionIdentifier } from 'homebridge';
 import os from 'os';
 import readline from 'readline';
 import { Writable } from 'stream';
@@ -53,7 +53,7 @@ export class FfmpegStreamingProcess {
     sessionId: string,
     videoProcessor: string,
     ffmpegArgs: string[],
-    log,
+    log: Logger,
     debug = false,
     delegate: StreamingDelegate,
     callback?: StreamRequestCallback,

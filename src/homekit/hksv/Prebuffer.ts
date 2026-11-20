@@ -2,7 +2,7 @@
 import { ChildProcess, spawn, StdioNull, StdioPipe } from 'child_process';
 import EventEmitter from 'events';
 import { createServer, Server } from 'net';
-import { listenServer, MP4Atom, parseFragmentedMP4 } from './RecordingDelegate';
+import { KNOWN_BENIGN_FFMPEG_ERROR, listenServer, MP4Atom, parseFragmentedMP4 } from './RecordingDelegate';
 import type { Logger } from 'homebridge';
 
 interface PrebufferFmp4 {
@@ -31,12 +31,14 @@ export class PreBuffer {
   private readonly ffmpegInput: string[];
   private readonly cameraName: string;
   private readonly ffmpegPath: string;
+  private readonly encoderArgs?: string[];
 
-  constructor(ffmpegInput: string[], cameraName: string, videoProcessor: string, log: Logger) {
+  constructor(ffmpegInput: string[], cameraName: string, videoProcessor: string, log: Logger, encoderArgs?: string[]) {
     this.ffmpegInput = ffmpegInput;
     this.cameraName = cameraName;
     this.ffmpegPath = videoProcessor;
     this.log = log;
+    this.encoderArgs = encoderArgs;
   }
 
   async startPreBuffer(): Promise<Mp4Session> {
@@ -44,8 +46,13 @@ export class PreBuffer {
       return this.prebufferSession;
     }
 
-    const vcodec = [
+    // The recording delegate derives these from the negotiated HKSV configuration
+    // (resolution/fps/bitrate/profile). Fall back to a safe 720p/CRF default when
+    // none were supplied (e.g. prebuffer warmed before the config arrived).
+    const vcodec = this.encoderArgs ?? [
       '-vcodec', 'libx264',
+      // MJPEG sources decode to yuvj422p; baseline/main only accept 4:2:0 (#162).
+      '-pix_fmt', 'yuv420p',
       '-color_range', 'pc',
       '-colorspace', 'bt470bg',
       '-color_primaries', 'smpte170m',
@@ -58,9 +65,10 @@ export class PreBuffer {
       '-sc_threshold', '0',
       '-bf', '0',
       '-force_key_frames', 'expr:gte(t,n_forced*1)',
+      // eslint-disable-next-line max-len
       '-vf', 'fps=25:round=down,scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-an',
-  ];
+    ];
 
     const fmp4OutputServer: Server = createServer(async (socket) => {
       fmp4OutputServer.close();
@@ -141,8 +149,10 @@ export class PreBuffer {
     if (cp.stderr) {
       cp.stderr.on('data', data => {
         const output = data.toString();
-        // Only log actual errors, not warnings or info messages
-        if (output.toLowerCase().includes('error') && !output.toLowerCase().includes('deprecated')) {
+        // Only log actual errors, not warnings, info, or expected start/stop noise.
+        if (KNOWN_BENIGN_FFMPEG_ERROR.test(output)) {
+          this.log.debug(`[${this.cameraName}] [PreBuffer] FFmpeg (benign): ${output.trim()}`);
+        } else if (output.toLowerCase().includes('error') && !output.toLowerCase().includes('deprecated')) {
           this.log.error(`[${this.cameraName}] [PreBuffer] FFmpeg error: ${output.trim()}`);
         }
       });
@@ -164,7 +174,26 @@ export class PreBuffer {
 
     const server = new Server(socket => {
       server.close();
-      const writeAtom = (atom: MP4Atom) => socket.write(Buffer.concat([atom.header, atom.data]));
+
+      // Drain-aware writer: honour socket backpressure so the initial ring flush
+      // (and a slow downstream FFmpeg) can't balloon Node's write buffer.
+      const queue: Buffer[] = [];
+      let writable = true;
+      const flush = () => {
+        while (writable && queue.length) {
+          writable = socket.write(queue.shift()!);
+        }
+        if (!writable) {
+          socket.once('drain', () => {
+            writable = true;
+            flush();
+          });
+        }
+      };
+      const writeAtom = (atom: MP4Atom) => {
+        queue.push(Buffer.concat([atom.header, atom.data]));
+        flush();
+      };
 
       if (this.ftyp) {
         writeAtom(this.ftyp);
@@ -190,6 +219,7 @@ export class PreBuffer {
       this.events.on('atom', writeAtom);
 
       const cleanup = () => {
+        queue.length = 0;
         this.events.removeListener('atom', writeAtom);
         this.events.removeListener('killed', cleanup);
         socket.removeAllListeners();

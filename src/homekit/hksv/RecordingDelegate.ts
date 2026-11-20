@@ -2,6 +2,8 @@ import {
   APIEvent,
   CameraRecordingConfiguration,
   CameraRecordingDelegate,
+  H264Level,
+  H264Profile,
   HAP,
   HDSProtocolSpecificErrorReason,
   RecordingPacket,
@@ -29,6 +31,15 @@ export interface FFMpegFragmentedMP4Session {
 }
 
 export const PREBUFFER_LENGTH = 4000;
+
+/**
+ * FFmpeg stderr lines that are expected during normal HKSV start/stop (a recording
+ * being torn down mid-fragment, the prebuffer pipe closing, a brief MJPEG hiccup).
+ * These are logged at debug instead of as errors so the log isn't spammed.
+ */
+export const KNOWN_BENIGN_FFMPEG_ERROR =
+  // eslint-disable-next-line max-len
+  /moov atom not found|Cannot determine format of input stream|Broken pipe|Invalid data found when processing input|Error splitting the input into NAL units|Immediate exit requested|partial file|End of file/i;
 
 export async function listenServer(server: Server, log: Logger): Promise<number> {
   let isListening = false;
@@ -121,6 +132,7 @@ export class RecordingDelegate implements CameraRecordingDelegate {
   private preBuffer?: PreBuffer;
   private preBufferInitPromise?: Promise<void>;
   private currentRecordingConfiguration?: CameraRecordingConfiguration;
+  private prebufferEncoderSignature?: string;
   private activeFFmpegProcesses = new Map<string, ChildProcess>();
   private streamAbortControllers = new Map<string, AbortController>();
   private closedStreams = new Set<string>();
@@ -171,14 +183,48 @@ export class RecordingDelegate implements CameraRecordingDelegate {
       void this.startPreBuffer().catch((error) => {
         this.log.warn(`[${this.cameraName}] Failed to warm prebuffer: ${error}`, this.streamUrl);
       });
+    } else {
+      // Recording was turned off: tear the prebuffer down so its FFmpeg process
+      // and localhost TCP server do not keep running for the rest of the
+      // process lifetime. startPreBuffer() re-warms it on re-activation.
+      this.stopPreBuffer();
     }
     return Promise.resolve();
+  }
+
+  private stopPreBuffer(): void {
+    if (!this.preBufferSession && !this.preBuffer) {
+      return;
+    }
+    this.log.info(`[${this.cameraName}] Stopping prebuffer for ${this.streamUrl}`);
+    if (this.preBufferSession?.process && !this.preBufferSession.process.killed) {
+      this.preBufferSession.process.kill('SIGKILL');
+    }
+    if (this.preBufferSession?.server) {
+      this.preBufferSession.server.close();
+    }
+    this.preBufferSession = undefined;
+    this.preBuffer = undefined;
   }
 
   updateRecordingConfiguration(config: CameraRecordingConfiguration | undefined): Promise<void> {
     this.log.info(`[${this.cameraName}] Recording configuration updated`, this.streamUrl);
     this.currentRecordingConfiguration = config;
-    if (config && this.recordingActive) {
+
+    if (!config) {
+      // HomeKit cleared the selection (recording management reset): drop the prebuffer.
+      this.stopPreBuffer();
+      return Promise.resolve();
+    }
+
+    if (this.recordingActive) {
+      // If a prebuffer is already running with different (or default) encoder
+      // settings, tear it down so it re-warms with the freshly negotiated ones.
+      const desired = this.buildPrebufferEncoderArgs().join('');
+      if (this.preBufferSession && desired !== this.prebufferEncoderSignature) {
+        this.log.info(`[${this.cameraName}] Recording configuration changed; re-warming prebuffer encoder`, this.streamUrl);
+        this.stopPreBuffer();
+      }
       void this.startPreBuffer().catch((error) => {
         this.log.warn(`[${this.cameraName}] Failed to warm prebuffer after configuration update: ${error}`, this.streamUrl);
       });
@@ -269,6 +315,9 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     if (!this.preBufferInitPromise) {
       this.preBufferInitPromise = (async () => {
         this.log.info(`[${this.cameraName}] Starting prebuffer for ${this.streamUrl}`);
+        // No `-re`: this is a live source, so read frames as they arrive. `-re`
+        // would pace input to the declared rate and drift the prebuffer behind
+        // real time, which conflicts with the low-latency flags below.
         const ffmpegInput = [
           '-use_wallclock_as_timestamps', '1',
           '-probesize', '200000',
@@ -278,14 +327,15 @@ export class RecordingDelegate implements CameraRecordingDelegate {
           '-max_delay', '0',
           '-thread_queue_size', '1024',
           '-f', 'mjpeg',
-          '-re',
           '-i', this.streamUrl,
         ];
         if (this.base64auth) {
           ffmpegInput.unshift('-headers', `Authorization: Basic ${this.base64auth}\r\n`);
         }
 
-        this.preBuffer = new PreBuffer(ffmpegInput, this.cameraName, this.videoProcessor, this.log);
+        const encoderArgs = this.buildPrebufferEncoderArgs();
+        this.prebufferEncoderSignature = encoderArgs.join('');
+        this.preBuffer = new PreBuffer(ffmpegInput, this.cameraName, this.videoProcessor, this.log, encoderArgs);
         this.preBufferSession = await this.preBuffer.startPreBuffer();
       })()
         .finally(() => {
@@ -422,8 +472,8 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     if (cp.stderr) {
       cp.stderr.on('data', data => {
         const msg = data.toString();
-        if (intentionallyKilled && /Immediate exit requested/i.test(msg)) {
-          this.log.debug(`[${this.cameraName}] [FFmpeg stderr]: ${msg.trim()} (intentional stop)`);
+        if (intentionallyKilled || KNOWN_BENIGN_FFMPEG_ERROR.test(msg)) {
+          this.log.debug(`[${this.cameraName}] [FFmpeg stderr]: ${msg.trim()} (benign)`);
           return;
         }
         if (msg.includes('moov') || msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed')) {
@@ -451,6 +501,121 @@ export class RecordingDelegate implements CameraRecordingDelegate {
     }
 
     return { cp, generator: generator() };
+  }
+
+  /**
+   * Builds the libx264 args for the prebuffer encoder. When HomeKit has selected
+   * a recording configuration we honour its resolution, frame rate, bitrate and
+   * profile so recordings match what was negotiated; otherwise we fall back to a
+   * safe 720p/CRF default. Keyframes stay on a 1-second cadence regardless: the
+   * prebuffer-replay path starts a recording at a `moof` boundary, and a short
+   * GOP keeps that close to a keyframe so playback starts cleanly.
+   */
+  private buildPrebufferEncoderArgs(): string[] {
+    const config = this.currentRecordingConfiguration;
+
+    const base = [
+      '-vcodec', 'libx264',
+      // MJPEG sources decode to yuvj422p; baseline/main only accept 4:2:0 (#162).
+      '-pix_fmt', 'yuv420p',
+      '-color_range', 'pc',
+      '-colorspace', 'bt470bg',
+      '-color_primaries', 'smpte170m',
+      '-color_trc', 'smpte170m',
+      '-preset', 'veryfast',
+      '-tune', 'zerolatency',
+    ];
+
+    if (!config) {
+      return [
+        ...base,
+        '-crf', '22',
+        '-g', '25',
+        '-keyint_min', '25',
+        '-sc_threshold', '0',
+        '-bf', '0',
+        '-force_key_frames', 'expr:gte(t,n_forced*1)',
+        // eslint-disable-next-line max-len
+        '-vf', 'fps=25:round=down,scale=\'min(1280,iw)\':\'min(720,ih)\':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2',
+        '-an',
+      ];
+    }
+
+    const [rawWidth, rawHeight, rawFps] = config.videoCodec.resolution;
+    const width = this.clamp(Math.round(rawWidth || 1280), 64, 1920);
+    const height = this.clamp(Math.round(rawHeight || 720), 64, 1080);
+    const fps = this.clamp(Math.round(rawFps || 25), 2, 30);
+    const bitrateKbps = this.normalizeBitrateKbps(config.videoCodec.parameters.bitRate);
+    const profile = this.mapH264Profile(config.videoCodec.parameters.profile);
+    const level = this.mapH264Level(config.videoCodec.parameters.level);
+
+    const args = [...base];
+    if (profile) {
+      args.push('-profile:v', profile);
+    }
+    if (level) {
+      args.push('-level:v', level);
+    }
+    if (bitrateKbps) {
+      args.push('-b:v', `${bitrateKbps}k`, '-maxrate', `${bitrateKbps}k`, '-bufsize', `${bitrateKbps * 2}k`);
+    } else {
+      args.push('-crf', '22');
+    }
+    args.push(
+      '-g', `${fps}`,
+      '-keyint_min', `${fps}`,
+      '-sc_threshold', '0',
+      '-bf', '0',
+      '-force_key_frames', 'expr:gte(t,n_forced*1)',
+      // eslint-disable-next-line max-len
+      '-vf', `fps=${fps}:round=down,scale='min(${width},iw)':'min(${height},ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2`,
+      '-an',
+    );
+    return args;
+  }
+
+  /** HomeKit advertises the recording bitrate in kbit/s; guard against a stray bit/s value. */
+  private normalizeBitrateKbps(value: number | undefined): number | undefined {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      return undefined;
+    }
+    const kbps = value > 100000 ? Math.round(value / 1000) : Math.round(value);
+    return this.clamp(kbps, 300, 8000);
+  }
+
+  private mapH264Profile(profile: H264Profile): string | undefined {
+    switch (profile) {
+      case H264Profile.BASELINE:
+        return 'baseline';
+      case H264Profile.MAIN:
+        return 'main';
+      case H264Profile.HIGH:
+        return 'high';
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Maps the negotiated HKSV level to a libx264 `-level:v` string. Safe to pin
+   * because HomeKit only ever pairs a level with a resolution it permits, and we
+   * clamp the encoder to <=1080p — all within level 4.0.
+   */
+  private mapH264Level(level: H264Level): string | undefined {
+    switch (level) {
+      case H264Level.LEVEL3_1:
+        return '3.1';
+      case H264Level.LEVEL3_2:
+        return '3.2';
+      case H264Level.LEVEL4_0:
+        return '4.0';
+      default:
+        return undefined;
+    }
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
   }
 
   private toStreamKey(streamId: number | string): string {

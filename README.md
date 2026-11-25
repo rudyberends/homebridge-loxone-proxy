@@ -56,7 +56,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to Outlets (grouped in one Moods accessory, or one accessory per mood). Individual lights are mapped to a Lightbulb.
 |`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping. By default, it expects the switch to be ON for the dooor to be locked. There is an option in the config to reverse this behavior.
 |`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
-|`NfcCodeTouch` | Doorbell, MotionSensor | Auto | It will map to a Doorbell by default. There is an advanced switch in the config to set it to MotionSensor.
+|`NfcCodeTouch` | MotionSensor | Auto | Triggers on every access (code, NFC tag or app, granted or denied). Can be disabled under Advanced. The keypad's bell button isn't part of this block: wire it to an Intercom block to get a HomeKit doorbell.
 |`PresenceDetector` | OccupancySensor | Auto
 |`Radio` | Switch (Group) | Auto | All Radio outputs are mapped to a Switch Group as a seperate switch.
 |`Smoke` | SmokeSensor | Manual | InfoOnlyDigital Item. Requires a mapping.

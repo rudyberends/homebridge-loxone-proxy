@@ -2,17 +2,19 @@ import type { Service } from 'homebridge';
 import type { NfcCodeTouchControl } from 'loxone-ts-client';
 import type { LoxonePlatform } from '../../LoxonePlatform';
 
-/** How an NFC Code Touch access event surfaces in HomeKit. */
-export type NfcMapping = 'DoorBell' | 'MotionSensor';
-
 const MOTION_RESET_MS = 5000;
 
 /**
- * Binds an NfcCodeTouch as a momentary trigger. It has no on/off state; its
- * `historyDate` (a ms timestamp) advances on every access. A change fires the
- * mapped HomeKit service — a doorbell press, or a motion detection that clears
- * itself after {@link MOTION_RESET_MS}. The first (replayed) historyDate is an
- * existing entry, not a new event, so it is recorded without firing.
+ * Binds an NfcCodeTouch as a MotionSensor that pulses on every access. The block
+ * has no on/off state; its `historyDate` (a ms timestamp) advances on every
+ * access-history entry, granted or denied (Structure File, NFC Code Touch). A
+ * change sets MotionDetected, which clears itself after {@link MOTION_RESET_MS}.
+ * The first (replayed) historyDate is an existing entry, not a new event, so it
+ * is recorded without firing.
+ *
+ * The keypad's bell button is not part of this block: it is wired in Config to
+ * an Intercom (whose `bell` already rings the HomeKit doorbell), so it is never
+ * mapped here.
  *
  * Returns a disposer that clears any pending motion reset and the subscription.
  */
@@ -20,24 +22,15 @@ export function bindNfcCodeTouch(
   platform: LoxonePlatform,
   service: Service,
   control: NfcCodeTouchControl,
-  mapping: NfcMapping,
 ): () => void {
   const C = platform.Characteristic;
   let initialized = false;
   let lastHistoryDate = 0;
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
-  if (mapping === 'DoorBell') {
-    service.getCharacteristic(C.ProgrammableSwitchEvent).onGet(() => C.ProgrammableSwitchEvent.SINGLE_PRESS);
-  } else {
-    service.getCharacteristic(C.MotionDetected).onGet(() => false);
-  }
+  service.getCharacteristic(C.MotionDetected).onGet(() => false);
 
   const trigger = (): void => {
-    if (mapping === 'DoorBell') {
-      service.updateCharacteristic(C.ProgrammableSwitchEvent, C.ProgrammableSwitchEvent.SINGLE_PRESS);
-      return;
-    }
     service.updateCharacteristic(C.MotionDetected, true);
     if (resetTimer) {
       clearTimeout(resetTimer);
@@ -59,7 +52,7 @@ export function bindNfcCodeTouch(
       return;
     }
     lastHistoryDate = ts;
-    platform.log.debug(`[${control.name}] NFC access event → ${mapping} trigger`);
+    platform.log.debug(`[${control.name}] NFC access event → motion`);
     trigger();
   };
 

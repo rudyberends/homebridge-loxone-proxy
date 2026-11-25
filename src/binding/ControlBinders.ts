@@ -205,11 +205,26 @@ const pushbuttonBinder: ControlBinder = (platform, handle) => {
   }];
 };
 
+// NfcCodeTouch → a MotionSensor pulsing on every access, or nothing ('Disabled').
+// The block only reports access events (granted or denied), never the keypad's
+// bell — that is wired to an Intercom — so the former 'DoorBell' mapping, which
+// rang on every unlock (#168), is gone; a legacy 'DoorBell' value falls back to
+// MotionSensor.
+let warnedLegacyNfcDoorbell = false;
 const nfcCodeTouchBinder: ControlBinder = (platform, handle) => {
   const nfc = handle as NfcCodeTouchControl;
-  const mapping = platform.config.Advanced?.NfcCodeTouchMapping === 'MotionSensor' ? 'MotionSensor' : 'DoorBell';
-  const kind = mapping === 'MotionSensor' ? platform.Service.MotionSensor : platform.Service.Doorbell;
-  return [{ kind, bindTo: (service) => bindNfcCodeTouch(platform, service, nfc, mapping) }];
+  const mapping = platform.config.Advanced?.NfcCodeTouchMapping;
+  if (mapping === 'Disabled') {
+    return [];
+  }
+  if (mapping === 'DoorBell' && !warnedLegacyNfcDoorbell) {
+    warnedLegacyNfcDoorbell = true;
+    platform.log.warn(
+      'NFC Code Touch mapping "DoorBell" is no longer supported (the block reports access events, not bell presses); ' +
+      'using MotionSensor. Wire the keypad bell to an Intercom block to get a HomeKit doorbell.',
+    );
+  }
+  return [{ kind: platform.Service.MotionSensor, bindTo: (service) => bindNfcCodeTouch(platform, service, nfc) }];
 };
 
 // Radio → one accessory with a Switch per output, plus an "All Off" (output 0).

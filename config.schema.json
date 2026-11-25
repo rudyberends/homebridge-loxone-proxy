@@ -57,10 +57,10 @@
           "NfcCodeTouchMapping": {
             "title": "NFC Code Touch mapping",
             "type": "string",
-            "default": "DoorBell",
-            "enum": [
-              "DoorBell",
-              "MotionSensor"
+            "default": "MotionSensor",
+            "oneOf": [
+              { "title": "Motion sensor (triggers on every access)", "enum": ["MotionSensor"] },
+              { "title": "Disabled", "enum": ["Disabled"] }
             ]
           },
           "MotionTriggersDoorbell": {
@@ -243,7 +243,7 @@
       "type": "fieldset",
       "expandable": true,
       "title": "NFC Code Touch",
-      "description": "How an NFC Code Touch appears in HomeKit — as a doorbell or a motion sensor.",
+      "description": "An NFC Code Touch appears in HomeKit as a motion sensor that triggers on every access (code, NFC tag or app, granted or denied). The keypad's bell button is not part of this block: wire it to an Intercom block in Loxone Config to get a HomeKit doorbell.",
       "items": [
         "Advanced.NfcCodeTouchMapping"
       ]

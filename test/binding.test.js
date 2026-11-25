@@ -24,7 +24,7 @@ const { radioOutputBindings } = require('../dist/binding/tables/radioBindings');
 const { smokeAlarmBindings } = require('../dist/binding/tables/smokeAlarmBindings');
 const { contactBindings } = require('../dist/binding/tables/contactBindings');
 const { moodBindings } = require('../dist/binding/tables/moodBindings');
-const { COMPOSITE_BINDERS } = require('../dist/binding/ControlBinders');
+const { COMPOSITE_BINDERS, CONTROL_BINDERS } = require('../dist/binding/ControlBinders');
 const { bindCharacteristics } = require('../dist/binding/BindingEngine');
 const { LoxoneCommandError } = require('loxone-ts-client');
 const {
@@ -456,7 +456,7 @@ function fakeNfcEnv() {
     getCharacteristic: () => char,
     updateCharacteristic: (c, value) => { updates.push([c, value]); return service; },
   };
-  const Characteristic = { ProgrammableSwitchEvent: { SINGLE_PRESS: 0 }, MotionDetected: 'MotionDetected' };
+  const Characteristic = { MotionDetected: 'MotionDetected' };
   const platform = { Characteristic, log: { debug() {} } };
   let listener = null;
   const control = {
@@ -466,23 +466,32 @@ function fakeNfcEnv() {
   return { service, platform, control, updates, fire: (ts) => { control.historyDate = ts; listener(); } };
 }
 
-test('nfcCodeTouch doorbell ignores the initial replay then rings on a new entry', () => {
+test('nfcCodeTouch pulses MotionDetected on a new entry, not on the replay or a repeat', () => {
   const env = fakeNfcEnv();
-  const dispose = bindNfcCodeTouch(env.platform, env.service, env.control, 'DoorBell');
-  assert.equal(env.updates.length, 0, 'replayed initial historyDate does not ring');
+  const dispose = bindNfcCodeTouch(env.platform, env.service, env.control);
+  assert.equal(env.updates.length, 0, 'replayed initial historyDate does not fire');
   env.fire(2000);
-  assert.deepEqual(env.updates, [[env.platform.Characteristic.ProgrammableSwitchEvent, 0]]);
-  env.fire(2000); // same timestamp → no duplicate ring
+  assert.deepEqual(env.updates, [['MotionDetected', true]]);
+  env.fire(2000); // same timestamp → no duplicate
   assert.equal(env.updates.length, 1);
-  dispose();
+  dispose(); // clears the pending 5s reset timer
 });
 
-test('nfcCodeTouch motion mapping fires MotionDetected on a new entry', () => {
-  const env = fakeNfcEnv();
-  const dispose = bindNfcCodeTouch(env.platform, env.service, env.control, 'MotionSensor');
-  env.fire(2000);
-  assert.deepEqual(env.updates[0], ['MotionDetected', true]);
-  dispose(); // clears the pending 5s reset timer
+test('nfcCodeTouch binder: MotionSensor by default and for legacy DoorBell, nothing when Disabled (#168)', () => {
+  const warnings = [];
+  const platform = {
+    Service: { MotionSensor: 'MotionSensor', Doorbell: 'Doorbell' },
+    config: { Advanced: {} },
+    log: { warn: (m) => warnings.push(m), debug() {} },
+  };
+  const nfc = CONTROL_BINDERS.NfcCodeTouch;
+  assert.deepEqual(nfc(platform, {}).map((b) => b.kind), ['MotionSensor']);
+  platform.config.Advanced.NfcCodeTouchMapping = 'DoorBell';
+  assert.deepEqual(nfc(platform, {}).map((b) => b.kind), ['MotionSensor']);
+  nfc(platform, {});
+  assert.equal(warnings.length, 1, 'legacy DoorBell warns once');
+  platform.config.Advanced.NfcCodeTouchMapping = 'Disabled';
+  assert.deepEqual(nfc(platform, {}), []);
 });
 
 // --- multi-service fan-outs (Radio / SmokeAlarm / WindowMonitor) -------------

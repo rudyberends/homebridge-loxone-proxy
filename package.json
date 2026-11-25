@@ -37,7 +37,7 @@
     "@homebridge/plugin-ui-utils": "^1.0.3",
     "@roamhq/wrtc": "^0.10.0",
     "ffmpeg-for-homebridge": "^2.1.7",
-    "loxone-ts-client": "^0.2.0",
+    "loxone-ts-client": "^0.4.0",
     "pick-port": "^2.1.0",
     "ws": "^8.19.0"
   },

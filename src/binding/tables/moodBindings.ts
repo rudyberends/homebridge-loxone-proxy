@@ -2,7 +2,7 @@ import type { LightControllerV2Control } from 'loxone-ts-client';
 import type { BindingTable } from '../CharacteristicBinding';
 
 /**
- * One LightControllerV2 mood as a Switch: on when the mood is active, and turning
+ * One LightControllerV2 mood as an on/off service (an Outlet): on when the mood is active, and turning
  * it on selects that mood (`changeTo/{id}`). Moods are mutually exclusive, so OFF
  * sends nothing — you switch moods by turning another on (or the All-Off mood).
  */

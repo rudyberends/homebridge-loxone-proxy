@@ -311,7 +311,9 @@ const lightControllerComposite: CompositeBinder = (platform, handle, client) => 
   const planned: PlannedAccessory[] = [];
 
   // Mood switches (gated by config): 'enabled' groups them on one Moods accessory,
-  // 'separate' gives every mood its own accessory.
+  // 'separate' gives every mood its own accessory. Exposed as Outlets, not Switches:
+  // Home groups outlets into a single tile of buttons in Control Center, where
+  // switches render as separate sliders (#165). Behaviour is identical (On only).
   const moodMode = platform.config.options?.MoodSwitches;
   // moodId 0 and 778 are the "all off" moods, not real scenes.
   const moods = (lc.moods ?? []).filter((mood) => mood.id !== 0 && mood.id !== 778);
@@ -323,7 +325,7 @@ const lightControllerComposite: CompositeBinder = (platform, handle, client) => 
         name: String(mood.name),
         room,
         services: [{
-          kind: platform.Service.Switch,
+          kind: platform.Service.Outlet,
           bindTo: (service) => bindCharacteristics(platform, service, lc, moodBindings(mood.id)),
         }],
       });
@@ -335,7 +337,7 @@ const lightControllerComposite: CompositeBinder = (platform, handle, client) => 
       name: 'Moods',
       room,
       services: moods.map((mood) => ({
-        kind: platform.Service.Switch,
+        kind: platform.Service.Outlet,
         subtype: `mood:${mood.id}`,
         name: String(mood.name),
         bindTo: (service) => bindCharacteristics(platform, service, lc, moodBindings(mood.id)),

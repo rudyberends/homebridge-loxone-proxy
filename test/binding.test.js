@@ -637,6 +637,7 @@ test('LightControllerV2 composite plans a Moods accessory + per-lamp accessories
   assert.ok(moods, 'a Moods accessory is planned');
   assert.equal(moods.services.length, 1, 'only the real mood (Off/AllOff filtered)');
   assert.equal(moods.services[0].subtype, 'mood:7');
+  assert.equal(moods.services[0].kind.UUID, 'Outlet', 'moods are Outlets so Home groups them as buttons');
 
   const lamp = planned.find((p) => p.uuidSource === 'sub-dim');
   assert.ok(lamp, 'the lamp sub-control becomes its own accessory');
@@ -651,6 +652,7 @@ test('LightControllerV2 composite plans a Moods accessory + per-lamp accessories
   assert.ok(dinner, 'the mood gets its own accessory');
   assert.equal(dinner.name, 'Dinner');
   assert.equal(dinner.services.length, 1);
+  assert.equal(dinner.services[0].kind.UUID, 'Outlet');
   assert.equal(separate.filter((p) => p.uuidSource.startsWith('lc1/mood/')).length, 1, 'Off/AllOff filtered');
 
   // 'disabled': no mood accessories at all, lamps still planned.

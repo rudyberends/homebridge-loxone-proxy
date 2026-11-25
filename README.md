@@ -53,7 +53,7 @@ The following list displays all supported itemtypes supported by this plugin.
 |`IRoomControllerV2` | Thermostat | Auto
 |`Jalousie` | Window Covering | Auto
 |`Leak` | LeakSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
-|`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to a Switch Group as a seperate switch. Individual lights are mapped to a Lightbulb.
+|`LightControllerV2` | MoodSwitch, Lightbulb | Auto | When enabled, all LightControllerV2 moods are mapped to Outlets (grouped in one Moods accessory, or one accessory per mood). Individual lights are mapped to a Lightbulb.
 |`Lock` | LockMechanism | Manual | Switch Item. Requires a mapping. By default, it expects the switch to be ON for the dooor to be locked. There is an option in the config to reverse this behavior.
 |`Motion` | MotionSensor | Manual | InfoOnlyDigital Item. Requires a mapping.
 |`NfcCodeTouch` | Doorbell, MotionSensor | Auto | It will map to a Doorbell by default. There is an advanced switch in the config to set it to MotionSensor.
@@ -115,7 +115,7 @@ HomeKit's biggest quirk with a single bridge is that **all** of that bridge's ac
 **Pairing workflow** — this is what makes the room assignment stick: in the Home app, first open the **target room**, then tap **Add Accessory → More options…**, pick the room's bridge and enter the code shown in the UI. HomeKit drops the freshly-paired accessories into the room you had open.
 
 ## Mood switches
-Set on the Options tab. **Grouped** (default) puts all moods of a LightControllerV2 as switches in one Moods accessory per light controller. **Separate** gives every mood its own Switch accessory, so each mood can be placed on its own (e.g. in Control Center). **Disabled** exposes no moods. In HomeKit this behaves like a radio group: only one mood can be active at a time, and mixing moods is not possible.
+Set on the Options tab. **Grouped** (default) puts all moods of a LightControllerV2 in one Moods accessory per light controller. Moods are exposed as Outlets rather than Switches, so Home shows them as a grouped tile of buttons in Control Center instead of separate sliders. **Separate** gives every mood its own accessory, so each mood can be placed on its own (e.g. in Control Center). **Disabled** exposes no moods. In HomeKit this behaves like a radio group: only one mood can be active at a time, and mixing moods is not possible.
 
 ## Manual mapping (aliases)
 Some items cannot be classified automatically and need a naming convention. For example, give all Brightness sensors the convention `MH0'XX'` in Loxone Config

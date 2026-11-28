@@ -1,6 +1,7 @@
-import { PlatformAccessory, APIEvent, Service } from 'homebridge';
-import { LoxonePlatform } from '../../LoxonePlatform';
+import { Service } from 'hap-nodejs';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 import { CameraService } from './Camera';
+import type { HomeKitAccessory } from '../../HomeKitHost';
 
 /**
  * CameraMotionSensor performs motion detection by analyzing
@@ -30,8 +31,8 @@ export class CameraMotionSensor {
   private state = { MotionDetected: false };
 
   constructor(
-    private readonly platform: LoxonePlatform,
-    private readonly accessory: PlatformAccessory,
+    private readonly platform: LoxoneHomeKit,
+    private readonly accessory: HomeKitAccessory,
     private readonly camera: CameraService,
     private readonly doorbellService?: { triggerDoorbell: () => void },
   ) {
@@ -40,7 +41,7 @@ export class CameraMotionSensor {
     this.setupService();
     this.startPolling();
 
-    platform.api.on(APIEvent.SHUTDOWN, () => {
+    platform.host.onShutdown(() => {
       this.shuttingDown = true;
       if (this.loopTimer) {
         clearTimeout(this.loopTimer);

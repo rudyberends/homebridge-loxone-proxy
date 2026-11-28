@@ -1,4 +1,4 @@
-import { PlatformConfig } from 'homebridge';
+import type { LoxoneHomeKitConfig } from './HomeKitHost';
 
 export type RoomFilterType = 'inclusion' | 'exclusion';
 
@@ -17,7 +17,7 @@ export interface LoxoneConnectionConfig {
   password?: unknown;
 }
 
-export function normalizeLoxoneConfig(config: PlatformConfig): NormalizedLoxoneConfig {
+export function normalizeLoxoneConfig(config: LoxoneHomeKitConfig): NormalizedLoxoneConfig {
   return {
     excludedTypes: parseList(config.Exclusions),
     roomFilter: {

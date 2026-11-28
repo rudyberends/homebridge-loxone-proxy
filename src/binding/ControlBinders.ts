@@ -1,4 +1,4 @@
-import type { PlatformAccessory, Service, WithUUID } from 'homebridge';
+import type { Service, WithUUID } from 'hap-nodejs';
 import type {
   AlarmControl,
   ColorPickerV2Control,
@@ -24,7 +24,7 @@ import type {
   WindowControl,
   WindowMonitorControl,
 } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../LoxonePlatform';
+import type { LoxoneHomeKit } from '../LoxoneHomeKit';
 import { bindCharacteristics } from './BindingEngine';
 import { bindColorPicker } from './binders/colorBinder';
 import { bindIntercom } from './binders/intercomBinder';
@@ -42,6 +42,7 @@ import { radioOutputBindings } from './tables/radioBindings';
 import { occupancyBindings } from './tables/sensorBindings';
 import { smokeAlarmBindings } from './tables/smokeAlarmBindings';
 import { thermostatBindings } from './tables/thermostatBindings';
+import type { HomeKitAccessory } from '../HomeKitHost';
 
 /** One HomeKit service to (build and) bind on a control's accessory. */
 export interface ServiceBinding {
@@ -59,7 +60,7 @@ export interface ServiceBinding {
  * Returns `[]` when the control resolves to nothing (e.g. an unclassified
  * InfoOnlyAnalog), so the coordinator exposes no accessory for it.
  */
-export type ControlBinder = (platform: LoxonePlatform, handle: ControlHandle) => ServiceBinding[];
+export type ControlBinder = (platform: LoxoneHomeKit, handle: ControlHandle) => ServiceBinding[];
 
 /** One HomeKit accessory a control expands into (a composite control yields several). */
 export interface PlannedAccessory {
@@ -76,7 +77,7 @@ export interface PlannedAccessory {
    * Imperative setup beyond the declarative services — e.g. the intercom
    * camera/HKSV controller. Runs after the services are built; returns a disposer.
    */
-  bindAccessory?: (accessory: PlatformAccessory) => () => void;
+  bindAccessory?: (accessory: HomeKitAccessory) => () => void;
   /**
    * Whether to remove services not in this plan (default true). Set false for
    * accessories that add services outside the plan (cameras), or the camera
@@ -91,7 +92,7 @@ export interface PlannedAccessory {
  * Gets the client so it can resolve sub-controls to typed handles.
  */
 export type CompositeBinder = (
-  platform: LoxonePlatform,
+  platform: LoxoneHomeKit,
   handle: ControlHandle,
   client: LoxoneClient,
 ) => PlannedAccessory[];
@@ -394,7 +395,7 @@ const intercomComposite: CompositeBinder = (platform, handle, client) => {
     name: control.name,
     room: control.roomName ?? 'Unassigned',
     services: [],
-    bindAccessory: (accessory: PlatformAccessory) => bindIntercom(platform, accessory, control, client, false),
+    bindAccessory: (accessory: HomeKitAccessory) => bindIntercom(platform, accessory, control, client, false),
     prune: false,
   }];
 };
@@ -407,7 +408,7 @@ const intercomV2Composite: CompositeBinder = (platform, handle, client) => {
     name: control.name,
     room: control.roomName ?? 'Unassigned',
     services: [],
-    bindAccessory: (accessory: PlatformAccessory) => bindIntercom(platform, accessory, control, client, true),
+    bindAccessory: (accessory: HomeKitAccessory) => bindIntercom(platform, accessory, control, client, true),
     prune: false,
   }];
 };
@@ -422,7 +423,7 @@ const irrigationComposite: CompositeBinder = (platform, handle) => {
     name: control.name,
     room: control.roomName ?? 'Unassigned',
     services: [],
-    bindAccessory: (accessory: PlatformAccessory) => bindIrrigation(platform, accessory, control),
+    bindAccessory: (accessory: HomeKitAccessory) => bindIrrigation(platform, accessory, control),
     prune: false,
   }];
 };

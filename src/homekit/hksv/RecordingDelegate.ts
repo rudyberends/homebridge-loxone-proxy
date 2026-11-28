@@ -1,22 +1,20 @@
 import {
-  APIEvent,
   CameraRecordingConfiguration,
   CameraRecordingDelegate,
   H264Level,
   H264Profile,
-  HAP,
   HDSProtocolSpecificErrorReason,
   RecordingPacket,
-} from 'homebridge';
-import type { Logger } from 'homebridge';
+} from 'hap-nodejs';
 import { spawn, ChildProcess } from 'child_process';
 import { Server, AddressInfo } from 'net';
 import { Readable } from 'stream';
 import { once } from 'events';
 import { Buffer } from 'buffer';
 import { env } from 'process';
-import { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 import { PreBuffer, Mp4Session } from './Prebuffer';
+import type { Hap, HostLogger } from '../../HomeKitHost';
 
 export interface MP4Atom {
   header: Buffer;
@@ -41,7 +39,7 @@ export const KNOWN_BENIGN_FFMPEG_ERROR =
   // eslint-disable-next-line max-len
   /moov atom not found|Cannot determine format of input stream|Broken pipe|Invalid data found when processing input|Error splitting the input into NAL units|Immediate exit requested|partial file|End of file/i;
 
-export async function listenServer(server: Server, log: Logger): Promise<number> {
+export async function listenServer(server: Server, log: HostLogger): Promise<number> {
   let isListening = false;
   while (!isListening) {
     const port = 10000 + Math.round(Math.random() * 30000);
@@ -121,8 +119,8 @@ export async function* parseFragmentedMP4(readable: Readable): AsyncGenerator<MP
 }
 
 export class RecordingDelegate implements CameraRecordingDelegate {
-  private readonly hap: HAP;
-  private readonly log: Logger;
+  private readonly hap: Hap;
+  private readonly log: HostLogger;
   private readonly videoProcessor: string;
   private readonly streamUrl: string;
   private readonly base64auth: string;
@@ -140,19 +138,19 @@ export class RecordingDelegate implements CameraRecordingDelegate {
   private shuttingDown = false;
 
   constructor(
-    private readonly platform: LoxonePlatform,
+    private readonly platform: LoxoneHomeKit,
     streamUrl: string,
     base64auth: string,
     cameraName: string,
   ) {
     this.log = platform.log;
-    this.hap = platform.api.hap;
+    this.hap = platform.hap;
     this.videoProcessor = 'ffmpeg';
     this.streamUrl = streamUrl;
     this.base64auth = base64auth;
     this.cameraName = cameraName;
 
-    platform.api.on(APIEvent.SHUTDOWN, () => {
+    platform.host.onShutdown(() => {
       this.shuttingDown = true;
       this.log.info(`[${this.cameraName}] Shutting down recording delegate`, this.streamUrl);
       // Abort all active streams

@@ -3,7 +3,7 @@ import { ChildProcess, spawn, StdioNull, StdioPipe } from 'child_process';
 import EventEmitter from 'events';
 import { createServer, Server } from 'net';
 import { KNOWN_BENIGN_FFMPEG_ERROR, listenServer, MP4Atom, parseFragmentedMP4 } from './RecordingDelegate';
-import type { Logger } from 'homebridge';
+import type { HostLogger } from '../../HomeKitHost';
 
 interface PrebufferFmp4 {
   atom: MP4Atom;
@@ -27,13 +27,13 @@ export class PreBuffer {
   prevIdr = 0;
   prebufferSession?: Mp4Session;
 
-  private readonly log: Logger;
+  private readonly log: HostLogger;
   private readonly ffmpegInput: string[];
   private readonly cameraName: string;
   private readonly ffmpegPath: string;
   private readonly encoderArgs?: string[];
 
-  constructor(ffmpegInput: string[], cameraName: string, videoProcessor: string, log: Logger, encoderArgs?: string[]) {
+  constructor(ffmpegInput: string[], cameraName: string, videoProcessor: string, log: HostLogger, encoderArgs?: string[]) {
     this.ffmpegInput = ffmpegInput;
     this.cameraName = cameraName;
     this.ffmpegPath = videoProcessor;

@@ -1,6 +1,6 @@
-import type { Service } from 'homebridge';
+import type { Service } from 'hap-nodejs';
 import type { ColorPickerV2Control } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 import { kelvinToMired, kelvinToRgb, miredToKelvin, rgbToHsv } from '../colorMath';
 import { toHapStatusError } from '../hapError';
 
@@ -16,7 +16,7 @@ import { toHapStatusError } from '../hapError';
  *
  * Returns a disposer that drops the `color` subscription.
  */
-export function bindColorPicker(platform: LoxonePlatform, service: Service, control: ColorPickerV2Control): () => void {
+export function bindColorPicker(platform: LoxoneHomeKit, service: Service, control: ColorPickerV2Control): () => void {
   const C = platform.Characteristic;
   const state = { On: false, Brightness: 0, Hue: 0, Saturation: 0, ColorTemperature: 153 };
   let mode: 'color' | 'colortemperature' = 'color';

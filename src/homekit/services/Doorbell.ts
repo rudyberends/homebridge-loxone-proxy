@@ -1,5 +1,6 @@
-import type { PlatformAccessory, Service } from 'homebridge';
-import type { LoxonePlatform } from '../../LoxonePlatform';
+import type { Service } from 'hap-nodejs';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
+import type { HomeKitAccessory } from '../../HomeKitHost';
 
 /**
  * A standalone HomeKit Doorbell service. `triggerDoorbell()` fires a single-press
@@ -11,8 +12,8 @@ export class Doorbell {
   private programmableSwitchEvent = 0;
 
   constructor(
-    private readonly platform: LoxonePlatform,
-    private readonly accessory: PlatformAccessory,
+    private readonly platform: LoxoneHomeKit,
+    private readonly accessory: HomeKitAccessory,
   ) {
     this.service =
       this.accessory.getService(this.platform.Service.Doorbell) ??

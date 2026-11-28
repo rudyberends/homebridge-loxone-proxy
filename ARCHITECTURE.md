@@ -6,7 +6,9 @@ This plugin has one product boundary: Loxone <-> HomeKit. The architecture is op
 
 | Layer | Module(s) | Owns | Must not own |
 | --- | --- | --- | --- |
-| Platform | `LoxonePlatform`, `index.ts` | Homebridge lifecycle, the accessory cache list, the name registry, exposing HAP `Service`/`Characteristic`. | Loxone protocol details or item semantics. |
+| Platform (host) | `LoxonePlatform`, `index.ts` | Homebridge lifecycle and the accessory cache: implements `HomeKitHost` on Homebridge's API. The only modules that import `homebridge`. | Loxone protocol details or item semantics. |
+| Host boundary | `HomeKitHost` | What the core needs from whoever runs it: HAP (at runtime), log, config, a storage path, the main bridge's accessory store, a shutdown hook. | Any Homebridge type. |
+| Core | `LoxoneHomeKit` | Owns the name registry and the binding coordinator; exposes HAP `Service`/`Characteristic` from the host's HAP to the binders. | Homebridge specifics (cache, plugin registration). |
 | Loxone transport | [`loxone-ts-client`](https://www.npmjs.com/package/loxone-ts-client) (external dependency) | All Miniserver communication: websocket, token auth, Structure File parsing, encrypted commands, state subscriptions, and the typed room/control model. | HomeKit concepts. |
 | Binding coordinator | `LoxoneBindingCoordinator` | Connection orchestration, per-room control discovery, accessory planning, reconciliation (create/update/restore/remove), routing accessories to the main or a per-room bridge, room/type filtering, central-room handling. | HAP characteristic specifics — it delegates those. |
 | Control routing | `ControlBinders` (`CONTROL_BINDERS`, `COMPOSITE_BINDERS`) | Mapping each Loxone control `type` to a `PlannedAccessory` (which HomeKit service(s) and which bindings). | Talking to the Miniserver. |
@@ -24,6 +26,7 @@ This plugin has one product boundary: Loxone <-> HomeKit. The architecture is op
 - The plugin has no hand-rolled command bus or state router; the library's typed handles own subscription and dispatch. Do not re-implement that layer.
 - Binders and tables must not reach into the raw `loxone-ts-client` client/transport directly — go through the control handle.
 - HomeKit service code must not talk to the transport directly.
+- Only the host (`LoxonePlatform`) imports `homebridge`; the core imports hap-nodejs for types only and gets HAP at runtime from `HomeKitHost.hap`.
 
 ## Transport Boundary
 

@@ -1,4 +1,4 @@
-import type { CharacteristicValue } from 'homebridge';
+import type { CharacteristicValue } from 'hap-nodejs';
 import type { ControlHandle } from 'loxone-ts-client';
 
 /**

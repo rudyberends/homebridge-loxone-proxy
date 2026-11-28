@@ -1,6 +1,6 @@
-import type { Service } from 'homebridge';
+import type { Service } from 'hap-nodejs';
 import type { NfcCodeTouchControl } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 
 const MOTION_RESET_MS = 5000;
 
@@ -19,7 +19,7 @@ const MOTION_RESET_MS = 5000;
  * Returns a disposer that clears any pending motion reset and the subscription.
  */
 export function bindNfcCodeTouch(
-  platform: LoxonePlatform,
+  platform: LoxoneHomeKit,
   service: Service,
   control: NfcCodeTouchControl,
 ): () => void {

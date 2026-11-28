@@ -1,7 +1,8 @@
-import type { PlatformAccessory, Service } from 'homebridge';
+import type { Service } from 'hap-nodejs';
 import type { IrrigationControl } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 import { sanitizeName } from '../../AccessoryNameRegistry';
+import type { HomeKitAccessory } from '../../HomeKitHost';
 
 // HAP's Set/RemainingDuration default to a 1-hour max; Loxone zones can run longer
 // (e.g. 5400s). Raise the ceiling to 24h so real durations aren't rejected/clamped.
@@ -23,7 +24,7 @@ interface ZoneValve {
  * Stateful (per-zone start times + a countdown interval); returns a disposer that
  * clears the interval and the `currentZone` subscription.
  */
-export function bindIrrigation(platform: LoxonePlatform, accessory: PlatformAccessory, control: IrrigationControl): () => void {
+export function bindIrrigation(platform: LoxoneHomeKit, accessory: HomeKitAccessory, control: IrrigationControl): () => void {
   const C = platform.Characteristic;
   const disposers: Array<() => void> = [];
 

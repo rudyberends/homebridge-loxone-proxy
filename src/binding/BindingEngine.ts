@@ -1,6 +1,6 @@
-import type { Characteristic, Service, WithUUID } from 'homebridge';
+import type { Characteristic, Service, WithUUID } from 'hap-nodejs';
 import type { ControlHandle } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../LoxonePlatform';
+import type { LoxoneHomeKit } from '../LoxoneHomeKit';
 import type { BindingTable } from './CharacteristicBinding';
 import { toHapStatusError } from './hapError';
 
@@ -18,7 +18,7 @@ type CharacteristicConstructor = WithUUID<new () => Characteristic>;
  * re-binding the same service on a rebuild so listeners don't accumulate.
  */
 export function bindCharacteristics<H extends ControlHandle>(
-  platform: LoxonePlatform,
+  platform: LoxoneHomeKit,
   service: Service,
   handle: H,
   bindings: BindingTable<H>,

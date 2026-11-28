@@ -1,8 +1,8 @@
-import { PlatformAccessory } from 'homebridge';
-import { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 import { streamingDelegate } from '../hksv/StreamingDelegate';
 import { get as httpGet } from 'http';
 import { get as httpsGet } from 'https';
+import type { HomeKitAccessory } from '../../HomeKitHost';
 
 export type TwoWayAudioTemplateVars = Record<string, string>;
 export type TwoWayAudioContext = {
@@ -15,8 +15,8 @@ export type TwoWayAudioContext = {
  * HomeKit-compatible MJPEG streaming and snapshot functionality.
  */
 export class CameraService {
-  private readonly platform: LoxonePlatform;
-  private readonly accessory: PlatformAccessory;
+  private readonly platform: LoxoneHomeKit;
+  private readonly accessory: HomeKitAccessory;
   private readonly base64auth: string;
   private readonly streamUrl: string;
   private readonly snapshotUrl?: string;
@@ -26,8 +26,8 @@ export class CameraService {
   private streamingDelegate!: streamingDelegate;
 
   constructor(
-    platform: LoxonePlatform,
-    accessory: PlatformAccessory,
+    platform: LoxoneHomeKit,
+    accessory: HomeKitAccessory,
     streamUrl: string,
     snapshotUrl: string | undefined,
     base64auth: string,

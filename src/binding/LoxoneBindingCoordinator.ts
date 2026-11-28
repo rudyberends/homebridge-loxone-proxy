@@ -1,11 +1,12 @@
-import type { PlatformAccessory, Service } from 'homebridge';
+import type { Service } from 'hap-nodejs';
 import {
   LoxoneClient,
   type ControlHandle,
   type Logger as LoxoneLogger,
   type LoxoneClientOptions,
 } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../LoxonePlatform';
+import type { HomeKitAccessory } from '../HomeKitHost';
+import type { LoxoneHomeKit } from '../LoxoneHomeKit';
 import { sanitizeName } from '../AccessoryNameRegistry';
 import {
   normalizeLoxoneConfig,
@@ -16,16 +17,14 @@ import {
 import { COMPOSITE_BINDERS, CONTROL_BINDERS, type PlannedAccessory, type ServiceBinding } from './ControlBinders';
 import { RoomBridgePublisher } from './RoomBridgePublisher';
 
-const PLUGIN_NAME = 'homebridge-loxone-proxy';
-const PLATFORM_NAME = 'LoxonePlatform';
 const MAX_CONNECT_ATTEMPTS = 6;
 
 /**
- * The plugin's engine: owns the loxone-ts-client connection, discovers every
+ * The core's engine: owns the loxone-ts-client connection, discovers every
  * control, and binds it to HomeKit through the {@link ./ControlBinders} registry
- * and the {@link ./BindingEngine}. It reuses the platform's reconciler and name
- * registry, and honours the room-filter / Exclusions config; a typed control
- * handle drives the characteristics directly.
+ * and the {@link ./BindingEngine}. It keeps the host's main-bridge accessories in
+ * step, uses the core's name registry, and honours the room-filter / Exclusions
+ * config; a typed control handle drives the characteristics directly.
  */
 export class LoxoneBindingCoordinator {
   private client: LoxoneClient | undefined;
@@ -38,7 +37,7 @@ export class LoxoneBindingCoordinator {
   /** Publishes per-room HAP bridges for rooms configured with `bridge: true`; other rooms use the main bridge. */
   private readonly publisher = new RoomBridgePublisher(this.platform);
 
-  constructor(private readonly platform: LoxonePlatform) {}
+  constructor(private readonly platform: LoxoneHomeKit) {}
 
   /** The current Miniserver communication token (for authenticated side channels, e.g. intercom talkback). */
   get token(): string | undefined {
@@ -82,7 +81,7 @@ export class LoxoneBindingCoordinator {
     this.rebuild(false);
   }
 
-  /** Releases the connection and all engine subscriptions (Homebridge shutdown). */
+  /** Releases the connection and all engine subscriptions (host shutdown). */
   async stop(): Promise<void> {
     this.disposers.forEach((dispose) => dispose());
     this.disposers.clear();
@@ -98,7 +97,7 @@ export class LoxoneBindingCoordinator {
       useTls: Boolean(config.TLS),
       logger: this.loxoneLogger(),
     };
-    return new LoxoneClient(this.buildHost(), config.username, config.password, options);
+    return new LoxoneClient(this.buildHost(), config.username ?? '', config.password ?? '', options); // both checked in start()
   }
 
   private async connectWithRetry(client: LoxoneClient): Promise<boolean> {
@@ -139,7 +138,7 @@ export class LoxoneBindingCoordinator {
         // Isolate each control: one binder throwing must not abort the whole rebuild.
         try {
           for (const planned of this.plan(handle, client)) {
-            const accessoryUuid = this.platform.api.hap.uuid.generate(planned.uuidSource);
+            const accessoryUuid = this.platform.hap.uuid.generate(planned.uuidSource);
             seen.add(accessoryUuid);
 
             const accessory = this.reconcile(accessoryUuid, planned);
@@ -214,7 +213,7 @@ export class LoxoneBindingCoordinator {
       : {};
   }
 
-  /** Whether a room should get its own HAP bridge (vs. the main Homebridge bridge). */
+  /** Whether a room should get its own HAP bridge (vs. the host's main bridge). */
   private usesBridge(room: string): boolean {
     // Loxone "central" rooms hold whole-house functions, not a real room — always main bridge.
     return this.roomSettings()[room]?.bridge === true && !this.isCentralRoom(room);
@@ -226,7 +225,7 @@ export class LoxoneBindingCoordinator {
   }
 
   /** Finds the cached accessory (or creates + registers it) and refreshes its AccessoryInformation. */
-  private reconcile(accessoryUuid: string, planned: PlannedAccessory): PlatformAccessory {
+  private reconcile(accessoryUuid: string, planned: PlannedAccessory): HomeKitAccessory {
     const useBridge = this.usesBridge(planned.room);
     // On its own room bridge the HomeKit room provides context, so drop the room prefix.
     const displayName = this.platform.generateUniqueName(planned.room, planned.name, accessoryUuid, false, !useBridge);
@@ -245,11 +244,11 @@ export class LoxoneBindingCoordinator {
 
   /**
    * Finds (or creates) the accessory for `id`, on the right bridge. Room-bridge
-   * accessories are tracked by the publisher and NOT in `platform.accessories`;
-   * main-bridge accessories are registered on Homebridge's bridge as usual. When a
+   * accessories are tracked by the publisher and NOT in the host's accessory store;
+   * main-bridge accessories are registered on the host's main bridge as usual. When a
    * room flips to its own bridge, the stale main-bridge accessory is dropped first.
    */
-  private upsertAccessory(id: string, displayName: string, useBridge: boolean): { accessory: PlatformAccessory; isNew: boolean } {
+  private upsertAccessory(id: string, displayName: string, useBridge: boolean): { accessory: HomeKitAccessory; isNew: boolean } {
     if (useBridge) {
       const tracked = this.publisher.get(id);
       if (tracked) {
@@ -257,28 +256,26 @@ export class LoxoneBindingCoordinator {
         return { accessory: tracked, isNew: false };
       }
       // Room just got its own bridge — drop the stale copy from the main bridge.
-      const staleIndex = this.platform.accessories.findIndex((acc) => acc.UUID === id);
-      if (staleIndex !== -1) {
-        this.platform.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [this.platform.accessories[staleIndex]]);
-        this.platform.accessories.splice(staleIndex, 1);
+      const stale = this.store.all().find((acc) => acc.UUID === id);
+      if (stale) {
+        this.store.unregister(stale);
       }
-      return { accessory: new this.platform.api.platformAccessory(displayName, id), isNew: true };
+      return { accessory: this.store.create(displayName, id), isNew: true };
     }
 
-    const existing = this.platform.accessories.find((acc) => acc.UUID === id);
+    const existing = this.store.all().find((acc) => acc.UUID === id);
     if (existing) {
       // Converge cached accessories on the freshly sanitized name (older entries
       // may hold names with characters HAP rejects).
       existing.displayName = displayName;
       return { accessory: existing, isNew: false };
     }
-    const accessory = new this.platform.api.platformAccessory(displayName, id);
-    this.platform.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-    this.platform.accessories.push(accessory);
+    const accessory = this.store.create(displayName, id);
+    this.store.register(accessory);
     return { accessory, isNew: true };
   }
 
-  private updateAccessoryInformation(accessory: PlatformAccessory, room: string, serialNumber: string, displayName: string): void {
+  private updateAccessoryInformation(accessory: HomeKitAccessory, room: string, serialNumber: string, displayName: string): void {
     const info = accessory.getService(this.platform.Service.AccessoryInformation);
     if (!info) {
       return;
@@ -291,7 +288,7 @@ export class LoxoneBindingCoordinator {
   }
 
   /** Builds the planned service(s) on the accessory, binds each, prunes the rest. */
-  private applyBindings(accessory: PlatformAccessory, planned: PlannedAccessory): () => void {
+  private applyBindings(accessory: HomeKitAccessory, planned: PlannedAccessory): () => void {
     const bindings = planned.services;
     const disposers: Array<() => void> = [];
     const kept = new Set<Service>();
@@ -322,7 +319,7 @@ export class LoxoneBindingCoordinator {
   }
 
   /** Resolves (creating if needed) the HomeKit service for a binding, by subtype when present. */
-  private resolveService(accessory: PlatformAccessory, binding: ServiceBinding): Service {
+  private resolveService(accessory: HomeKitAccessory, binding: ServiceBinding): Service {
     if (binding.subtype !== undefined) {
       // Providing the (displayName, subtype) ctor args satisfies the typed overload;
       // at runtime hap `new`s the concrete service subclass with those args.
@@ -350,18 +347,14 @@ export class LoxoneBindingCoordinator {
   /** Removes every accessory not produced in this rebuild — from both the main bridge and the room bridges. */
   private prune(seen: Set<string>): void {
     // Main-bridge accessories no longer present (incl. stale ones from older versions).
-    for (const accessory of [...this.platform.accessories]) {
+    for (const accessory of [...this.store.all()]) {
       if (seen.has(accessory.UUID)) {
         continue;
       }
       this.disposers.get(accessory.UUID)?.();
       this.disposers.delete(accessory.UUID);
-      const index = this.platform.accessories.findIndex((acc) => acc.UUID === accessory.UUID);
-      if (index !== -1) {
-        this.platform.accessories.splice(index, 1);
-      }
       this.platform.log.info(`[BindingEngine] Removing accessory no longer present: ${accessory.displayName}`);
-      this.platform.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      this.store.unregister(accessory);
     }
     // Room-bridge accessories no longer present.
     for (const accessory of this.publisher.prune(seen)) {
@@ -372,7 +365,7 @@ export class LoxoneBindingCoordinator {
   }
 
   /** Keeps the bound service(s) on an accessory; removes the rest (incl. a stale ServiceLabel from older builds). */
-  private pruneOtherServices(accessory: PlatformAccessory, kept: Set<Service>): void {
+  private pruneOtherServices(accessory: HomeKitAccessory, kept: Set<Service>): void {
     const accessoryInfo = this.platform.Service.AccessoryInformation.UUID;
     for (const service of [...accessory.services]) {
       if (kept.has(service) || service.UUID === accessoryInfo) {
@@ -380,6 +373,11 @@ export class LoxoneBindingCoordinator {
       }
       accessory.removeService(service);
     }
+  }
+
+  /** The host's main-bridge accessories. */
+  private get store() {
+    return this.platform.host.accessories;
   }
 
   private buildHost(): string {
@@ -390,7 +388,7 @@ export class LoxoneBindingCoordinator {
     return `${host}:${port}`;
   }
 
-  /** Bridges loxone-ts-client's Logger onto Homebridge's logger (lib info → debug to keep the log quiet). */
+  /** Bridges loxone-ts-client's Logger onto the host's logger (lib info → debug to keep the log quiet). */
   private loxoneLogger(): LoxoneLogger {
     const log = this.platform.log;
     return {

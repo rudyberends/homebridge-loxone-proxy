@@ -1,8 +1,9 @@
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
-import { Logger, StreamRequestCallback, StreamSessionIdentifier } from 'homebridge';
+import { StreamRequestCallback, StreamSessionIdentifier } from 'hap-nodejs';
 import os from 'os';
 import readline from 'readline';
 import { Writable } from 'stream';
+import type { HostLogger } from '../../HomeKitHost';
 
 /**
  * A delegate interface for handling streaming operations.
@@ -53,7 +54,7 @@ export class FfmpegStreamingProcess {
     sessionId: string,
     videoProcessor: string,
     ffmpegArgs: string[],
-    log: Logger,
+    log: HostLogger,
     debug = false,
     delegate: StreamingDelegate,
     callback?: StreamRequestCallback,

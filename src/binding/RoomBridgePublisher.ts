@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { PlatformAccessory } from 'homebridge';
 import type { Accessory, Bridge } from 'hap-nodejs';
-import type { LoxonePlatform } from '../LoxonePlatform';
+import type { HomeKitAccessory } from '../HomeKitHost';
+import type { LoxoneHomeKit } from '../LoxoneHomeKit';
 import { sanitizeName } from '../AccessoryNameRegistry';
 
 /** Manifest of published room bridges, read by the custom config UI to show pairing codes. */
@@ -25,30 +25,30 @@ const FORBIDDEN_PINS = new Set([
 
 /**
  * Optional "one bridge per room" publish strategy. Instead of registering every
- * accessory on Homebridge's single bridge (so HomeKit drops them all into one
+ * accessory on the host's single bridge (so HomeKit drops them all into one
  * room), this publishes a separate HAP {@link Bridge} per Loxone room — from the
- * same plugin process and the same Miniserver connection. Each room bridge is
+ * same process and the same Miniserver connection. Each room bridge is
  * paired once in the Home app, and all its accessories land in the room you pick.
  *
  * Identity is derived deterministically from the room name (stable MAC-like
  * username + pincode), so pairings survive restarts; HAP persists them by
- * username in Homebridge's storage. Ports are left to HAP (a free port, re-
+ * username in the host's storage. Ports are left to HAP (a free port, re-
  * advertised via mDNS), so they need not be stable.
  */
 export class RoomBridgePublisher {
   private readonly bridges = new Map<string, RoomBridge>();
   private readonly accessoryRoom = new Map<string, string>(); // accessory UUID -> room key
-  private readonly tracked = new Map<string, PlatformAccessory>(); // accessory UUID -> accessory (room-bridge only)
+  private readonly tracked = new Map<string, HomeKitAccessory>(); // accessory UUID -> accessory (room-bridge only)
 
-  constructor(private readonly platform: LoxonePlatform) {}
+  constructor(private readonly platform: LoxoneHomeKit) {}
 
   /** The room-bridge accessory for `uuid`, if this publisher owns it (so reconcile can reuse it). */
-  get(uuid: string): PlatformAccessory | undefined {
+  get(uuid: string): HomeKitAccessory | undefined {
     return this.tracked.get(uuid);
   }
 
   /** Attaches an accessory to its room bridge (moving it if its room changed). Idempotent. */
-  register(accessory: PlatformAccessory, room: string): void {
+  register(accessory: HomeKitAccessory, room: string): void {
     const key = (room || 'Unassigned').trim() || 'Unassigned';
     this.tracked.set(accessory.UUID, accessory);
     const previous = this.accessoryRoom.get(accessory.UUID);
@@ -65,8 +65,8 @@ export class RoomBridgePublisher {
   }
 
   /** Detaches every tracked accessory not in `seen` (prune); returns the removed accessories. */
-  prune(seen: Set<string>): PlatformAccessory[] {
-    const removed: PlatformAccessory[] = [];
+  prune(seen: Set<string>): HomeKitAccessory[] {
+    const removed: HomeKitAccessory[] = [];
     for (const [uuid, accessory] of [...this.tracked]) {
       if (seen.has(uuid)) {
         continue;
@@ -78,7 +78,7 @@ export class RoomBridgePublisher {
   }
 
   /** Detaches an accessory (prune); unpublishes its bridge if it becomes empty. */
-  unregister(accessory: PlatformAccessory): void {
+  unregister(accessory: HomeKitAccessory): void {
     const key = this.accessoryRoom.get(accessory.UUID);
     if (key) {
       this.detach(accessory.UUID, key);
@@ -96,7 +96,7 @@ export class RoomBridgePublisher {
       entry.bridge.publish({
         username: macForRoom(room),
         pincode,
-        category: this.platform.api.hap.Categories.BRIDGE,
+        category: this.platform.hap.Categories.BRIDGE,
       });
       entry.published = true;
       entry.pincode = pincode;
@@ -121,14 +121,14 @@ export class RoomBridgePublisher {
       const bridges = [...this.bridges.entries()]
         .filter(([, entry]) => entry.published && entry.pincode)
         .map(([room, entry]) => ({ room, pincode: entry.pincode, setupURI: entry.setupURI }));
-      const path = join(this.platform.api.user.storagePath(), ROOM_BRIDGE_MANIFEST);
+      const path = join(this.platform.host.storagePath, ROOM_BRIDGE_MANIFEST);
       writeFileSync(path, JSON.stringify({ bridges }, null, 2));
     } catch (error) {
       this.platform.log.debug(`[Room Bridge] Could not write pairing manifest: ${(error as Error).message}`);
     }
   }
 
-  /** Unpublishes all room bridges (Homebridge shutdown). */
+  /** Unpublishes all room bridges (host shutdown). */
   async dispose(): Promise<void> {
     for (const entry of this.bridges.values()) {
       if (entry.published) {
@@ -142,11 +142,11 @@ export class RoomBridgePublisher {
   private ensureBridge(key: string): RoomBridge {
     let entry = this.bridges.get(key);
     if (!entry) {
-      const uuid = this.platform.api.hap.uuid.generate(`loxone:room-bridge:${key}`);
+      const uuid = this.platform.hap.uuid.generate(`loxone:room-bridge:${key}`);
       // Name the bridge after the room itself ("Woonkamer"), not "Loxone Woonkamer" —
       // it's paired into that room, so the prefix just doubled up. Provenance lives in Manufacturer.
       const name = sanitizeName(key) || 'Loxone Room';
-      const bridge = new this.platform.api.hap.Bridge(name, uuid);
+      const bridge = new this.platform.hap.Bridge(name, uuid);
       bridge.getService(this.platform.Service.AccessoryInformation)
         ?.setCharacteristic(this.platform.Characteristic.Manufacturer, 'Loxone')
         .setCharacteristic(this.platform.Characteristic.Model, 'Room Bridge')
@@ -176,9 +176,8 @@ export class RoomBridgePublisher {
     }
   }
 
-  private hapAccessory(accessory: PlatformAccessory): Accessory {
-    // Homebridge wraps a hap-nodejs Accessory; that's what a Bridge bridges.
-    return (accessory as unknown as { _associatedHAPAccessory: Accessory })._associatedHAPAccessory;
+  private hapAccessory(accessory: HomeKitAccessory): Accessory {
+    return this.platform.host.accessories.hapAccessory(accessory);
   }
 }
 

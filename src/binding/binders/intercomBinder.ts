@@ -1,13 +1,13 @@
-import type { PlatformAccessory } from 'homebridge';
 import type { ControlHandle, IntercomControl, IntercomSecuredDetails, IntercomV2Control, LoxoneClient } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 import { sanitizeName } from '../../AccessoryNameRegistry';
 import { CameraService, type TwoWayAudioContext, type TwoWayAudioTemplateVars } from '../../homekit/services/Camera';
 import { CameraMotionSensor } from '../../homekit/services/CameraMotionSensor';
 import { Doorbell } from '../../homekit/services/Doorbell';
+import type { HomeKitAccessory } from '../../HomeKitHost';
 
 /** Accessories whose camera controller has already been configured (configure once, not per rebuild). */
-const camerasConfigured = new WeakSet<PlatformAccessory>();
+const camerasConfigured = new WeakSet<HomeKitAccessory>();
 
 interface IntercomLike extends ControlHandle {
   bell?: boolean;
@@ -25,8 +25,8 @@ interface IntercomLike extends ControlHandle {
  * intercom in a running Homebridge.
  */
 export function bindIntercom(
-  platform: LoxonePlatform,
-  accessory: PlatformAccessory,
+  platform: LoxoneHomeKit,
+  accessory: HomeKitAccessory,
   control: IntercomControl | IntercomV2Control,
   client: LoxoneClient,
   isV2: boolean,
@@ -72,7 +72,7 @@ export function bindIntercom(
   return () => disposers.forEach((dispose) => dispose());
 }
 
-function bindDoorReleaseSwitch(platform: LoxonePlatform, accessory: PlatformAccessory, sub: ControlHandle): () => void {
+function bindDoorReleaseSwitch(platform: LoxoneHomeKit, accessory: HomeKitAccessory, sub: ControlHandle): () => void {
   const C = platform.Characteristic;
   const subtype = `intercom-sub:${sub.uuid}`;
   const name = sanitizeName(sub.name) || 'Output';
@@ -96,8 +96,8 @@ function bindDoorReleaseSwitch(platform: LoxonePlatform, accessory: PlatformAcce
 }
 
 async function configureV1Camera(
-  platform: LoxonePlatform,
-  accessory: PlatformAccessory,
+  platform: LoxoneHomeKit,
+  accessory: HomeKitAccessory,
   handle: IntercomLike,
   doorbellTrigger: { triggerDoorbell: () => void },
 ): Promise<void> {
@@ -144,8 +144,8 @@ async function configureV1Camera(
 }
 
 function configureV2Camera(
-  platform: LoxonePlatform,
-  accessory: PlatformAccessory,
+  platform: LoxoneHomeKit,
+  accessory: HomeKitAccessory,
   control: IntercomV2Control,
   client: LoxoneClient,
   doorbellTrigger: { triggerDoorbell: () => void },
@@ -176,8 +176,8 @@ function configureV2Camera(
 }
 
 function initializeCamera(
-  platform: LoxonePlatform,
-  accessory: PlatformAccessory,
+  platform: LoxoneHomeKit,
+  accessory: HomeKitAccessory,
   streamUrl: string,
   snapshotUrl: string | undefined,
   auth: string,
@@ -203,8 +203,8 @@ function initializeCamera(
 
 /** Best-effort native motion sensor for an IntercomV2 (a nearby motion control sharing the device UUID prefix). */
 function bindNativeMotion(
-  platform: LoxonePlatform,
-  accessory: PlatformAccessory,
+  platform: LoxoneHomeKit,
+  accessory: HomeKitAccessory,
   control: IntercomV2Control,
   client: LoxoneClient,
 ): boolean {

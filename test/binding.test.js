@@ -331,7 +331,7 @@ function fakeColorEnv() {
   });
   const service = { getCharacteristic: (key) => (chars[key] ??= makeChar()) };
   const Characteristic = { On: 'On', Brightness: 'Brightness', Hue: 'Hue', Saturation: 'Saturation', ColorTemperature: 'ColorTemperature' };
-  const platform = { Characteristic, api: { hap: { HapStatusError: class extends Error {}, HAPStatus: {} } } };
+  const platform = { Characteristic, hap: { HapStatusError: class extends Error {}, HAPStatus: {} } };
   const sent = [];
   const control = {
     color: undefined,
@@ -554,7 +554,7 @@ function fakeEngineEnv() {
     HapStatusError: class extends Error { constructor(status) { super('hap'); this.hapStatus = status; } },
     HAPStatus: { SERVICE_COMMUNICATION_FAILURE: -70402, INSUFFICIENT_PRIVILEGES: -70401 },
   };
-  const platform = { Characteristic: { On: 'On' }, api: { hap }, log: { warn() {}, debug() {} } };
+  const platform = { Characteristic: { On: 'On' }, hap, log: { warn() {}, debug() {} } };
   let stateListener = null;
   let unsubscribed = 0;
   const handle = {

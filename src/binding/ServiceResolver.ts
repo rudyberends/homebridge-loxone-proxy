@@ -1,6 +1,6 @@
-import { Service, type WithUUID } from 'homebridge';
+import { Service, type WithUUID } from 'hap-nodejs';
 import type { ControlHandle, InfoOnlyAnalogControl, InfoOnlyDigitalControl, SwitchControl } from 'loxone-ts-client';
-import type { LoxonePlatform } from '../LoxonePlatform';
+import type { LoxoneHomeKit } from '../LoxoneHomeKit';
 import type { BindingTable } from './CharacteristicBinding';
 import {
   humidityBindings,
@@ -33,7 +33,7 @@ type SwitchKind = 'lock' | 'outlet' | 'lightbulb' | 'switch';
  * service class. A Switch becomes a Lightbulb (category `lights`), a
  * LockMechanism, an Outlet, or a plain Switch.
  */
-export function resolveSwitchService(platform: LoxonePlatform, sw: SwitchControl): ResolvedService<SwitchControl> {
+export function resolveSwitchService(platform: LoxoneHomeKit, sw: SwitchControl): ResolvedService<SwitchControl> {
   const alias = (platform.config.switchAlias ?? {}) as SwitchAliasConfig;
 
   switch (classifySwitch(sw, alias)) {
@@ -57,7 +57,7 @@ export function resolveSwitchService(platform: LoxonePlatform, sw: SwitchControl
  * sensor (not exposed — matches the legacy "unsupported" skip).
  */
 export function resolveAnalogSensor(
-  platform: LoxonePlatform,
+  platform: LoxoneHomeKit,
   sensor: InfoOnlyAnalogControl,
 ): ResolvedService<InfoOnlyAnalogControl> | undefined {
   switch (sensor.control.sensorKind) {
@@ -96,7 +96,7 @@ export function resolveAnalogSensor(
  * when no alias matches (not exposed — matches the legacy behaviour).
  */
 export function resolveDigitalSensor(
-  platform: LoxonePlatform,
+  platform: LoxoneHomeKit,
   sensor: InfoOnlyDigitalControl,
 ): ResolvedService<InfoOnlyDigitalControl> | undefined {
   const aliases = (platform.config.InfoOnlyDigitalAlias ?? {}) as Record<string, string>;

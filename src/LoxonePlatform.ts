@@ -1,47 +1,35 @@
-import {
-  API,
-  APIEvent,
-  Characteristic,
-  DynamicPlatformPlugin,
-  Logger,
-  PlatformAccessory,
-  PlatformConfig,
-  Service,
-} from 'homebridge';
+import { API, APIEvent, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig } from 'homebridge';
+import type { Accessory } from 'hap-nodejs';
 
-import { AccessoryNameRegistry } from './AccessoryNameRegistry';
-import { LoxoneBindingCoordinator } from './binding/LoxoneBindingCoordinator';
+import type { AccessoryStore, HomeKitAccessory, HomeKitHost } from './HomeKitHost';
+import { LoxoneHomeKit } from './LoxoneHomeKit';
+
+const PLUGIN_NAME = 'homebridge-loxone-proxy';
+const PLATFORM_NAME = 'LoxonePlatform';
 
 /**
- * LoxonePlatform — the Homebridge dynamic platform. It connects to the Miniserver
- * via loxone-ts-client (the {@link LoxoneBindingCoordinator}) and exposes every
- * control to HomeKit through the binding engine. The reconciler and name registry
- * are the only remaining HomeKit-side glue.
+ * LoxonePlatform — the Homebridge dynamic platform. A thin host around the
+ * {@link LoxoneHomeKit} core: it hands the core Homebridge's HAP, log, config and
+ * storage, and keeps the main bridge's accessories in Homebridge's cache.
  */
 export class LoxonePlatform implements DynamicPlatformPlugin {
-  public readonly Service: typeof Service = this.api.hap.Service;
-  public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
-
   public readonly accessories: PlatformAccessory[] = [];
-
-  private readonly nameRegistry: AccessoryNameRegistry;
-  private readonly bindingCoordinator: LoxoneBindingCoordinator;
+  private readonly homekit: LoxoneHomeKit;
 
   constructor(
     public readonly log: Logger,
     public readonly config: PlatformConfig,
     public readonly api: API,
   ) {
-    this.nameRegistry = new AccessoryNameRegistry();
-    this.bindingCoordinator = new LoxoneBindingCoordinator(this);
+    this.homekit = new LoxoneHomeKit(this.host());
 
     this.api.on('didFinishLaunching', () => {
-      void this.bindingCoordinator.start();
+      void this.homekit.start();
     });
 
     // Release the Miniserver connection (websocket, keep-alive timers) on shutdown.
     this.api.on(APIEvent.SHUTDOWN, () => {
-      void this.bindingCoordinator.stop();
+      void this.homekit.stop();
     });
   }
 
@@ -51,18 +39,36 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
     this.accessories.push(accessory);
   }
 
-  /** Clean + unique + HAP-safe + UUID-stable name builder. */
-  generateUniqueName(room: string, base: string, uuid?: string, isSubItem = false, prefixRoom = true): string {
-    return this.nameRegistry.generate(room, base, uuid, isSubItem, prefixRoom);
-  }
-
-  /** The active Miniserver communication token (used by intercom talkback). */
-  getCommunicationToken(): string | undefined {
-    return this.bindingCoordinator.token;
-  }
-
-  /** Miniserver temperature display unit (0 = Celsius, 1 = Fahrenheit), for the thermostat binding. */
-  getTemperatureDisplayUnit(): number {
-    return this.bindingCoordinator.temperatureUnit;
+  private host(): HomeKitHost {
+    const api = this.api;
+    const cached = this.accessories;
+    const accessories: AccessoryStore = {
+      all: () => cached,
+      create: (displayName, uuid) => new api.platformAccessory(displayName, uuid),
+      register: (accessory) => {
+        api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory as PlatformAccessory]);
+        cached.push(accessory as PlatformAccessory);
+      },
+      unregister: (accessory) => {
+        const index = cached.findIndex((acc) => acc.UUID === accessory.UUID);
+        if (index !== -1) {
+          cached.splice(index, 1);
+        }
+        api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory as PlatformAccessory]);
+      },
+      // Homebridge wraps a hap-nodejs Accessory; that's what a Bridge bridges.
+      hapAccessory: (accessory: HomeKitAccessory) =>
+        (accessory as unknown as { _associatedHAPAccessory: Accessory })._associatedHAPAccessory,
+    };
+    return {
+      hap: api.hap,
+      log: this.log,
+      config: this.config,
+      storagePath: api.user.storagePath(),
+      accessories,
+      onShutdown: (listener) => {
+        api.on(APIEvent.SHUTDOWN, listener);
+      },
+    };
   }
 }

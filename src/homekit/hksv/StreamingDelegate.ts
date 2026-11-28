@@ -1,8 +1,7 @@
-import { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 import { get as httpGet } from 'http';
 import { get as httpsGet } from 'https';
 import {
-  APIEvent,
   AudioStreamingCodecType,
   AudioStreamingSamplerate,
   CameraController,
@@ -11,7 +10,6 @@ import {
   CameraStreamingDelegate,
   CameraStreamingOptions,
   EventTriggerOption,
-  HAP,
   H264Level,
   H264Profile,
   MediaContainerType,
@@ -26,7 +24,7 @@ import {
   PrepareStreamResponse,
   StartStreamRequest,
   CameraRecordingDelegate,
-} from 'homebridge';
+} from 'hap-nodejs';
 
 import {
   defaultFfmpegPath,
@@ -43,9 +41,10 @@ import { FfmpegStreamingProcess, StreamingDelegate as FfmpegStreamingDelegate } 
 import { LoxoneTalkbackSession } from './LoxoneTalkback';
 import { RecordingDelegate } from './RecordingDelegate';
 import { extractHost, tokenizeFfmpegArgs } from './ffmpegArgs';
+import type { Hap } from '../../HomeKitHost';
 
   interface SessionInfo {
-      address: string; // address of the HAP controller
+      address: string; // address of the Hap controller
       addressVersion: 'ipv4' | 'ipv6';
 
       videoPort: number;
@@ -99,11 +98,11 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
   private isShuttingDown = false;
 
   //private readonly camera;
-  private readonly hap: HAP;
+  private readonly hap: Hap;
   private snapshotUrl?: string;
 
   constructor(
-      private readonly platform: LoxonePlatform,
+      private readonly platform: LoxoneHomeKit,
       streamUrl: string,
       base64auth: string,
       cameraName: string,
@@ -112,7 +111,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
       twoWayAudioContext?: TwoWayAudioContext,
   ) {
     //this.camera = camera;
-    this.hap = this.platform.api.hap;
+    this.hap = this.platform.hap;
     this.streamUrl = streamUrl;
     this.base64auth = base64auth;
     this.cameraName = cameraName;
@@ -154,7 +153,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
     }
 
     // Handle shutdown
-    platform.api.on(APIEvent.SHUTDOWN, () => {
+    platform.host.onShutdown(() => {
       this.isShuttingDown = true;
       this.platform.log.debug(`[${this.cameraName}] Streaming delegate is shutting down`);
       Object.keys(this.ongoingSessions).forEach((sessionId) => this.stopStream(sessionId));
@@ -836,7 +835,7 @@ export class streamingDelegate implements CameraStreamingDelegate, FfmpegStreami
           platform: this.platform,
           cameraName: this.cameraName,
           signalingBaseUrl,
-          username: this.platform.config.username,
+          username: this.platform.config.username ?? '',
           getToken: () => this.platform.getCommunicationToken(),
           onIncomingPcm: (chunk: Buffer) => this.feedHomeKitIncomingAudio(activeSession, chunk),
         });

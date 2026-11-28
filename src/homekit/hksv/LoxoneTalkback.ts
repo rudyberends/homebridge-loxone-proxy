@@ -8,7 +8,7 @@ import {
   randomBytes,
 } from 'crypto';
 import { createRsaPublicKey } from './rsa';
-import { LoxonePlatform } from '../../LoxonePlatform';
+import type { LoxoneHomeKit } from '../../LoxoneHomeKit';
 
 type JsonRpcMessage = {
   jsonrpc?: string;
@@ -108,7 +108,7 @@ interface WrtcModuleLike {
 }
 
 export interface LoxoneTalkbackOptions {
-  platform: LoxonePlatform;
+  platform: LoxoneHomeKit;
   cameraName: string;
   signalingBaseUrl: string;
   username: string;

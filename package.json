@@ -37,14 +37,13 @@
     "@homebridge/plugin-ui-utils": "^1.0.3",
     "@roamhq/wrtc": "^0.10.0",
     "ffmpeg-for-homebridge": "^2.1.7",
+    "loxone-homekit": "^1.0.0",
     "loxone-ts-client": "^0.4.0",
-    "pick-port": "^2.1.0",
-    "ws": "^8.19.0"
+    "pick-port": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/sharp": "^0.32.0",
-    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
     "eslint": "^8.0.1",

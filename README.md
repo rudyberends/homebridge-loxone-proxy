@@ -20,7 +20,7 @@ It retrieves the Loxone [Structure-File](https://www.loxone.com/wp-content/uploa
 
 # Architecture
 
-This plugin is intentionally focused on one integration path: Loxone <-> HomeKit. The current architecture keeps that path explicit:
+This plugin is intentionally focused on one integration path: Loxone <-> HomeKit. The Loxone ⇄ HomeKit core lives in the [`loxone-homekit`](https://github.com/rudyberends/loxone-homekit) package, which other hosts can use too; this plugin is the Homebridge host around it. The architecture keeps that path explicit:
 
 | Layer | Responsibility |
 | --- | --- |

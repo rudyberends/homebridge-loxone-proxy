@@ -1,15 +1,14 @@
 import { API, APIEvent, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig } from 'homebridge';
 import type { Accessory } from 'hap-nodejs';
 
-import type { AccessoryStore, HomeKitAccessory, HomeKitHost } from './HomeKitHost';
-import { LoxoneHomeKit } from './LoxoneHomeKit';
+import { LoxoneHomeKit, type AccessoryStore, type HomeKitAccessory, type HomeKitHost } from 'loxone-homekit';
 
 const PLUGIN_NAME = 'homebridge-loxone-proxy';
 const PLATFORM_NAME = 'LoxonePlatform';
 
 /**
  * LoxonePlatform — the Homebridge dynamic platform. A thin host around the
- * {@link LoxoneHomeKit} core: it hands the core Homebridge's HAP, log, config and
+ * {@link LoxoneHomeKit} core (the loxone-homekit package): it hands the core Homebridge's HAP, log, config and
  * storage, and keeps the main bridge's accessories in Homebridge's cache.
  */
 export class LoxonePlatform implements DynamicPlatformPlugin {

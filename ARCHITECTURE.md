@@ -13,7 +13,7 @@ This plugin has one product boundary: Loxone <-> HomeKit. The architecture is op
 
 New Loxone controls, HomeKit mappings and media fixes belong in `loxone-homekit`; this plugin only changes for Homebridge-side concerns (lifecycle, cache, config schema, config UI).
 
-The plugin keeps `@homebridge/camera-utils`, `ffmpeg-for-homebridge` and `@roamhq/wrtc` as dependencies: they are optional peers of the core, needed here for intercom video and talkback.
+The plugin keeps `@homebridge/camera-utils` (which brings ffmpeg) and `@roamhq/wrtc` as dependencies: they are optional peers of the core, needed here for intercom video and talkback.
 
 ## Release Rules
 

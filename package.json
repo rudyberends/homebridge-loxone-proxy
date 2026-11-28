@@ -36,7 +36,7 @@
     "@homebridge/camera-utils": "^2.2.0",
     "@homebridge/plugin-ui-utils": "^1.0.3",
     "@roamhq/wrtc": "^0.10.0",
-    "loxone-homekit": "^1.1.1",
+    "loxone-homekit": "^1.1.2",
     "loxone-ts-client": "^0.4.0"
   },
   "devDependencies": {
